@@ -297,9 +297,9 @@ export default function FleetManagementPage() {
     try {
       const [vRes, aRes, mRes, bRes] = await Promise.all([
         supabase.from('fleet_vehicles').select('*').order('registration_number'),
-        supabase.from('fleet_allocations').select('*, vehicles(registration_number, make_model)').order('created_at', { ascending: false }),
-        supabase.from('fleet_maintenance').select('*, vehicles(registration_number, make_model)').order('created_at', { ascending: false }),
-        supabase.from('fleet_breakdowns').select('*, vehicles(registration_number, make_model)').order('created_at', { ascending: false }),
+        supabase.from('fleet_allocations').select('*, vehicles:fleet_vehicles(registration_number, make_model)').order('created_at', { ascending: false }),
+        supabase.from('fleet_maintenance').select('*, vehicles:fleet_vehicles(registration_number, make_model)').order('created_at', { ascending: false }),
+        supabase.from('fleet_breakdowns').select('*, vehicles:fleet_vehicles!fleet_breakdowns_vehicle_id_fkey(registration_number, make_model)').order('created_at', { ascending: false }),
       ]);
 
       if (vRes.data && vRes.data.length > 0) setVehicles(vRes.data);
@@ -339,8 +339,7 @@ export default function FleetManagementPage() {
       return;
     }
 
-    const newVehicle: FleetVehicle = {
-      id: `veh-${Date.now()}`,
+    const vehiclePayload = {
       registration_number: vehicleForm.registration_number.toUpperCase(),
       make_model: vehicleForm.make_model,
       vehicle_type: vehicleForm.vehicle_type as any,
@@ -354,21 +353,24 @@ export default function FleetManagementPage() {
       avg_fuel_consumption_kml: Number(vehicleForm.avg_fuel_consumption_kml),
       transporter_vendor_name: vehicleForm.transporter_vendor_name || undefined,
       hire_rate_per_ton: Number(vehicleForm.hire_rate_per_ton) || undefined,
-      created_at: new Date().toISOString(),
     };
 
     try {
-      await supabase.from('fleet_vehicles').insert(newVehicle);
-    } catch (e) { /* local fallback */ }
+      const { data, error } = await supabase.from('fleet_vehicles').insert(vehiclePayload).select().single();
+      if (error) throw error;
+      const newVehicle = data as FleetVehicle;
 
-    setVehicles([newVehicle, ...vehicles]);
-    setShowVehicleModal(false);
-    toast.success(`Vehicle ${newVehicle.registration_number} registered successfully!`);
-    setVehicleForm({
-      registration_number: '', make_model: '', vehicle_type: 'horse_trailer', ownership: 'owned',
-      capacity_tons: 30, current_odometer_km: 100000, assigned_driver_name: '', driver_phone: '',
-      fuel_tank_capacity_l: 600, avg_fuel_consumption_kml: 2.2, transporter_vendor_name: '', hire_rate_per_ton: 0,
-    });
+      setVehicles([newVehicle, ...vehicles]);
+      setShowVehicleModal(false);
+      toast.success(`Vehicle ${newVehicle.registration_number} registered successfully!`);
+      setVehicleForm({
+        registration_number: '', make_model: '', vehicle_type: 'horse_trailer', ownership: 'owned',
+        capacity_tons: 30, current_odometer_km: 100000, assigned_driver_name: '', driver_phone: '',
+        fuel_tank_capacity_l: 600, avg_fuel_consumption_kml: 2.2, transporter_vendor_name: '', hire_rate_per_ton: 0,
+      });
+    } catch (error: any) {
+      toast.error(`Vehicle registration failed: ${error.message}`);
+    }
   }
 
   async function handleCreateAllocation(e: React.FormEvent) {
@@ -379,9 +381,8 @@ export default function FleetManagementPage() {
       return;
     }
 
-    const newAlloc: FleetAllocation = {
-      id: `alloc-${Date.now()}`,
-      allocation_number: `TRK-ALLOC-2026-${Math.floor(100 + Math.random() * 900)}`,
+    const allocationPayload = {
+      allocation_number: `TRK-ALLOC-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
       vehicle_id: targetVeh.id,
       driver_name: allocationForm.driver_name || targetVeh.assigned_driver_name || 'Assigned Driver',
       driver_phone: allocationForm.driver_phone || targetVeh.driver_phone || '',
@@ -392,18 +393,25 @@ export default function FleetManagementPage() {
       start_odometer_km: Number(allocationForm.start_odometer_km) || targetVeh.current_odometer_km,
       fuel_issued_liters: Number(allocationForm.fuel_issued_liters) || undefined,
       fuel_cost_usd: Number(allocationForm.fuel_cost_usd) || undefined,
-      dispatch_time: format(new Date(), 'yyyy-MM-dd HH:mm'),
+      dispatch_time: new Date().toISOString(),
       status: 'in_transit',
       notes: allocationForm.notes,
-      created_at: new Date().toISOString(),
-      vehicles: targetVeh,
+      created_by: profile?.id || null,
     };
 
-    // Update vehicle status
-    setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'in_transit' } : v));
-    setAllocations([newAlloc, ...allocations]);
-    setShowAllocationModal(false);
-    toast.success(`Truck ${targetVeh.registration_number} dispatched to ${newAlloc.destination}!`);
+    try {
+      const { data, error } = await supabase.from('fleet_allocations').insert(allocationPayload).select().single();
+      if (error) throw error;
+      const { error: vehicleError } = await supabase.from('fleet_vehicles').update({ status: 'in_transit' }).eq('id', targetVeh.id);
+      if (vehicleError) throw vehicleError;
+      const newAlloc = { ...data, vehicles: targetVeh } as FleetAllocation;
+      setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'in_transit' } : v));
+      setAllocations([newAlloc, ...allocations]);
+      setShowAllocationModal(false);
+      toast.success(`Truck ${targetVeh.registration_number} dispatched to ${newAlloc.destination}!`);
+    } catch (error: any) {
+      toast.error(`Truck allocation failed: ${error.message}`);
+    }
   }
 
   async function handleReportBreakdown(e: React.FormEvent) {
@@ -414,27 +422,33 @@ export default function FleetManagementPage() {
       return;
     }
 
-    const newBreakdown: FleetBreakdown = {
-      id: `brk-${Date.now()}`,
-      incident_number: `BRK-2026-${Math.floor(100 + Math.random() * 900)}`,
+    const breakdownPayload = {
+      incident_number: `BRK-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
       vehicle_id: targetVeh.id,
       driver_name: breakdownForm.driver_name || targetVeh.assigned_driver_name || 'Driver',
-      incident_date_time: format(new Date(), 'yyyy-MM-dd HH:mm'),
+      incident_date_time: new Date().toISOString(),
       location: breakdownForm.location,
       nature_of_breakdown: breakdownForm.nature_of_breakdown as any,
       description: breakdownForm.description,
       cargo_status: breakdownForm.cargo_status as any,
       rescue_vehicle_id: breakdownForm.rescue_vehicle_id || undefined,
       status: 'reported',
-      created_at: new Date().toISOString(),
-      vehicles: targetVeh,
+      created_by: profile?.id || null,
     };
 
-    // Set truck status to breakdown
-    setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'breakdown' } : v));
-    setBreakdowns([newBreakdown, ...breakdowns]);
-    setShowBreakdownModal(false);
-    toast.error(`BREAKDOWN ALERT logged for truck ${targetVeh.registration_number}`);
+    try {
+      const { data, error } = await supabase.from('fleet_breakdowns').insert(breakdownPayload).select().single();
+      if (error) throw error;
+      const { error: vehicleError } = await supabase.from('fleet_vehicles').update({ status: 'breakdown' }).eq('id', targetVeh.id);
+      if (vehicleError) throw vehicleError;
+      const newBreakdown = { ...data, vehicles: targetVeh } as FleetBreakdown;
+      setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'breakdown' } : v));
+      setBreakdowns([newBreakdown, ...breakdowns]);
+      setShowBreakdownModal(false);
+      toast.error(`BREAKDOWN ALERT logged for truck ${targetVeh.registration_number}`);
+    } catch (error: any) {
+      toast.error(`Breakdown report failed: ${error.message}`);
+    }
   }
 
   async function handleLogMaintenance(e: React.FormEvent) {
@@ -445,9 +459,8 @@ export default function FleetManagementPage() {
       return;
     }
 
-    const newMaint: FleetMaintenanceRecord = {
-      id: `maint-${Date.now()}`,
-      maintenance_number: `FLT-SVC-2026-${Math.floor(100 + Math.random() * 900)}`,
+    const maintenancePayload = {
+      maintenance_number: `FLT-SVC-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`,
       vehicle_id: targetVeh.id,
       service_type: maintenanceForm.service_type as any,
       description: maintenanceForm.description,
@@ -457,14 +470,22 @@ export default function FleetManagementPage() {
       parts_replaced: maintenanceForm.parts_replaced,
       service_date: format(new Date(), 'yyyy-MM-dd'),
       status: 'in_progress',
-      created_at: new Date().toISOString(),
-      vehicles: targetVeh,
+      created_by: profile?.id || null,
     };
 
-    setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'maintenance' } : v));
-    setMaintenanceRecords([newMaint, ...maintenanceRecords]);
-    setShowMaintenanceModal(false);
-    toast.success(`Maintenance order logged for ${targetVeh.registration_number}`);
+    try {
+      const { data, error } = await supabase.from('fleet_maintenance').insert(maintenancePayload).select().single();
+      if (error) throw error;
+      const { error: vehicleError } = await supabase.from('fleet_vehicles').update({ status: 'maintenance' }).eq('id', targetVeh.id);
+      if (vehicleError) throw vehicleError;
+      const newMaint = { ...data, vehicles: targetVeh } as FleetMaintenanceRecord;
+      setVehicles(prev => prev.map(v => v.id === targetVeh.id ? { ...v, status: 'maintenance' } : v));
+      setMaintenanceRecords([newMaint, ...maintenanceRecords]);
+      setShowMaintenanceModal(false);
+      toast.success(`Maintenance order logged for ${targetVeh.registration_number}`);
+    } catch (error: any) {
+      toast.error(`Maintenance logging failed: ${error.message}`);
+    }
   }
 
   return (
