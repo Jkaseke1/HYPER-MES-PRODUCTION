@@ -15,14 +15,16 @@ WITH required_tables(table_name) AS (
 required_columns(table_name, column_name) AS (
   VALUES
     ('goods_received_notes', 'weigh_bridge_ticket_id'),
-    ('goods_received_notes', 'sage_grv_number'),
-    ('goods_received_notes', 'supplier_invoice'),
+    ('goods_received_notes', 'supplier_invoice_no'),
+    ('goods_received_notes', 'supplier_delivery_note_no'),
+    ('goods_received_notes', 'supplier_order_no'),
+    ('goods_received_notes', 'external_reference'),
     ('weigh_bridge_tickets', 'supplier_id'),
     ('stock_takes', 'title'),
     ('stock_takes', 'person_name'),
     ('stock_takes', 'started_by'),
-    ('material_transfers', 'created_by'),
-    ('material_transfers', 'buffer_received_at'),
+    ('material_transfers', 'requested_by'),
+    ('material_transfers', 'buffer_warehouse_id'),
     ('warehouse_stock_balances', 'raw_material_id'),
     ('warehouse_stock_balances', 'warehouse_id'),
     ('warehouse_stock_balances', 'quantity')
