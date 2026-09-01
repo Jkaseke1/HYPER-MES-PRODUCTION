@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>PlantControl</title>
+    <script type="text/javascript">
+      // GitHub Pages SPA 404 Router Handler for /HYPER-MES/
+      (function() {
+        var l = window.location;
+        var path = l.pathname;
+        
+        var parts = path.split('/').filter(Boolean);
+        var repoName = parts.length > 0 ? parts[0] : 'HYPER-MES';
+        var routePath = parts.slice(1).join('/');
+        
+        var hashRoute = l.hash ? l.hash : (routePath ? '#/' + routePath : '#/');
+        
+        var targetUrl = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + repoName + '/' + hashRoute;
+        
+        if (l.href !== targetUrl) {
+          window.location.replace(targetUrl);
+        }
+      })();
+    </script>
+  </head>
+  <body style="background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
+    <div style="text-align: center; padding: 2rem;">
+      <h2 style="margin-bottom: 0.5rem; color: #38bdf8; font-weight: 800;">PlantControl</h2>
+      <p style="color: #94a3b8; font-size: 0.875rem;">Loading application page...</p>
+    </div>
+  </body>
+</html>

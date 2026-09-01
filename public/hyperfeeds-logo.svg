@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 150" width="100%" height="100%">
+  <defs>
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0b30"/>
+      <stop offset="50%" stop-color="#080826"/>
+      <stop offset="100%" stop-color="#04041a"/>
+    </linearGradient>
+    <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ff9100"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer Glow Arc -->
+  <ellipse cx="200" cy="75" rx="192" ry="58" fill="none" stroke="#ff8a00" stroke-width="4" opacity="0.9" transform="rotate(-1 200 75)"/>
+  
+  <!-- Main Deep Navy Oval -->
+  <ellipse cx="200" cy="75" rx="188" ry="54" fill="url(#navyGrad)" stroke="#05051a" stroke-width="2"/>
+  
+  <!-- Wheat Stalks Symbol -->
+  <g transform="translate(190, 18) scale(0.75)" opacity="0.95">
+    <!-- Left Stalk -->
+    <path d="M-8,30 C-4,15 -10,5 -18,-5 C-12,0 -4,10 0,25" fill="none" stroke="#ff9100" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M-18,-5 C-22,-3 -20,3 -14,5 C-10,6 -12,0 -18,-5 Z" fill="#ff9100"/>
+    <path d="M-14,5 C-18,7 -16,13 -10,15 C-6,16 -8,10 -14,5 Z" fill="#ff9100"/>
+    <path d="M-10,15 C-14,17 -12,23 -6,25 C-2,26 -4,20 -10,15 Z" fill="#ff9100"/>
+    <!-- Right Stalk -->
+    <path d="M8,30 C4,15 10,5 18,-5 C12,0 4,10 0,25" fill="none" stroke="#ff9100" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M18,-5 C22,-3 20,3 14,5 C10,6 12,0 18,-5 Z" fill="#ff9100"/>
+    <path d="M14,5 C18,7 16,13 10,15 C6,16 8,10 14,5 Z" fill="#ff9100"/>
+    <path d="M10,15 C14,17 12,23 6,25 C2,26 4,20 10,15 Z" fill="#ff9100"/>
+  </g>
+  
+  <!-- "hyper" Text -->
+  <text x="65" y="86" font-family="'Georgia', 'Times New Roman', serif" font-style="italic" font-weight="900" font-size="58" fill="#ffffff" letter-spacing="-1">hyper</text>
+  
+  <!-- "feeds" Text -->
+  <text x="202" y="86" font-family="'Georgia', 'Times New Roman', serif" font-style="italic" font-weight="900" font-size="58" fill="url(#orangeGrad)" letter-spacing="-1">feeds</text>
+  
+  <!-- "ANIMAL NUTRITION" Subtitle -->
+  <text x="200" y="112" font-family="'Arial Black', 'Helvetica', sans-serif" font-weight="900" font-size="13" fill="#ffffff" letter-spacing="4" text-anchor="middle">ANIMAL NUTRITION</text>
+</svg>
