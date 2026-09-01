@@ -11,6 +11,10 @@ interface State {
   error?: Error;
 }
 
+function recoveryUrl(returnTo = window.location.hash || '#/') {
+  return `${import.meta.env.BASE_URL}reset.html?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false
@@ -24,11 +28,12 @@ class ErrorBoundary extends Component<Props, State> {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
 
     const isStaleModule = /dynamically imported module|failed to fetch dynamically imported module|importing a module script failed/i.test(error.message || '');
-    const refreshKey = 'plantcontrol_stale_module_refreshed';
+    const refreshKey = 'plantcontrol_cache_recovery_attempted';
     if (isStaleModule && navigator.onLine && !sessionStorage.getItem(refreshKey)) {
-      // GitHub Pages deploys versioned chunks. Reload once to obtain the current chunk.
+      // GitHub Pages deploys versioned chunks. Clear the retired browser cache once,
+      // then return to the route the user was already working in.
       sessionStorage.setItem(refreshKey, 'true');
-      window.location.reload();
+      window.location.replace(recoveryUrl());
     }
   }
 
@@ -66,8 +71,7 @@ class ErrorBoundary extends Component<Props, State> {
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 onClick={() => {
-                  this.setState({ hasError: false, error: undefined });
-                  window.location.reload();
+                  window.location.replace(recoveryUrl());
                 }}
                 className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
               >
@@ -76,8 +80,7 @@ class ErrorBoundary extends Component<Props, State> {
 
               <button
                 onClick={() => {
-                  this.setState({ hasError: false, error: undefined });
-                  window.location.hash = '#/';
+                  window.location.replace(recoveryUrl('#/'));
                 }}
                 className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
               >

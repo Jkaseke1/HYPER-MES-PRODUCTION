@@ -29,7 +29,9 @@
             await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
           }
         } finally {
-          window.location.replace('./#/?cache-reset=' + Date.now());
+          const requestedRoute = new URLSearchParams(window.location.search).get('returnTo');
+          const returnTo = requestedRoute && requestedRoute.startsWith('#/') ? requestedRoute : '#/';
+          window.location.replace('./?cache-reset=' + Date.now() + returnTo);
         }
       })();
     </script>
