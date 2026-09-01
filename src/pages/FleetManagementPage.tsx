@@ -219,10 +219,11 @@ export default function FleetManagementPage() {
   const [loading, setLoading] = useState(false);
 
   // Core Datasets
-  const [vehicles, setVehicles] = useState<FleetVehicle[]>(INITIAL_VEHICLES);
-  const [allocations, setAllocations] = useState<FleetAllocation[]>(INITIAL_ALLOCATIONS);
-  const [maintenanceRecords, setMaintenanceRecords] = useState<FleetMaintenanceRecord[]>(INITIAL_MAINTENANCE);
-  const [breakdowns, setBreakdowns] = useState<FleetBreakdown[]>(INITIAL_BREAKDOWNS);
+  // Production starts empty until authorised fleet records are captured.
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [allocations, setAllocations] = useState<FleetAllocation[]>([]);
+  const [maintenanceRecords, setMaintenanceRecords] = useState<FleetMaintenanceRecord[]>([]);
+  const [breakdowns, setBreakdowns] = useState<FleetBreakdown[]>([]);
 
   // Search & Filter
   const [search, setSearch] = useState('');
