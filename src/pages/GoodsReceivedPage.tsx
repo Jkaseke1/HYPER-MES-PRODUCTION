@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, ReceiptText, Link2, ShieldCheck } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -758,16 +758,16 @@ export default function GoodsReceivedPage() {
 
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-[1280px] w-[96vw] h-[92vh] max-h-[92vh] p-0 sm:!max-w-[1280px] flex flex-col overflow-hidden rounded-xl border border-slate-200 shadow-2xl [&>button.absolute]:hidden">
-          <DialogHeader className="shrink-0 bg-[#0b0b30] text-white px-6 py-4 relative border-b border-[#ff9100]/30">
+        <DialogContent className="max-w-[1440px] w-[calc(100vw-24px)] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1440px] flex flex-col overflow-hidden rounded-lg border border-slate-200 shadow-2xl [&>button.absolute]:hidden">
+          <DialogHeader className="shrink-0 bg-[#0b0b30] text-white px-5 py-3.5 relative border-b border-[#ff9100]/30">
             <div className="flex items-center justify-between pr-10">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-[#ff9100]/15 border border-[#ff9100]/35 rounded-lg flex items-center justify-center">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-[#ff9100]/15 border border-[#ff9100]/35 rounded-lg flex items-center justify-center">
                   <Package className="w-5 h-5 text-orange-200" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <DialogTitle className="text-xl font-extrabold tracking-tight text-white">Create GRN Delivery</DialogTitle>
+                    <DialogTitle className="text-lg font-extrabold tracking-tight text-white">Create GRN Delivery</DialogTitle>
                     <span className="text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full uppercase tracking-wider">Draft</span>
                   </div>
                   <DialogDescription className="text-slate-400 text-xs font-medium mt-0.5">
@@ -791,26 +791,43 @@ export default function GoodsReceivedPage() {
             </button>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto bg-slate-100/70" style={{ scrollbarWidth: 'thin' }}>
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5 p-5 [&_input]:h-10 [&_[role='combobox']]:h-10">
-              <div className="space-y-5">
+          <div className="flex-1 overflow-y-auto bg-[#f3f6f9]" style={{ scrollbarWidth: 'thin' }}>
+            <div className="border-b border-slate-200 bg-white px-4 py-2.5">
+              <div className="mx-auto grid max-w-[1380px] grid-cols-2 gap-2 md:grid-cols-4">
+                {[
+                  ['01', 'Receipt details', Boolean(supplierId && receivedDate)],
+                  ['02', 'Finance references', Boolean(supplierInvoiceNo || supplierDeliveryNoteNo || supplierOrderNo || externalReference)],
+                  ['03', 'Weighbridge', Boolean(weighBridgeTicketId)],
+                  ['04', 'Material lines', items.every((item) => Boolean(item.raw_material_id && Number(item.received_qty) > 0))],
+                ].map(([step, label, complete]) => (
+                  <div key={String(step)} className={`flex min-h-9 items-center gap-2 border px-3 py-1.5 ${complete ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                    <span className={`font-mono text-[10px] font-bold ${complete ? 'text-emerald-700' : 'text-slate-400'}`}>{step}</span>
+                    <span className={`truncate text-xs font-bold ${complete ? 'text-emerald-900' : 'text-slate-600'}`}>{label}</span>
+                    {complete && <CheckCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-emerald-600" />}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-4 p-4 [&_input]:h-10 [&_[role='combobox']]:h-10">
+              <div className="space-y-4">
 
                 {/* GRN Header Panel */}
                 <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center text-slate-700">
-                        <FileText className="w-4 h-4" />
+                      <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-700">
+                        <ReceiptText className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="text-base font-extrabold text-slate-900">Receipt Header</p>
-                        <p className="text-xs text-slate-500">Supplier, receipt date and supporting notes.</p>
+                        <p className="text-sm font-extrabold text-slate-900">Receipt Details</p>
+                        <p className="text-[11px] text-slate-500">Core supplier delivery information</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
                   </div>
-                  <div className="p-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.25fr)_minmax(220px,.75fr)] gap-3">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
                         <Select value={supplierId} onValueChange={setSupplierId}>
@@ -838,14 +855,14 @@ export default function GoodsReceivedPage() {
                         />
                       </div>
                     </div>
-                    <div className="space-y-1.5 mt-4">
+                    <div className="space-y-1.5 mt-3">
                       <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Notes</Label>
                       <Textarea
                         id="notes"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Additional notes or comments..."
-                        rows={3}
+                        rows={2}
                         className="bg-white border-slate-300 text-sm resize-none"
                       />
                     </div>
@@ -854,18 +871,18 @@ export default function GoodsReceivedPage() {
 
               {/* Sage Reference Controls */}
               <div className="rounded-lg border border-teal-200 bg-teal-50/40 shadow-sm overflow-hidden">
-                <div className="bg-white border-b border-teal-100 px-5 py-4">
+                <div className="bg-white border-b border-teal-100 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
-                      <FileText className="w-4 h-4" />
+                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
+                      <Link2 className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-base font-extrabold text-slate-900">Sage & Finance References</p>
-                      <p className="text-xs text-slate-500 font-medium">Optional now, but important for supplier enquiry, invoice matching and audit traceability.</p>
+                      <p className="text-sm font-extrabold text-slate-900">Sage & Finance References</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Invoice, delivery note, purchase order and external traceability</p>
                     </div>
                   </div>
                 </div>
-                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-teal-800">Supplier Invoice No</Label>
                     <Input
@@ -874,7 +891,6 @@ export default function GoodsReceivedPage() {
                       placeholder="e.g. INV27539"
                       className="bg-white border-teal-300 font-mono focus:border-teal-600"
                     />
-                    <p className="text-[10px] text-teal-800">Saved to the Sage GRV Supplier Invoice field for Finance matching.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-600">Supplier Delivery Note No</Label>
@@ -884,7 +900,6 @@ export default function GoodsReceivedPage() {
                       placeholder="e.g. DN-4567"
                       className="bg-white border-blue-200 font-mono"
                     />
-                    <p className="text-[10px] text-slate-500">Helps match physical delivery notes to Sage GRV records.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-600">Supplier Order / PO No</Label>
@@ -894,7 +909,6 @@ export default function GoodsReceivedPage() {
                       placeholder="e.g. PO61092"
                       className="bg-white border-blue-200 font-mono"
                     />
-                    <p className="text-[10px] text-slate-500">Maps to Sage OrderNum when the bridge posts the GRV.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-600">External / Weighbridge Ref</Label>
@@ -904,7 +918,6 @@ export default function GoodsReceivedPage() {
                       placeholder="Defaults to WB ticket if left blank"
                       className="bg-white border-blue-200 font-mono"
                     />
-                    <p className="text-[10px] text-slate-500">Used for load, weighbridge or other external trace references.</p>
                   </div>
                 </div>
               </div>
@@ -914,15 +927,15 @@ export default function GoodsReceivedPage() {
                 <button
                   type="button"
                   onClick={() => setWbExpanded(!wbExpanded)}
-                  className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-200 text-left hover:bg-slate-50"
+                  className="w-full flex items-center justify-between px-4 py-3 border-b border-slate-200 text-left hover:bg-slate-50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
+                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
                       <Scale className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-base font-extrabold text-slate-900">Weighbridge Evidence</p>
-                      <p className="text-xs text-slate-500 font-medium">Optional evidence: tickets are captured in PlantControl Weighbridge and linked here only when they match this GRN.</p>
+                      <p className="text-sm font-extrabold text-slate-900">Weighbridge Evidence</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Link a matching PlantControl weighbridge ticket</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1105,14 +1118,14 @@ export default function GoodsReceivedPage() {
 
               {/* Line Items Section */}
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100 text-blue-700">
+                    <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100 text-blue-700">
                       <Warehouse className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-base font-extrabold text-slate-900">Raw Material Lines</p>
-                      <p className="text-xs text-slate-500">{items.length} item{items.length !== 1 ? 's' : ''} ready for finance valuation.</p>
+                      <p className="text-sm font-extrabold text-slate-900">Raw Material Lines</p>
+                      <p className="text-[11px] text-slate-500">{items.length} item{items.length !== 1 ? 's' : ''} in this receipt</p>
                     </div>
                   </div>
                   <button
@@ -1125,7 +1138,7 @@ export default function GoodsReceivedPage() {
                   </button>
                 </div>
 
-                <div className="p-5 space-y-3">
+                <div className="p-4 space-y-3">
                   {items.map((item, index) => (
                     <div key={index} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                       {/* Item header */}
@@ -1234,37 +1247,37 @@ export default function GoodsReceivedPage() {
               </div>
 
               {/* Receipt Overview Panel */}
-              <aside className="xl:sticky xl:top-5 h-fit rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="border-b border-slate-200 px-5 py-4">
+              <aside className="lg:sticky lg:top-4 h-fit rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100 text-emerald-700">
+                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/15 text-emerald-300">
                       <Hash className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="text-base font-extrabold text-slate-900">Receipt Summary</p>
-                      <p className="text-xs text-slate-500">Live totals for Finance.</p>
+                      <p className="text-sm font-extrabold text-white">Receipt Summary</p>
+                      <p className="text-[11px] text-slate-400">Live quantity and value controls</p>
                     </div>
                   </div>
                 </div>
-                <div className="p-5 space-y-3">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="grid grid-cols-2 gap-2 p-3">
+                  <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total Ordered</p>
-                    <p className="font-extrabold text-slate-900 text-xl mt-1 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-xs font-medium text-slate-500">kg</span></p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
-                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <div className="border border-emerald-200 bg-emerald-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Total Received</p>
-                    <p className="font-extrabold text-emerald-900 text-xl mt-1 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-xs font-medium text-emerald-700">kg</span></p>
+                    <p className="font-extrabold text-emerald-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-emerald-700">kg</span></p>
                   </div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Weighbridge Nett</p>
-                    <p className="font-extrabold text-slate-900 text-xl mt-1 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-xs font-medium text-slate-500">kg</span></p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+                  <div className="border border-blue-200 bg-blue-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Estimated Value</p>
-                    <p className="font-extrabold text-blue-900 text-xl mt-1 font-mono">${totalReceivedValue.toFixed(2)}</p>
+                    <p className="font-extrabold text-blue-900 text-lg mt-0.5 font-mono">${totalReceivedValue.toFixed(2)}</p>
                   </div>
 
-                  <div className={`rounded-lg px-4 py-3 text-xs font-medium flex items-start gap-2 ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
+                  <div className={`col-span-2 px-3 py-2.5 text-[11px] font-medium flex items-start gap-2 ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
                     <div className={`w-2 h-2 rounded-full mt-1 ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                     <span>
                       {wbNettMassValue > 0
@@ -1273,25 +1286,44 @@ export default function GoodsReceivedPage() {
                     </span>
                   </div>
                 </div>
+                <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="text-slate-500">Supplier</span>
+                    <span className={`font-bold ${supplierId ? 'text-emerald-700' : 'text-amber-700'}`}>{supplierId ? 'Selected' : 'Required'}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="text-slate-500">Material lines</span>
+                    <span className={`font-bold ${items.every((item) => Boolean(item.raw_material_id && Number(item.received_qty) > 0)) ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {items.every((item) => Boolean(item.raw_material_id && Number(item.received_qty) > 0)) ? 'Complete' : 'Incomplete'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-[11px]">
+                    <span className="text-slate-500">Weighbridge evidence</span>
+                    <span className={`font-bold ${weighBridgeTicketId ? 'text-emerald-700' : 'text-slate-500'}`}>{weighBridgeTicketId ? 'Linked' : 'Optional'}</span>
+                  </div>
+                </div>
               </aside>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">
-            <p className="text-xs text-slate-500 font-medium hidden sm:block">GRN will be posted to Sage 200 Evolution automatically upon approval</p>
+          <div className="shrink-0 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-3">
+            <div className="hidden items-center gap-2 sm:flex">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <p className="text-xs text-slate-500 font-medium">Approval posts this GRN to Sage 200 Evolution</p>
+            </div>
             <div className="flex gap-3 ml-auto">
               <button
                 onClick={() => setModalOpen(false)}
                 disabled={saving}
-                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl transition-all disabled:opacity-50"
+                className="px-5 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveGRN}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#ff9100] hover:bg-[#e67f00] rounded-xl shadow-sm transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#ff9100] hover:bg-[#e67f00] rounded-lg shadow-sm transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>
