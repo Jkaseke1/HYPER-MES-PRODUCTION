@@ -61,7 +61,6 @@ const TempWorkersPage = lazy(() => import('./pages/payroll/TempWorkersPage'));
 const WorkerAttendancePage = lazy(() => import('./pages/payroll/WorkerAttendancePage'));
 const PayrollProcessingPage = lazy(() => import('./pages/payroll/PayrollProcessingPage'));
 const PaymentHistoryPage = lazy(() => import('./pages/payroll/PaymentHistoryPage'));
-const SagePostingReviewPage = lazy(() => import('./pages/SagePostingReviewPage'));
 const PlantIntegrationHubPage = lazy(() => import('./pages/PlantIntegrationHubPage'));
 const ManagementReportingPage = lazy(() => import('./pages/ManagementReportingPage'));
 const ProductionControlCentrePage = lazy(() => import('./pages/ProductionControlCentrePage'));
@@ -189,7 +188,6 @@ export default function App() {
               <Route path="payroll/attendance" element={<WorkerAttendancePage />} />
               <Route path="payroll/processing" element={<PayrollProcessingPage />} />
               <Route path="payroll/history" element={<PaymentHistoryPage />} />
-              <Route path="sage-posting-review" element={<SagePostingReviewPage />} />
               <Route path="plant-integrations" element={<PlantIntegrationHubPage />} />
               <Route path="management-reporting" element={<ManagementReportingPage />} />
             </Route>

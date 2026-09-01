@@ -328,19 +328,6 @@ export default function ReportsPage() {
                   <p className="text-xs text-slate-500 mt-1">Daily matrix of additions (GRN) and deductions (floor)</p>
                 </a>
 
-                <a
-                  href="/sage-posting-review"
-                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-purple-500 hover:shadow-md transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="p-2 bg-purple-50 text-purple-700 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                      <DollarSign className="w-5 h-5" />
-                    </span>
-                    <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Sage Audit</span>
-                  </div>
-                  <h4 className="font-bold text-slate-900 text-sm">Sage Posting Review</h4>
-                  <p className="text-xs text-slate-500 mt-1">Audit log of all Sage postings across all warehouses</p>
-                </a>
               </div>
 
               <div className="bg-white border border-slate-200 rounded-xl p-5">
