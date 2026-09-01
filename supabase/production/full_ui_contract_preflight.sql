@@ -5,6 +5,15 @@
 WITH required_columns(table_name, column_name) AS (
   VALUES
     ('goods_received_notes', 'weigh_bridge_ticket_id'),
+    ('branches', 'sage_code'),
+    ('branches', 'sage_warehouse_code'),
+    ('branches', 'sage_warehouse_id'),
+    ('warehouses', 'sage_warehouse_code'),
+    ('warehouses', 'sage_warehouse_id'),
+    ('suppliers', 'sage_code'),
+    ('raw_materials', 'currency_code'),
+    ('raw_materials', 'cost_per_unit_usd'),
+    ('raw_materials', 'production_reorder_level'),
     ('goods_received_notes', 'supplier_invoice_no'),
     ('goods_received_notes', 'supplier_delivery_note_no'),
     ('goods_received_notes', 'supplier_order_no'),
