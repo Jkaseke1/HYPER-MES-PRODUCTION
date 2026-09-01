@@ -60,8 +60,8 @@ WITH required_columns(table_name, column_name) AS (
     ('maintenance_work_orders', 'status'),
     ('rm_cost_register', 'effective_date'),
     ('usd_zig_rate_history', 'effective_date'),
-    ('plant_integration_sources', 'is_active'),
-    ('plant_integration_events', 'status')
+    ('plant_integration_sources', 'enabled'),
+    ('plant_integration_events', 'processing_status')
 ),
 required_functions(function_name) AS (
   VALUES
@@ -141,7 +141,7 @@ checks AS (
     'safety',
     'active_plant_integration_sources',
     CASE WHEN EXISTS (
-      SELECT 1 FROM public.plant_integration_sources WHERE is_active
+      SELECT 1 FROM public.plant_integration_sources WHERE enabled
     ) THEN 'REVIEW' ELSE 'SAFE' END
 )
 SELECT check_type, object_name, status
