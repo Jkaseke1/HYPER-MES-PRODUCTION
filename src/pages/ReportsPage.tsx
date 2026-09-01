@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { Link } from 'react-router-dom';
 
 type Tab = 'production' | 'variance' | 'costing' | 'inventory';
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -286,8 +287,8 @@ export default function ReportsPage() {
             <div className="space-y-6">
               {/* Quick Report Links Card */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <a
-                  href="/warehouse"
+                <Link
+                  to="/warehouse"
                   className="p-4 bg-white rounded-xl border border-slate-200 hover:border-teal-500 hover:shadow-md transition-all group"
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -298,10 +299,10 @@ export default function ReportsPage() {
                   </div>
                   <h4 className="font-bold text-slate-900 text-sm">Stock Movements</h4>
                   <p className="text-xs text-slate-500 mt-1">Real-time additions & deductions per warehouse</p>
-                </a>
+                </Link>
 
-                <a
-                  href="/reports/rm-reconciliation"
+                <Link
+                  to="/reports/rm-reconciliation"
                   className="p-4 bg-white rounded-xl border border-slate-200 hover:border-amber-500 hover:shadow-md transition-all group"
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -312,10 +313,10 @@ export default function ReportsPage() {
                   </div>
                   <h4 className="font-bold text-slate-900 text-sm">RM Reconciliation</h4>
                   <p className="text-xs text-slate-500 mt-1">Opening balance + receipts - issues vs stock count</p>
-                </a>
+                </Link>
 
-                <a
-                  href="/rm-receipts-matrix"
+                <Link
+                  to="/rm-receipts-matrix"
                   className="p-4 bg-white rounded-xl border border-slate-200 hover:border-indigo-500 hover:shadow-md transition-all group"
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -326,7 +327,7 @@ export default function ReportsPage() {
                   </div>
                   <h4 className="font-bold text-slate-900 text-sm">Receipts & Issues Matrix</h4>
                   <p className="text-xs text-slate-500 mt-1">Daily matrix of additions (GRN) and deductions (floor)</p>
-                </a>
+                </Link>
 
               </div>
 

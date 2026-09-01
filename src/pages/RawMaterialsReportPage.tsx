@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Download, RefreshCw, Package, TrendingUp, TrendingDown, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Calendar, Download, RefreshCw, Package, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import StatCard from '../components/ui/StatCard';
 import type { ReconRawMaterial } from '../types/reconciliation';
 import { MONTH_NAMES } from '../types/reconciliation';
+import { Link } from 'react-router-dom';
 
 interface Branch {
   id: string;
@@ -271,9 +272,9 @@ export default function RawMaterialsReportPage() {
           <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
           <p className="text-base font-semibold text-amber-800">No reconciliation period found for {MONTH_NAMES[selectedMonth - 1]} {selectedYear}</p>
           <p className="text-sm text-amber-600 mt-1">Create a reconciliation period first, then enter physical stock counts.</p>
-          <a href="/reconciliation" className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors">
-            <ExternalLink className="w-4 h-4" /> Go to Reconciliation
-          </a>
+          <Link to="/reconciliation" className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors">
+            Go to Reconciliation
+          </Link>
         </div>
       )}
 

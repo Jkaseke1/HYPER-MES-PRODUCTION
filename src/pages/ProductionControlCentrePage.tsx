@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileWarning, Plus, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Clock3, FileWarning, Plus, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import ProductionNoticeAttachments from '../components/production/ProductionNoticeAttachments';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { Link } from 'react-router-dom';
 
 type Order = { id: string; batch_number: string; status: string; planned_qty: number; planned_end?: string; created_at: string; formulations?: { name?: string; sage_code?: string } | null };
 type Notice = { id: string; production_order_id: string; output_qty_kg: number; output_bags: number; rejected_qty_kg: number; recycle_qty_kg: number; variance_reason: string; declaration_notes: string; status: string; submitted_at?: string; verified_at?: string };
@@ -92,7 +93,7 @@ export default function ProductionControlCentrePage() {
     <div className="grid gap-4 md:grid-cols-3">
       <div className="rounded-xl border border-rose-200 bg-rose-50 p-5"><FileWarning className="h-5 w-5 text-rose-600" /><p className="mt-2 text-sm font-semibold text-rose-900">Overdue digital notices</p><p className="text-3xl font-bold text-rose-700">{overdueOrders.length}</p><p className="text-xs text-rose-700">More than 24 hours without verification</p></div>
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><Clock3 className="h-5 w-5 text-amber-600" /><p className="mt-2 text-sm font-semibold text-amber-900">Awaiting verification</p><p className="text-3xl font-bold text-amber-700">{notices.filter(n => n.status === 'submitted').length}</p><p className="text-xs text-amber-700">Supervisor or Finance review required</p></div>
-      <a href="#/stock-take" className="rounded-xl border border-teal-200 bg-teal-50 p-5 transition hover:bg-teal-100"><ShieldCheck className="h-5 w-5 text-teal-600" /><p className="mt-2 text-sm font-semibold text-teal-900">Daily physical count</p><p className="mt-1 flex items-center gap-1 text-sm font-bold text-teal-700">Open Stock Take <ExternalLink className="h-3.5 w-3.5" /></p><p className="text-xs text-teal-700">Count, freeze, recount and approve variances.</p></a>
+      <Link to="/stock-take" className="rounded-xl border border-teal-200 bg-teal-50 p-5 transition hover:bg-teal-100"><ShieldCheck className="h-5 w-5 text-teal-600" /><p className="mt-2 text-sm font-semibold text-teal-900">Daily physical count</p><p className="mt-1 flex items-center gap-1 text-sm font-bold text-teal-700">Open Stock Take</p><p className="text-xs text-teal-700">Count, freeze, recount and approve variances.</p></Link>
     </div>
 
     <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
