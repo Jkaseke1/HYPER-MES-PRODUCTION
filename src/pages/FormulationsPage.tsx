@@ -148,6 +148,7 @@ export default function FormulationsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [ings, setIngs] = useState<IngRow[]>([emptyIng()]);
   const [editId, setEditId] = useState<string | null>(null);
+  const [copiedBatchSize, setCopiedBatchSize] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelected, setCompareSelected] = useState<Formulation[]>([]);
@@ -270,6 +271,7 @@ export default function FormulationsPage() {
     setEditId(null);
     setForm({ ...emptyForm });
     setIngs([emptyIng()]);
+    setCopiedBatchSize(null);
     setEditOpen(true);
   }
 
@@ -282,6 +284,7 @@ export default function FormulationsPage() {
       // Reset to blank
       setForm({ ...emptyForm });
       setIngs([emptyIng()]);
+      setCopiedBatchSize(null);
       return;
     }
     const src = formulations.find(f => f.id === sourceId);
@@ -314,6 +317,7 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: 0,
       status: 'draft',
     });
+    setCopiedBatchSize(Number(src.batch_size) || null);
     setIngs((srcIngs || []).length > 0 ? (srcIngs || []).map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
@@ -325,6 +329,7 @@ export default function FormulationsPage() {
 
   async function openEdit(f: Formulation) {
     setEditId(f.id);
+    setCopiedBatchSize(null);
     const variants = (f as any).unit_size_variants;
     console.log('Loading formulation variants:', variants);
     setForm({
@@ -534,6 +539,26 @@ export default function FormulationsPage() {
       ...i,
       percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100 * 100) / 100 : 0,
     }));
+  };
+
+  const updateReferenceBatchSize = (batchSize: string) => {
+    const nextBatchSize = Number(batchSize) || 0;
+    const variants = [...form.unit_size_variants];
+    variants[0] = { ...(variants[0] || { size: '', batch_size: 0 }), batch_size: nextBatchSize };
+    setForm({ ...form, batch_size: batchSize, unit_size_variants: variants });
+
+    if (copiedBatchSize && nextBatchSize > 0) {
+      const scale = nextBatchSize / copiedBatchSize;
+      const scaledIngredients = ings.map((ingredient) => ({
+        ...ingredient,
+        quantity: Math.round((Number(ingredient.quantity) || 0) * scale * 10000) / 10000,
+      }));
+      setIngs(recalculatePercentages(scaledIngredients, nextBatchSize));
+      setCopiedBatchSize(nextBatchSize);
+      return;
+    }
+
+    setIngs(recalculatePercentages(ings, nextBatchSize));
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
@@ -1543,8 +1568,8 @@ export default function FormulationsPage() {
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference Formula Batch Size (kg) *</label>
-              <input type="number" min="0.0001" step="0.0001" value={form.batch_size} onChange={e => { const batchSize = e.target.value; const v = [...form.unit_size_variants]; v[0] = { ...(v[0] || { size: '', batch_size: 0 }), batch_size: Number(batchSize) || 0 }; setForm({ ...form, batch_size: batchSize, unit_size_variants: v }); setIngs(recalculatePercentages(ings, Number(batchSize) || 0)); }} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" />
-              <p className="mt-1 text-xs text-slate-500">The BOM is stored against this reference quantity. Production orders can use any planned quantity and scale automatically.</p></div>
+              <input type="number" min="0.0001" step="0.0001" value={form.batch_size} onChange={e => updateReferenceBatchSize(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000" />
+              <p className="mt-1 text-xs text-slate-500">Copied BOM quantities scale proportionally when you change this size. Production orders can use any planned quantity and scale automatically.</p></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
