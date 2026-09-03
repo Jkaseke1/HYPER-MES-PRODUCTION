@@ -275,10 +275,8 @@ export default function FormulationsPage() {
     setEditOpen(true);
   }
 
-  // Optional helper: pre-fill the New Formula form from an existing formulation.
-  // Populates every field (name, code, sage_code, sizes, category, BOM, nutritional targets) as a starting point.
-  // The modal stays in New mode — user must edit Code (and usually Name/Sage Code) to unique values before saving.
-  // The duplicate-code alert in handleSave catches forgotten renames.
+  // Copy the technical BOM only. Identity fields stay blank so the result is
+  // always a new, independent formula instead of an apparent linked record.
   async function prefillFromFormulation(sourceId: string) {
     if (!sourceId) {
       // Reset to blank
@@ -301,9 +299,9 @@ export default function FormulationsPage() {
     }
     // Keep editId = null (always New mode)
     setForm({
-      name: src.name,
-      code: src.code,
-      sage_code: (src as any).sage_code || '',
+      name: '',
+      code: '',
+      sage_code: '',
       version: 1,
       category: src.category || '',
       description: src.description || '',
@@ -1534,21 +1532,21 @@ export default function FormulationsPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Copy from existing BOM (optional)</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Copy ingredients from an existing BOM (optional)</label>
               <select
                 value=""
                 onChange={e => { const v = e.target.value; e.target.value = ''; prefillFromFormulation(v); }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
                 disabled={!!editId}
-                title={editId ? 'Not available in Edit mode' : 'Pre-fill all fields from an existing formulation. Remember to change Code to a unique value before saving.'}
+                title={editId ? 'Not available in Edit mode' : 'Copies ingredients and technical settings into a new independent draft.'}
               >
-                <option value="">— Start blank —</option>
+                <option value="">— Start independent formula —</option>
                 {formulations.map(f => (
                   <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
                 ))}
               </select>
-              {!editId && form.code && (
-                <p className="text-[11px] text-amber-600 mt-1">⚠ Copying from an existing BOM — change <strong>Code</strong> to a unique value before saving.</p>
+              {!editId && copiedBatchSize && (
+                <p className="text-[11px] text-amber-600 mt-1">Copied ingredients are in a new draft. Enter a new name, formula code, and Sage code.</p>
               )}
             </div>
             <div>
