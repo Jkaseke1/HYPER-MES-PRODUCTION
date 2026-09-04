@@ -10,7 +10,7 @@ BEGIN;
 
 DO $$
 BEGIN
-  RAISE EXCEPTION 'IMPORT BLOCKED: live Sage contains 19 RM warehouse movements dated 2026-09-01 through 2026-09-03. Reconcile and import those movements before enabling this script.';
+  RAISE EXCEPTION 'IMPORT BLOCKED PENDING FINAL SAGE CHECK: expect 19 PostST rows, maximum AutoIdx 2188141, through 2026-09-04 13:40 CAT. Remove this guard only after the live result still matches.';
 END
 $$;
 
@@ -95,6 +95,38 @@ VALUES
   ('WHB0001', 36456.75, 79),
   ('ZIB0001', 0, 80);
 
+-- The live Sage query returned 19 warehouse-18 rows. Seventeen were DOC
+-- chick transactions with a net movement of zero and are outside the GRN-only
+-- raw-material launch. These are the two physical RM movements to catch up.
+CREATE TEMP TABLE sage_rm_movement_stage (
+  sage_auto_idx bigint PRIMARY KEY,
+  transaction_date date NOT NULL,
+  posted_at timestamp NOT NULL,
+  movement_type text NOT NULL CHECK (movement_type IN ('receipt', 'issue')),
+  material_code text NOT NULL,
+  quantity_kg numeric(14, 4) NOT NULL CHECK (quantity_kg > 0),
+  signed_quantity_kg numeric(14, 4) NOT NULL,
+  reference text NOT NULL,
+  secondary_reference text,
+  sage_user text NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO sage_rm_movement_stage (
+  sage_auto_idx,
+  transaction_date,
+  posted_at,
+  movement_type,
+  material_code,
+  quantity_kg,
+  signed_quantity_kg,
+  reference,
+  secondary_reference,
+  sage_user
+)
+VALUES
+  (2184241, date '2026-09-01', timestamp '2026-09-01 10:57:34', 'receipt', 'MAW0001', 14580, 14580, 'HFGRV003847', '049', 'OwenC'),
+  (2184400, date '2026-09-01', timestamp '2026-09-01 12:30:18.487', 'issue', 'SAC0001', 50, -50, 'HFIST11758', 'IJR002456', 'Matthew');
+
 DO $$
 DECLARE
   v_count integer;
@@ -109,6 +141,15 @@ BEGIN
       v_count, v_total;
   END IF;
 
+  SELECT count(*), sum(signed_quantity_kg)
+    INTO v_count, v_total
+  FROM sage_rm_movement_stage;
+
+  IF v_count <> 2 OR v_total <> 14530 THEN
+    RAISE EXCEPTION 'Sage catch-up control failed: expected 2 rows / +14530 kg, got % rows / % kg',
+      v_count, v_total;
+  END IF;
+
   IF (SELECT count(*) FROM public.warehouses WHERE upper(code) = 'RM' AND is_active) <> 1 THEN
     RAISE EXCEPTION 'Expected exactly one active RM warehouse';
   END IF;
@@ -120,6 +161,15 @@ BEGIN
 
   IF v_count <> 0 THEN
     RAISE EXCEPTION 'Material control failed: % staged code(s) are missing, inactive, or not measured in kg', v_count;
+  END IF;
+
+  SELECT count(*) INTO v_count
+  FROM sage_rm_movement_stage s
+  LEFT JOIN public.raw_materials rm ON upper(rm.code) = upper(s.material_code)
+  WHERE rm.id IS NULL OR NOT rm.is_active OR lower(rm.unit) <> 'kg';
+
+  IF v_count <> 0 THEN
+    RAISE EXCEPTION 'Sage catch-up control failed: % material code(s) are missing, inactive, or not measured in kg', v_count;
   END IF;
 
   IF EXISTS (
@@ -145,6 +195,10 @@ BEGIN
 
   IF EXISTS (SELECT 1 FROM public.rm_daily_snapshots) THEN
     RAISE EXCEPTION 'Opening import stopped: daily raw-material snapshots already exist.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.rm_daily_receipts) OR EXISTS (SELECT 1 FROM public.rm_daily_issues) THEN
+    RAISE EXCEPTION 'Opening import stopped: daily raw-material receipt or issue history already exists.';
   END IF;
 END
 $$;
@@ -207,6 +261,8 @@ INSERT INTO public.rm_daily_snapshots (
   raw_material_id,
   opening_stock,
   opening_stock_base_date,
+  mtd_receipts,
+  issues_to_production,
   physical_stock,
   system_stock,
   comment
@@ -217,17 +273,112 @@ SELECT
   rm.id,
   s.quantity_kg,
   date '2026-09-01',
+  COALESCE((
+    SELECT sum(m.quantity_kg)
+    FROM sage_rm_movement_stage m
+    WHERE upper(m.material_code) = upper(s.material_code)
+      AND m.movement_type = 'receipt'
+  ), 0),
+  COALESCE((
+    SELECT sum(m.quantity_kg)
+    FROM sage_rm_movement_stage m
+    WHERE upper(m.material_code) = upper(s.material_code)
+      AND m.movement_type = 'issue'
+  ), 0),
   s.quantity_kg,
   s.quantity_kg,
   'Production opening balance from physical count dated 2026-08-30; source row ' || s.source_row
 FROM opening_rm_stage s
 JOIN public.raw_materials rm ON upper(rm.code) = upper(s.material_code);
 
+WITH rm_warehouse AS (
+  SELECT id FROM public.warehouses WHERE upper(code) = 'RM' AND is_active
+)
+UPDATE public.warehouse_stock_balances wsb
+SET quantity = wsb.quantity + m.signed_quantity_kg,
+    updated_at = now()
+FROM sage_rm_movement_stage m
+JOIN public.raw_materials rm ON upper(rm.code) = upper(m.material_code)
+CROSS JOIN rm_warehouse w
+WHERE wsb.raw_material_id = rm.id
+  AND wsb.warehouse_id = w.id;
+
+UPDATE public.raw_materials rm
+SET current_stock = rm.current_stock + m.signed_quantity_kg,
+    updated_at = now()
+FROM sage_rm_movement_stage m
+WHERE upper(rm.code) = upper(m.material_code);
+
+WITH rm_warehouse AS (
+  SELECT id FROM public.warehouses WHERE upper(code) = 'RM' AND is_active
+)
+INSERT INTO public.stock_movements (
+  movement_type,
+  reference_type,
+  raw_material_id,
+  warehouse_id,
+  quantity,
+  unit,
+  movement_date,
+  batch_number,
+  notes
+)
+SELECT
+  m.movement_type,
+  'sage_rm_catchup_2026_09_01',
+  rm.id,
+  w.id,
+  m.quantity_kg,
+  'kg',
+  m.transaction_date::timestamptz,
+  COALESCE(m.secondary_reference, ''),
+  'Historical Sage catch-up; PostST AutoIdx ' || m.sage_auto_idx || '; reference ' || m.reference || '; posted ' || m.posted_at || '; Sage user ' || m.sage_user
+FROM sage_rm_movement_stage m
+JOIN public.raw_materials rm ON upper(rm.code) = upper(m.material_code)
+CROSS JOIN rm_warehouse w;
+
+INSERT INTO public.rm_daily_receipts (
+  receipt_date,
+  raw_material_name,
+  raw_material_id,
+  quantity_kg,
+  grn_reference
+)
+SELECT
+  m.transaction_date,
+  rm.name,
+  rm.id,
+  m.quantity_kg,
+  m.reference
+FROM sage_rm_movement_stage m
+JOIN public.raw_materials rm ON upper(rm.code) = upper(m.material_code)
+WHERE m.movement_type = 'receipt';
+
+INSERT INTO public.rm_daily_issues (
+  issue_date,
+  raw_material_name,
+  raw_material_id,
+  quantity_kg,
+  production_order_ref,
+  production_line
+)
+SELECT
+  m.transaction_date,
+  rm.name,
+  rm.id,
+  m.quantity_kg,
+  m.reference,
+  'Historical Sage catch-up'
+FROM sage_rm_movement_stage m
+JOIN public.raw_materials rm ON upper(rm.code) = upper(m.material_code)
+WHERE m.movement_type = 'issue';
+
 DO $$
 DECLARE
   v_balance_rows integer;
   v_movement_rows integer;
   v_snapshot_rows integer;
+  v_catchup_rows integer;
   v_warehouse_total numeric;
   v_master_total numeric;
 BEGIN
@@ -250,13 +401,18 @@ BEGIN
   FROM public.rm_daily_snapshots
   WHERE snapshot_date = date '2026-09-01';
 
+  SELECT count(*) INTO v_catchup_rows
+  FROM public.stock_movements
+  WHERE reference_type = 'sage_rm_catchup_2026_09_01';
+
   IF v_balance_rows <> 72
-     OR v_warehouse_total <> 1052917.45
-     OR v_master_total <> 1052917.45
+     OR v_warehouse_total <> 1067447.45
+     OR v_master_total <> 1067447.45
      OR v_movement_rows <> 39
+     OR v_catchup_rows <> 2
      OR v_snapshot_rows <> 72 THEN
-    RAISE EXCEPTION 'Final verification failed: balances=% total=% master=% movements=% snapshots=%',
-      v_balance_rows, v_warehouse_total, v_master_total, v_movement_rows, v_snapshot_rows;
+    RAISE EXCEPTION 'Final verification failed: balances=% total=% master=% opening movements=% catch-up movements=% snapshots=%',
+      v_balance_rows, v_warehouse_total, v_master_total, v_movement_rows, v_catchup_rows, v_snapshot_rows;
   END IF;
 END
 $$;
@@ -265,7 +421,7 @@ COMMIT;
 
 SELECT
   count(*) AS balance_rows,
-  round(sum(wsb.quantity), 2) AS opening_quantity_kg
+  round(sum(wsb.quantity), 2) AS current_quantity_kg
 FROM public.warehouse_stock_balances wsb
 JOIN public.warehouses w ON w.id = wsb.warehouse_id
 WHERE upper(w.code) = 'RM';
