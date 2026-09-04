@@ -31,7 +31,7 @@ interface WeighBridgeTicketProps {
 }
 
 const input =
-  'w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-colors bg-white placeholder:text-slate-400';
+  'w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors bg-white placeholder:text-slate-400';
 const label = 'block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1';
 
 function Field({ title, children }: { title: string; children: React.ReactNode }) {
@@ -46,8 +46,8 @@ function Field({ title, children }: { title: string; children: React.ReactNode }
 function SectionHeader({ icon: Icon, children }: { icon: any; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 mb-3">
-      <div className="w-6 h-6 bg-teal-50 rounded-md flex items-center justify-center border border-teal-100">
-        <Icon className="w-3.5 h-3.5 text-teal-700" />
+      <div className="w-6 h-6 bg-orange-50 rounded-md flex items-center justify-center border border-orange-100">
+        <Icon className="w-3.5 h-3.5 text-orange-700" />
       </div>
       <span className="text-xs font-bold text-slate-700 uppercase tracking-widest">{children}</span>
       <div className="flex-1 border-t border-slate-200" />
@@ -97,7 +97,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
   return (
     <div
       className={`rounded-xl border transition-all duration-200 ${
-      expanded ? 'border-teal-300 shadow-sm' : 'border-slate-200'
+      expanded ? 'border-orange-300 shadow-sm' : 'border-slate-200'
       } overflow-hidden`}
     >
       {/* ── Header ── */}
@@ -106,30 +106,30 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
           type="button"
           onClick={() => setExpanded(!expanded)}
           className={`w-full flex items-center justify-between px-5 py-3 transition-colors ${
-            expanded ? 'bg-[#063b3a]' : 'bg-white hover:bg-teal-50/50'
+            expanded ? 'bg-[#09072c]' : 'bg-white hover:bg-orange-50/60'
           }`}
         >
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${expanded ? 'bg-teal-500' : 'bg-teal-50 border border-teal-100'}`}>
-              <Scale className={`w-4 h-4 ${expanded ? 'text-white' : 'text-teal-700'}`} />
+            <div className={`p-2 rounded-lg ${expanded ? 'bg-orange-500' : 'bg-orange-50 border border-orange-100'}`}>
+              <Scale className={`w-4 h-4 ${expanded ? 'text-white' : 'text-orange-700'}`} />
             </div>
             <div className="text-left">
               <p className={`text-sm font-semibold ${expanded ? 'text-white' : 'text-slate-900'}`}>
                 Weigh Bridge Ticket
               </p>
-              <p className={`text-xs mt-0.5 ${expanded ? 'text-teal-100/75' : 'text-slate-500'}`}>
+              <p className={`text-xs mt-0.5 ${expanded ? 'text-slate-300' : 'text-slate-500'}`}>
                 {hasWBData ? `Ref: ${data.wb_transaction_no}` : 'Optional — expand to capture weighing data'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {hasWBData && !expanded && (
-              <span className="px-2.5 py-0.5 text-xs font-semibold bg-teal-500/20 text-teal-400 rounded-full border border-teal-500/30">
+              <span className="px-2.5 py-0.5 text-xs font-semibold bg-orange-500/15 text-orange-300 rounded-full border border-orange-400/30">
                 Captured
               </span>
             )}
             {expanded ? (
-              <ChevronUp className="w-4 h-4 text-teal-200" />
+              <ChevronUp className="w-4 h-4 text-orange-200" />
             ) : (
               <ChevronDown className="w-4 h-4 text-slate-500" />
             )}
@@ -300,8 +300,8 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
 
               {/* Entry / Exit side by side */}
               <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 rounded-lg bg-teal-50/60 border border-teal-100 space-y-2.5">
-                  <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Entry — 1st Weighing</p>
+                <div className="p-3 rounded-lg bg-orange-50/60 border border-orange-100 space-y-2.5">
+                  <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider">Entry — 1st Weighing</p>
                   <Field title="Time In">
                     <input
                       type="datetime-local"
@@ -323,8 +323,8 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                   </Field>
                 </div>
 
-                <div className="p-3 rounded-lg bg-teal-50/60 border border-teal-100 space-y-2.5">
-                  <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Exit — 2nd Weighing</p>
+                <div className="p-3 rounded-lg bg-orange-50/60 border border-orange-100 space-y-2.5">
+                  <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider">Exit — 2nd Weighing</p>
                   <Field title="Time Out">
                     <input
                       type="datetime-local"
@@ -349,8 +349,8 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
 
               {/* Nett Mass + Driver Signed */}
               <div className="flex items-stretch gap-2.5">
-                <div className="flex-1 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                  <label className="block text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">
+                <div className="flex-1 p-3 rounded-lg bg-orange-50 border border-orange-200">
+                  <label className="block text-[10px] font-bold text-orange-800 uppercase tracking-wider mb-1">
                     Nett Mass (kg) — Auto
                   </label>
                   <input
@@ -360,7 +360,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                     value={data.wb_nett_mass}
                     onChange={(e) => onChange('wb_nett_mass', e.target.value)}
                     placeholder="Auto-calculated"
-                    className="w-full px-3 py-2 border border-emerald-300 rounded-md text-lg font-bold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 bg-white"
+                    className="w-full px-3 py-2 border border-orange-300 rounded-md text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white"
                   />
                 </div>
 
@@ -374,7 +374,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                     />
                     <div
                       className={`w-10 h-6 rounded-full transition-colors duration-200 relative ${
-                        data.wb_driver_signed ? 'bg-teal-600' : 'bg-slate-300'
+                        data.wb_driver_signed ? 'bg-orange-500' : 'bg-slate-300'
                       }`}
                     >
                       <div
@@ -386,7 +386,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                     <span className="text-[10px] font-semibold text-slate-600">Driver Signed</span>
                   </label>
                   {data.wb_driver_signed && (
-                    <div className="flex items-center gap-1 text-[10px] font-semibold text-teal-700">
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-orange-700">
                       <CheckCircle className="w-3 h-3" />
                       Signed
                     </div>

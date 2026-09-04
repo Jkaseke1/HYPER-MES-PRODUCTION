@@ -386,7 +386,7 @@ export default function WeighBridgePage() {
       <Dialog open={newOpen} onOpenChange={() => setNewOpen(false)}>
         <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] rounded-lg border-0 shadow-2xl [&>button.absolute]:hidden">
           {/* Header */}
-          <div className="bg-[#063b3a] text-white px-6 py-4 flex-shrink-0 relative">
+          <div className="bg-[#09072c] border-b-4 border-orange-500 text-white px-6 py-4 flex-shrink-0 relative">
             <button
               onClick={() => setNewOpen(false)}
               className="absolute top-3.5 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
@@ -395,8 +395,8 @@ export default function WeighBridgePage() {
               <X className="w-4 h-4 text-white" />
             </button>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-500/20 border border-emerald-500/30 rounded-xl flex items-center justify-center">
-                <Scale className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 bg-orange-500/15 border border-orange-400/30 rounded-lg flex items-center justify-center">
+                <Scale className="w-5 h-5 text-orange-300" />
               </div>
               <div>
                 <h2 className="text-lg font-extrabold tracking-tight">New Weighbridge Ticket</h2>
@@ -426,7 +426,7 @@ export default function WeighBridgePage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 rounded-xl transition-all shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
               >
                 <Scale className="w-4 h-4" />
                 {saving ? 'Saving Ticket...' : 'Save WeighBridge Ticket'}
