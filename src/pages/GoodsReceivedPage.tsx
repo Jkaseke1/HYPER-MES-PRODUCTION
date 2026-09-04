@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Warehouse, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, ReceiptText, Link2, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -814,20 +814,20 @@ export default function GoodsReceivedPage() {
 
                 {/* GRN Header Panel */}
                 <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-700">
-                        <ReceiptText className="w-4 h-4" />
+                      <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                        01
                       </div>
                       <div>
                         <p className="text-sm font-extrabold text-slate-900">Receipt Details</p>
-                        <p className="text-[11px] text-slate-500">Core supplier delivery information</p>
+                        <p className="text-[11px] text-slate-500">Supplier, receipt date and delivery notes</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
+                    <span className="text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
                   </div>
                   <div className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.25fr)_minmax(220px,.75fr)] gap-3">
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(320px,1.35fr)_220px_minmax(260px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
                         <Select value={supplierId} onValueChange={setSupplierId}>
@@ -854,42 +854,43 @@ export default function GoodsReceivedPage() {
                           className="bg-white border-slate-300 font-medium focus:border-orange-500"
                         />
                       </div>
-                    </div>
-                    <div className="space-y-1.5 mt-3">
-                      <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Notes</Label>
-                      <Textarea
-                        id="notes"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Additional notes or comments..."
-                        rows={2}
-                        className="bg-white border-slate-300 text-sm resize-none"
-                      />
+                      <div className="space-y-1.5">
+                        <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Delivery Notes</Label>
+                        <Textarea
+                          id="notes"
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Optional delivery note..."
+                          rows={1}
+                          className="h-10 min-h-10 resize-none bg-white border-slate-300 text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
 
               {/* Sage Reference Controls */}
-              <div className="rounded-lg border border-orange-200 bg-orange-50/40 shadow-sm overflow-hidden">
-                <div className="bg-white border-b border-orange-100 px-4 py-3">
+              <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center text-orange-700 border border-orange-100">
-                      <Link2 className="w-4 h-4" />
+                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                      02
                     </div>
                     <div>
                       <p className="text-sm font-extrabold text-slate-900">Sage & Finance References</p>
-                      <p className="text-[11px] text-slate-500 font-medium">Invoice, delivery note, purchase order and external traceability</p>
+                      <p className="text-[11px] text-slate-500 font-medium">Document references for matching and audit traceability</p>
                     </div>
                   </div>
+                  <span className="hidden text-[10px] font-bold uppercase tracking-wider text-slate-400 sm:inline">Optional at capture</span>
                 </div>
-                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-orange-800">Supplier Invoice No</Label>
+                    <Label className="text-xs font-semibold text-slate-600">Supplier Invoice No</Label>
                     <Input
                       value={supplierInvoiceNo}
                       onChange={(e) => setSupplierInvoiceNo(e.target.value)}
                       placeholder="e.g. INV27539"
-                      className="bg-white border-orange-300 font-mono focus:border-orange-500"
+                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -898,7 +899,7 @@ export default function GoodsReceivedPage() {
                       value={supplierDeliveryNoteNo}
                       onChange={(e) => setSupplierDeliveryNoteNo(e.target.value)}
                       placeholder="e.g. DN-4567"
-                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
+                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -907,7 +908,7 @@ export default function GoodsReceivedPage() {
                       value={supplierOrderNo}
                       onChange={(e) => setSupplierOrderNo(e.target.value)}
                       placeholder="e.g. PO61092"
-                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
+                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -916,7 +917,7 @@ export default function GoodsReceivedPage() {
                       value={externalReference}
                       onChange={(e) => setExternalReference(e.target.value)}
                       placeholder="Defaults to WB ticket if left blank"
-                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
+                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
                     />
                   </div>
                 </div>
@@ -1118,14 +1119,14 @@ export default function GoodsReceivedPage() {
 
               {/* Line Items Section */}
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center border border-orange-100 text-orange-700">
-                      <Warehouse className="w-4 h-4" />
+                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                      04
                     </div>
                     <div>
                       <p className="text-sm font-extrabold text-slate-900">Raw Material Lines</p>
-                      <p className="text-[11px] text-slate-500">{items.length} item{items.length !== 1 ? 's' : ''} in this receipt</p>
+                      <p className="text-[11px] text-slate-500">{items.length} receipt line{items.length !== 1 ? 's' : ''} captured</p>
                     </div>
                   </div>
                   <button
@@ -1138,25 +1139,25 @@ export default function GoodsReceivedPage() {
                   </button>
                 </div>
 
-                <div className="p-4 space-y-3">
+                <div className="space-y-3 p-4">
                   {items.map((item, index) => (
-                    <div key={index} className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                    <div key={index} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                       {/* Item header */}
-                      <div className="flex items-center justify-between bg-slate-50 border-b border-slate-200 px-4 py-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-[#0b0b30] px-3.5 py-2.5 text-white">
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 bg-slate-900 text-white text-[10px] font-bold rounded flex items-center justify-center">{index + 1}</span>
-                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Raw Material Line {index + 1}</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded bg-orange-500 text-[10px] font-black text-white">{index + 1}</span>
+                          <span className="text-xs font-bold uppercase tracking-wide text-white">Material line {index + 1}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
-                            <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">{Number(item.received_qty || 0).toLocaleString()} kg</span>
-                            <span className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
+                            <span className="rounded border border-white/15 bg-white/10 px-2 py-0.5 font-mono font-bold text-slate-200">{Number(item.received_qty || 0).toLocaleString()} kg</span>
+                            <span className="rounded border border-orange-400/25 bg-orange-500/15 px-2 py-0.5 font-mono font-bold text-orange-200">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
                           </div>
                           {items.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeItem(index)}
-                              className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1 rounded-lg transition-colors border border-rose-200"
+                              className="rounded border border-rose-300/30 px-2.5 py-1 text-xs font-bold text-rose-200 transition-colors hover:bg-rose-500/15 hover:text-white"
                             >
                               Remove
                             </button>
@@ -1164,28 +1165,26 @@ export default function GoodsReceivedPage() {
                         </div>
                       </div>
 
-                      {/* Material selector */}
-                      <div className="px-4 pt-3 pb-2">
-                        <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Raw Material *</Label>
-                        <Select
-                          value={item.raw_material_id}
-                          onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
-                        >
-                          <SelectTrigger className="mt-1.5 bg-white border-slate-300 font-medium focus:border-orange-500">
-                            <SelectValue placeholder="Select material" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {materials.map((material) => (
-                              <SelectItem key={material.id} value={material.id}>
-                                {material.code} — {material.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Quantity grid */}
-                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-4 pb-4">
+                      {/* Compact material entry row */}
+                      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-7">
+                        <div className="col-span-2 space-y-1.5 xl:col-span-2">
+                          <Label className="text-xs font-bold uppercase tracking-wide text-slate-700">Raw Material *</Label>
+                          <Select
+                            value={item.raw_material_id}
+                            onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
+                          >
+                            <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500">
+                              <SelectValue placeholder="Select material" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {materials.map((material) => (
+                                <SelectItem key={material.id} value={material.id}>
+                                  {material.code} — {material.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs font-semibold text-slate-500">Ordered Qty</Label>
                           <Input
