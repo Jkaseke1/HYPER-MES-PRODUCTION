@@ -27,6 +27,7 @@ export default function WarehousePage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [bufferBalances, setBufferBalances] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
+  const [sageBalanceCount, setSageBalanceCount] = useState(0);
   const [bufferSearchTerm, setBufferSearchTerm] = useState('');
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -80,7 +81,8 @@ export default function WarehousePage() {
     const [
       { data: m },
       { data: formulations },
-      { data: sageRmBalances }
+      { data: sageRmBalances },
+      { data: mesRmBalances }
     ] = await Promise.all([
       supabase.from('raw_materials').select('*, warehouses(*)').or('is_active.eq.true,is_active.is.null').order('name'),
       supabase.from('formulations').select('sage_code').eq('status', 'active'),
@@ -88,13 +90,17 @@ export default function WarehousePage() {
         .from('sage_stock_balances')
         .select('raw_material_id, sage_code, quantity')
         .eq('warehouse_id', 18),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'RM'),
     ]);
 
     const finishedGoodCodes = new Set(
       (formulations || []).map((formulation) => String(formulation.sage_code || '').trim().toUpperCase())
     );
     setMaterials((m || []).filter((material) => {
-      const sageCode = String(material.sage_code || '').trim().toUpperCase();
+      const sageCode = String(material.sage_code || material.code || '').trim().toUpperCase();
       return sageCode && !finishedGoodCodes.has(sageCode);
     }));
 
@@ -104,12 +110,17 @@ export default function WarehousePage() {
       if (b.raw_material_id) rmMapById[b.raw_material_id] = Number(b.quantity || 0);
       if (b.sage_code) rmMapByCode[String(b.sage_code).trim().toUpperCase()] = Number(b.quantity || 0);
     });
+    const mesMapById: Record<string, number> = {};
+    (mesRmBalances || []).forEach((b: any) => {
+      if (b.raw_material_id) mesMapById[b.raw_material_id] = Number(b.quantity || 0);
+    });
     const rmMap: Record<string, number> = {};
     (m || []).forEach((material: any) => {
       const code = String(material.sage_code || material.code || '').trim().toUpperCase();
-      rmMap[material.id] = rmMapById[material.id] ?? rmMapByCode[code] ?? 0;
+      rmMap[material.id] = rmMapById[material.id] ?? rmMapByCode[code] ?? mesMapById[material.id] ?? Number(material.current_stock || 0);
     });
     setRmWarehouseBalances(rmMap);
+    setSageBalanceCount((sageRmBalances || []).length);
 
     if (!silent) setLoading(false);
   }
@@ -163,6 +174,8 @@ export default function WarehousePage() {
     stockedCount: materials.filter((m) => (rmWarehouseBalances[m.id] || 0) > 0).length,
     total: materials.length,
   }), [materials, rmWarehouseBalances]);
+
+  const hasLiveSageBalances = sageBalanceCount > 0;
 
   const stockHealth = useMemo(() => {
     const critical = catalogRows.filter((m) => m.reorder_level > 0 && m.rm_balance === 0);
@@ -240,22 +253,22 @@ export default function WarehousePage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="border border-[#f39200]/70 bg-[#f39200]/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#ffc36b]">Inventory control</span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Sage stock synchronized</span>
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${hasLiveSageBalances ? 'text-emerald-300' : 'text-[#ffc36b]'}`}><span className={`h-1.5 w-1.5 rounded-full ${hasLiveSageBalances ? 'bg-emerald-300' : 'bg-[#f39200]'}`} />{hasLiveSageBalances ? 'Sage stock synchronized' : 'PlantControl opening balance active'}</span>
             </div>
             <h1 className="mt-3 text-2xl font-bold">Raw Materials Warehouse</h1>
-            <p className="mt-1 text-sm text-slate-300">Live Sage RM stock, reorder thresholds, and movement history.</p>
+            <p className="mt-1 text-sm text-slate-300">{hasLiveSageBalances ? 'Live Sage RM stock, reorder thresholds, and movement history.' : 'Verified RM opening balances, reorder thresholds, and movement history.'}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="inline-flex h-12 items-center gap-2 border border-white/20 bg-white/10 px-4 text-xs font-semibold text-slate-100"><Database className="h-4 w-4 text-emerald-300" />Refreshes every 12 sec</span>
-            <button type="button" onClick={() => fetchData(true)} className="inline-flex h-12 w-12 items-center justify-center border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20" title="Refresh Sage RM stock" aria-label="Refresh Sage RM stock"><RefreshCw className="h-5 w-5" /></button>
+            <button type="button" onClick={() => fetchData(true)} className="inline-flex h-12 w-12 items-center justify-center border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20" title="Refresh RM stock" aria-label="Refresh RM stock"><RefreshCw className="h-5 w-5" /></button>
           </div>
         </div>
         <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On-hand value</p><p className="mt-2 text-3xl font-bold">$ {stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-slate-400">Current Sage valuation</p></div>
+          <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">On-hand value</p><p className="mt-2 text-3xl font-bold">$ {stats.rmValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p><p className="mt-1 text-xs text-slate-400">{hasLiveSageBalances ? 'Current Sage valuation' : 'PlantControl valuation'}</p></div>
           <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Stock lines</p><p className="mt-2 text-3xl font-bold text-emerald-300">{stats.stockedCount}</p><p className="mt-1 text-xs text-slate-400">Materials on hand</p></div>
           <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Reorder alerts</p><p className={`mt-2 text-3xl font-bold ${stats.lowCount ? 'text-[#ffc36b]' : 'text-emerald-300'}`}>{stats.lowCount}</p><p className="mt-1 text-xs text-slate-400">At or below threshold</p></div>
           <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Tracked materials</p><p className="mt-2 text-3xl font-bold text-cyan-300">{catalogRows.length}</p><p className="mt-1 text-xs text-slate-400">Stocked or managed</p></div>
-          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-emerald-300"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />RM warehouse 18</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Database className="h-3.5 w-3.5" />Synchronized</span></div><p className="mt-2 text-xs text-slate-400">Sage is the stock authority</p></div>
+          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Stock source</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className={`inline-flex items-center gap-1.5 ${hasLiveSageBalances ? 'text-emerald-300' : 'text-[#ffc36b]'}`}><span className={`h-1.5 w-1.5 rounded-full ${hasLiveSageBalances ? 'bg-emerald-300' : 'bg-[#f39200]'}`} />{hasLiveSageBalances ? 'Sage RM warehouse 18' : 'PlantControl RM warehouse'}</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Database className="h-3.5 w-3.5" />{hasLiveSageBalances ? 'Synchronized' : 'Opening balance'}</span></div><p className="mt-2 text-xs text-slate-400">{hasLiveSageBalances ? 'Live Sage stock is active' : 'Switches to Sage after live integration'}</p></div>
         </div>
       </section>
       <div className="flex w-fit gap-1 border border-slate-200 bg-slate-50 p-1">
@@ -277,7 +290,7 @@ export default function WarehousePage() {
           </div>
           <div className="border border-slate-200 bg-white">
             <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 className="text-base font-bold text-slate-900">RM stock register</h2><p className="mt-0.5 text-xs text-slate-500">Sage RM on-hand quantities with editable reorder thresholds.</p></div>
+              <div><h2 className="text-base font-bold text-slate-900">RM stock register</h2><p className="mt-0.5 text-xs text-slate-500">{hasLiveSageBalances ? 'Sage RM on-hand quantities with editable reorder thresholds.' : 'PlantControl opening and catch-up quantities with editable reorder thresholds.'}</p></div>
               <div className="relative w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input type="text" placeholder="Search materials..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-10 pr-4 py-2 ${inputCls}`} />
@@ -292,7 +305,7 @@ export default function WarehousePage() {
                     </th>
                     <th className={`text-left ${thCls}`}>Code</th>
                     <th className={`text-right ${thCls} cursor-pointer`} onClick={() => toggleSort('rm_balance')}>
-                      <span className="inline-flex items-center gap-1 justify-end">Sage RM On Hand <ArrowUpDown className="w-3 h-3" /></span>
+                      <span className="inline-flex items-center gap-1 justify-end">{hasLiveSageBalances ? 'Sage RM On Hand' : 'RM On Hand'} <ArrowUpDown className="w-3 h-3" /></span>
                     </th>
                     <th className={`text-right ${thCls}`}>Reorder Level</th>
                     <th className={`text-center ${thCls}`}>Stock Level</th>
@@ -357,7 +370,7 @@ export default function WarehousePage() {
                     );
                   })}
                   {rmRows.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No Sage RM stock or replenishment thresholds found</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">No RM stock or replenishment thresholds found</td></tr>
                   )}
                 </tbody>
               </table>
