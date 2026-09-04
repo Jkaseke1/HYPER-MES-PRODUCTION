@@ -831,7 +831,7 @@ export default function GoodsReceivedPage() {
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
                         <Select value={supplierId} onValueChange={setSupplierId}>
-                          <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-emerald-500 focus:ring-emerald-500/20">
+                          <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500 focus:ring-orange-500/20">
                             <SelectValue placeholder="Select supplier..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -851,7 +851,7 @@ export default function GoodsReceivedPage() {
                           type="date"
                           value={receivedDate}
                           onChange={(e) => setReceivedDate(e.target.value)}
-                          className="bg-white border-slate-300 font-medium focus:border-emerald-500"
+                          className="bg-white border-slate-300 font-medium focus:border-orange-500"
                         />
                       </div>
                     </div>
@@ -870,10 +870,10 @@ export default function GoodsReceivedPage() {
                 </div>
 
               {/* Sage Reference Controls */}
-              <div className="rounded-lg border border-teal-200 bg-teal-50/40 shadow-sm overflow-hidden">
-                <div className="bg-white border-b border-teal-100 px-4 py-3">
+              <div className="rounded-lg border border-orange-200 bg-orange-50/40 shadow-sm overflow-hidden">
+                <div className="bg-white border-b border-orange-100 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
+                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center text-orange-700 border border-orange-100">
                       <Link2 className="w-4 h-4" />
                     </div>
                     <div>
@@ -884,12 +884,12 @@ export default function GoodsReceivedPage() {
                 </div>
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-teal-800">Supplier Invoice No</Label>
+                    <Label className="text-xs font-bold text-orange-800">Supplier Invoice No</Label>
                     <Input
                       value={supplierInvoiceNo}
                       onChange={(e) => setSupplierInvoiceNo(e.target.value)}
                       placeholder="e.g. INV27539"
-                      className="bg-white border-teal-300 font-mono focus:border-teal-600"
+                      className="bg-white border-orange-300 font-mono focus:border-orange-500"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -898,7 +898,7 @@ export default function GoodsReceivedPage() {
                       value={supplierDeliveryNoteNo}
                       onChange={(e) => setSupplierDeliveryNoteNo(e.target.value)}
                       placeholder="e.g. DN-4567"
-                      className="bg-white border-blue-200 font-mono"
+                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -907,7 +907,7 @@ export default function GoodsReceivedPage() {
                       value={supplierOrderNo}
                       onChange={(e) => setSupplierOrderNo(e.target.value)}
                       placeholder="e.g. PO61092"
-                      className="bg-white border-blue-200 font-mono"
+                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -916,7 +916,7 @@ export default function GoodsReceivedPage() {
                       value={externalReference}
                       onChange={(e) => setExternalReference(e.target.value)}
                       placeholder="Defaults to WB ticket if left blank"
-                      className="bg-white border-blue-200 font-mono"
+                      className="bg-white border-orange-200 font-mono focus:border-orange-500"
                     />
                   </div>
                 </div>
@@ -930,7 +930,7 @@ export default function GoodsReceivedPage() {
                   className="w-full flex items-center justify-between px-4 py-3 border-b border-slate-200 text-left hover:bg-slate-50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
+                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center text-orange-700 border border-orange-100">
                       <Scale className="w-4 h-4" />
                     </div>
                     <div>
@@ -939,7 +939,7 @@ export default function GoodsReceivedPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {weighBridgeTicketId && <span className="text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-full uppercase tracking-wider">Linked</span>}
+                    {weighBridgeTicketId && <span className="text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200 px-2 py-1 rounded-full uppercase tracking-wider">Linked</span>}
                     {wbExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                   </div>
                 </button>
@@ -1104,7 +1104,7 @@ export default function GoodsReceivedPage() {
                                 id="wb_driver_signed"
                                 checked={wbForm.driver_signed}
                                 onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
-                                className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
                               />
                               <Label htmlFor="wb_driver_signed" className="text-xs font-semibold cursor-pointer">Driver Signed</Label>
                             </div>
@@ -1120,7 +1120,7 @@ export default function GoodsReceivedPage() {
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100 text-blue-700">
+                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center border border-orange-100 text-orange-700">
                       <Warehouse className="w-4 h-4" />
                     </div>
                     <div>
@@ -1171,7 +1171,7 @@ export default function GoodsReceivedPage() {
                           value={item.raw_material_id}
                           onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                         >
-                          <SelectTrigger className="mt-1.5 bg-white border-slate-300 font-medium focus:border-emerald-500">
+                          <SelectTrigger className="mt-1.5 bg-white border-slate-300 font-medium focus:border-orange-500">
                             <SelectValue placeholder="Select material" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1204,7 +1204,7 @@ export default function GoodsReceivedPage() {
                             value={item.received_qty}
                             onChange={(e) => updateItem(index, 'received_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white border-emerald-300 focus:border-emerald-500 font-extrabold text-slate-900"
+                            className="bg-white border-orange-300 focus:border-orange-500 font-extrabold text-slate-900"
                             placeholder="0.00"
                           />
                         </div>
@@ -1250,7 +1250,7 @@ export default function GoodsReceivedPage() {
               <aside className="lg:sticky lg:top-4 h-fit rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/15 text-emerald-300">
+                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/15 text-orange-300">
                       <Hash className="w-4 h-4" />
                     </div>
                     <div>
@@ -1264,17 +1264,17 @@ export default function GoodsReceivedPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total Ordered</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
-                  <div className="border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Total Received</p>
-                    <p className="font-extrabold text-emerald-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-emerald-700">kg</span></p>
+                  <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Total Received</p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-orange-800">kg</span></p>
                   </div>
                   <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Weighbridge Nett</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
-                  <div className="border border-blue-200 bg-blue-50 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-blue-700">Estimated Value</p>
-                    <p className="font-extrabold text-blue-900 text-lg mt-0.5 font-mono">${totalReceivedValue.toFixed(2)}</p>
+                  <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Estimated Value</p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">${totalReceivedValue.toFixed(2)}</p>
                   </div>
 
                   <div className={`col-span-2 px-3 py-2.5 text-[11px] font-medium flex items-start gap-2 ${wbNettMassValue > 0 && wbVariancePct > 2 ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
