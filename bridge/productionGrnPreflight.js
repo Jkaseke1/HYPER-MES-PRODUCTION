@@ -71,6 +71,7 @@ async function run() {
     fail(`BRIDGE_ALLOWED_EVENT_TYPES must be exactly ${EXPECTED_EVENT_TYPE}`);
   }
   if (process.env.BRIDGE_ENFORCE_GRN_ONLY !== 'true') fail('BRIDGE_ENFORCE_GRN_ONLY must be true');
+  if (process.env.BRIDGE_ENFORCE_SAGE_IDENTITY !== 'true') fail('BRIDGE_ENFORCE_SAGE_IDENTITY must be true');
   if (process.env.DRY_RUN !== 'true') fail('DRY_RUN must be true during preflight');
   if (process.env.SAGE_STOCK_SYNC_ENABLED !== 'false') {
     fail('SAGE_STOCK_SYNC_ENABLED must be false until Sage reconciliation is approved');
