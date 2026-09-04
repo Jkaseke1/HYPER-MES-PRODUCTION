@@ -8,6 +8,12 @@
 
 BEGIN;
 
+DO $$
+BEGIN
+  RAISE EXCEPTION 'IMPORT BLOCKED: live Sage contains 19 RM warehouse movements dated 2026-09-01 through 2026-09-03. Reconcile and import those movements before enabling this script.';
+END
+$$;
+
 CREATE TEMP TABLE opening_rm_stage (
   material_code text PRIMARY KEY,
   quantity_kg numeric(14, 4) NOT NULL CHECK (quantity_kg >= 0),
