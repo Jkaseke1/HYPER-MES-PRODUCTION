@@ -2,17 +2,13 @@
 -- Source: Raw Materials Warehouse Stock Count 30.08.2026.xlsx
 -- Source SHA-256: 6B4D550A3D13BD685DE03D1D685C008A4BC7B1F700E2A39A82B9340A012A9373
 -- Effective date: 2026-09-01
+-- Live Sage reconciliation confirmed 2026-09-04 13:44 CAT:
+-- 19 PostST rows, maximum AutoIdx 2188141, net RM change +14530 kg.
 --
 -- Run once in the Production Supabase SQL Editor. The script aborts without
 -- changing data if stock activity or opening balances already exist.
 
 BEGIN;
-
-DO $$
-BEGIN
-  RAISE EXCEPTION 'IMPORT BLOCKED PENDING FINAL SAGE CHECK: expect 19 PostST rows, maximum AutoIdx 2188141, through 2026-09-04 13:40 CAT. Remove this guard only after the live result still matches.';
-END
-$$;
 
 CREATE TEMP TABLE opening_rm_stage (
   material_code text PRIMARY KEY,
