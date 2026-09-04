@@ -34,8 +34,12 @@ cp .env.example .env
 
 ### 3. Test Connection
 ```bash
-npm run test-connection
+npm run preflight:production-grn
 ```
+
+This preflight is read-only. It verifies the Production Supabase connection,
+GRN-only event scope, disabled stock synchronization, and the Sage SDK company
+identity. It stops if the SDK still reports UAT or a different company database.
 
 ### 4. Start Bridge Worker
 ```bash
@@ -114,6 +118,10 @@ Set `BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed` on the hosted bridge when only
 the GRN phase is approved. The worker then ignores pending production,
 material-transfer, and dispatch events until their event types are deliberately
 added to the allow-list. Leave it blank only once every Sage workflow is live.
+
+Keep `DRY_RUN=true` and `SAGE_STOCK_SYNC_ENABLED=false` through connection
+testing. In this mode the worker reports queued GRNs without claiming or changing
+them, and the Finance-approved PlantControl opening balances remain authoritative.
 
 ### **Required Sage Codes**
 - **suppliers.sage_code** - Sage supplier account codes

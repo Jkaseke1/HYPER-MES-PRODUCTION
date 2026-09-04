@@ -28,6 +28,8 @@ const ALLOWED_EVENT_TYPES = new Set(
     .map((eventType) => eventType.trim())
     .filter(Boolean),
 );
+const STOCK_SYNC_ENABLED = process.env.SAGE_STOCK_SYNC_ENABLED === 'true';
+const ENFORCE_GRN_ONLY = process.env.BRIDGE_ENFORCE_GRN_ONLY === 'true';
 let stockSyncQueue = Promise.resolve();
 let eventProcessingInProgress = false;
 
@@ -194,6 +196,14 @@ async function processPendingEvents() {
   if (!pending || pending.length === 0) return;
 
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
+
+  if (DRY_RUN) {
+    for (const event of pending) {
+      console.log(`  [DRY RUN] ${event.event_type} - ${event.reference_type} - ${event.reference_id}`);
+    }
+    console.log('  [DRY RUN] No events were claimed or changed.');
+    return;
+  }
 
   // Give users a live FIFO position while another Sage transaction is being
   // posted. The first row is claimed immediately; every later row remains
@@ -425,11 +435,16 @@ async function processPendingEvents() {
 }
 
 async function startWorker() {
+  if (ENFORCE_GRN_ONLY && (ALLOWED_EVENT_TYPES.size !== 1 || !ALLOWED_EVENT_TYPES.has('grn_confirmed'))) {
+    throw new Error('Production GRN scope lock requires BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed');
+  }
+
   console.log('==============================================');
   console.log(' HYPER MES — Sage Pastel Bridge Worker');
   console.log(` Mode: ${DRY_RUN ? 'DRY RUN (safe — no Sage writes)' : 'LIVE'}`);
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
+  console.log(` Sage stock sync: ${STOCK_SYNC_ENABLED ? 'ENABLED' : 'DISABLED'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');
@@ -444,12 +459,16 @@ async function startWorker() {
     return;
   }
 
-  // A full stock refresh is batched so a large catalogue never delays posting events.
-  void refreshSageStock(undefined, 'startup reconciliation batch');
+  // Opening balances remain authoritative until live Sage reconciliation is approved.
+  if (STOCK_SYNC_ENABLED && !DRY_RUN) {
+    void refreshSageStock(undefined, 'startup reconciliation batch');
+  }
 
   await processPendingEvents();
   setInterval(processPendingEvents, POLL_INTERVAL_MS);
-  setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
+  if (STOCK_SYNC_ENABLED && !DRY_RUN) {
+    setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
+  }
 }
 
 process.on('SIGINT',  () => { console.log('\n📡 Shutting down...'); process.exit(0); });

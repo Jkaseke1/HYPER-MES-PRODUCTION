@@ -5,6 +5,7 @@
   "main": "bridgeWorker.js",
   "scripts": {
     "start": "node bridgeWorker.js",
+    "preflight:production-grn": "node productionGrnPreflight.js",
     "dev": "nodemon bridgeWorker.js",
     "test-conn": "node test-conn.js",
     "test-grn": "node goodsReceiptAuto.js",
