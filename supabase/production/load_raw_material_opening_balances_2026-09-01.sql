@@ -10,11 +10,14 @@
 
 BEGIN;
 
+DROP TABLE IF EXISTS pg_temp.opening_rm_stage;
+DROP TABLE IF EXISTS pg_temp.sage_rm_movement_stage;
+
 CREATE TEMP TABLE opening_rm_stage (
   material_code text PRIMARY KEY,
   quantity_kg numeric(14, 4) NOT NULL CHECK (quantity_kg >= 0),
   source_row integer NOT NULL UNIQUE
-) ON COMMIT DROP;
+) ON COMMIT PRESERVE ROWS;
 
 INSERT INTO opening_rm_stage (material_code, quantity_kg, source_row)
 VALUES
@@ -105,7 +108,7 @@ CREATE TEMP TABLE sage_rm_movement_stage (
   reference text NOT NULL,
   secondary_reference text,
   sage_user text NOT NULL
-) ON COMMIT DROP;
+) ON COMMIT PRESERVE ROWS;
 
 INSERT INTO sage_rm_movement_stage (
   sage_auto_idx,
