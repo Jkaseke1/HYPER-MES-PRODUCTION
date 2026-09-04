@@ -27,6 +27,7 @@ export default function WarehousePage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [bufferBalances, setBufferBalances] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
+  const [trackedRmMaterialIds, setTrackedRmMaterialIds] = useState<string[]>([]);
   const [sageBalanceCount, setSageBalanceCount] = useState(0);
   const [bufferSearchTerm, setBufferSearchTerm] = useState('');
   const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -114,6 +115,10 @@ export default function WarehousePage() {
     (mesRmBalances || []).forEach((b: any) => {
       if (b.raw_material_id) mesMapById[b.raw_material_id] = Number(b.quantity || 0);
     });
+    setTrackedRmMaterialIds([...new Set([
+      ...(mesRmBalances || []).map((b: any) => b.raw_material_id).filter(Boolean),
+      ...(sageRmBalances || []).map((b: any) => b.raw_material_id).filter(Boolean),
+    ])]);
     const rmMap: Record<string, number> = {};
     (m || []).forEach((material: any) => {
       const code = String(material.sage_code || material.code || '').trim().toUpperCase();
@@ -148,7 +153,7 @@ export default function WarehousePage() {
   const catalogRows = useMemo(() => materials.map((m) => ({
       ...m,
       rm_balance: rmWarehouseBalances[m.id] ?? 0,
-  })).filter((m) => m.rm_balance > 0 || m.reorder_level > 0), [materials, rmWarehouseBalances]);
+  })).filter((m) => trackedRmMaterialIds.includes(m.id)), [materials, rmWarehouseBalances, trackedRmMaterialIds]);
 
   const rmRows = useMemo(() => {
     let list = [...catalogRows];
@@ -166,14 +171,13 @@ export default function WarehousePage() {
   }, [catalogRows, searchTerm, sortField, sortAsc]);
 
   const stats = useMemo(() => ({
-    rmValue: materials.reduce((s, m) => s + ((rmWarehouseBalances[m.id] || 0) * m.cost_per_unit), 0),
-    lowCount: materials.filter((m) => {
-      const rm = rmWarehouseBalances[m.id] || 0;
-      return m.reorder_level > 0 && rm <= m.reorder_level;
+    rmValue: catalogRows.reduce((s, m) => s + (m.rm_balance * m.cost_per_unit), 0),
+    lowCount: catalogRows.filter((m) => {
+      return m.reorder_level > 0 && m.rm_balance <= m.reorder_level;
     }).length,
-    stockedCount: materials.filter((m) => (rmWarehouseBalances[m.id] || 0) > 0).length,
-    total: materials.length,
-  }), [materials, rmWarehouseBalances]);
+    stockedCount: catalogRows.filter((m) => m.rm_balance > 0).length,
+    total: catalogRows.length,
+  }), [catalogRows]);
 
   const hasLiveSageBalances = sageBalanceCount > 0;
 
