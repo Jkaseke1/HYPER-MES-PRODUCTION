@@ -37,6 +37,9 @@ for ($attempt = 1; $attempt -le 30; $attempt++) {
   try {
     $headers = @{}
     $apiKey = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_KEY", "User")
+    if ([string]::IsNullOrWhiteSpace($apiKey)) {
+      $apiKey = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_KEY", "Machine")
+    }
     if (-not [string]::IsNullOrWhiteSpace($apiKey)) {
       $headers["X-Hyper-Api-Key"] = $apiKey
     }
