@@ -25,7 +25,27 @@ Start-Process `
   -WorkingDirectory $apiDir `
   -WindowStyle Hidden
 
-Start-Sleep -Seconds 1
-$apiUrl = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_URL", "User")
+$apiUrl = $env:HYPER_SAGE_API_URL
+if ([string]::IsNullOrWhiteSpace($apiUrl)) {
+  $apiUrl = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_URL", "User")
+}
 if ([string]::IsNullOrWhiteSpace($apiUrl)) { $apiUrl = "http://127.0.0.1:5088/" }
-Invoke-RestMethod -Method Get -Uri ($apiUrl.TrimEnd('/') + "/api/v1/health")
+
+$healthUri = $apiUrl.TrimEnd('/') + "/api/v1/health"
+$lastError = $null
+for ($attempt = 1; $attempt -le 30; $attempt++) {
+  try {
+    $headers = @{}
+    $apiKey = [Environment]::GetEnvironmentVariable("HYPER_SAGE_API_KEY", "User")
+    if (-not [string]::IsNullOrWhiteSpace($apiKey)) {
+      $headers["X-Hyper-Api-Key"] = $apiKey
+    }
+    Invoke-RestMethod -Method Get -Uri $healthUri -Headers $headers -TimeoutSec 3
+    exit 0
+  } catch {
+    $lastError = $_
+    Start-Sleep -Seconds 1
+  }
+}
+
+throw "SDK API did not become healthy at $healthUri after 30 seconds. Last error: $lastError"
