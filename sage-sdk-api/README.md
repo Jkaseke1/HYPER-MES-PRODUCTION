@@ -25,7 +25,7 @@ HYPER_SAGE_API_KEY
 HYPER_SAGE_ENVIRONMENT              # UAT or Production
 HYPER_SAGE_API_URL                  # UAT 5088; Production 5090
 HYPER_SAGE_WRITE_MODE               # Disabled by default; Enabled only for an approved posting window
-HYPER_SAGE_ALLOWED_OPERATIONS       # Production GRN phase: goods-receipts
+HYPER_SAGE_ALLOWED_OPERATIONS       # Production scope: goods-receipts,warehouse-transfers
 HYPER_SAGE_LIVE_COMPANY_DATABASE    # Hyperfeeds 2024
 HYPER_SAGE_SERVER                   # fallback when Common and company share a SQL server
 HYPER_SAGE_COMMON_SERVER            # optional: SageCommon SQL server, e.g. 192.168.203.130\HYPERFEEDSSQL

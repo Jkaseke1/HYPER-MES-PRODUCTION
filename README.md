@@ -13,5 +13,6 @@ files, staff access registers, local environment files, and Sage credentials.
 - Do not copy UAT user identities, records, or Sage references into Production.
 - Apply only the reviewed scripts under `supabase/production` and the selected
   schema migrations documented there.
-- Keep `BRIDGE_ALLOWED_EVENT_TYPES=stock_take_sage_snapshot` until Finance
-  formally releases the GRN workflow.
+- This release enables only approved GRNs and Production material receipts:
+  `BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed,material_transfer_to_production`.
+  Keep all other Sage event types blocked.

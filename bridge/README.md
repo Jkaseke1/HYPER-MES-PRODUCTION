@@ -114,10 +114,10 @@ SAGE_SDK_API_KEY=your-protected-sdk-api-key
 
 ### Phased rollout event scope
 
-Set `BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed` on the hosted bridge when only
-the GRN phase is approved. The worker then ignores pending production,
-material-transfer, and dispatch events until their event types are deliberately
-added to the allow-list. Leave it blank only once every Sage workflow is live.
+For this release set
+`BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed,material_transfer_to_production`.
+The worker then ignores pending production, dispatch, and all other unsupported
+events. Add further event types only after they are separately approved.
 
 Keep `DRY_RUN=true` and `SAGE_STOCK_SYNC_ENABLED=false` through connection
 testing. In this mode the worker reports queued GRNs without claiming or changing
