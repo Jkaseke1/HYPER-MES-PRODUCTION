@@ -57,7 +57,10 @@ async function verifySdkConnection() {
       throw new Error(`Sage SDK database is ${body.companyDatabase || 'unknown'}, expected ${expectedDatabase}`);
     }
   }
-  console.log(`Sage SDK connection: ${body.sdkConnection || 'verified'}`);
+  console.log(`PlantControl Sage SDK connection: ${body.sdkConnection || 'verified'}`);
+  console.log(`Sage environment: ${body.environment || 'unknown'}`);
+  console.log(`Sage company database: ${body.companyDatabase || 'unknown'}`);
+  return body;
 }
 
 async function queueSageStockSync(itemCodes, reason, options = {}) {
@@ -454,7 +457,7 @@ async function startWorker() {
   }
 
   console.log('==============================================');
-  console.log(' HYPER MES — Sage Pastel Bridge Worker');
+  console.log(' PlantControl — HYPER MES Sage Pastel Bridge Worker');
   console.log(` Mode: ${DRY_RUN ? 'DRY RUN (safe — no Sage writes)' : 'LIVE'}`);
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
