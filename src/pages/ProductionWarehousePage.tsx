@@ -33,6 +33,7 @@ interface AggregatedMaterial {
 interface ProductionMaterialSetting { id: string; name: string; code: string; unit: string; reorder_level: number; production_reorder_level?: number; }
 
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface PendingTransfer {
   id: string;
@@ -50,6 +51,8 @@ interface PendingTransfer {
 type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 
 export default function ProductionWarehousePage() {
+  const { profile } = useAuth();
+  const isProductionReceiver = profile?.role === 'production_receiver';
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
@@ -363,12 +366,14 @@ export default function ProductionWarehousePage() {
                 <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} kg</p>
                 <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
               </div>
-            <Link
-              to="/material-transfer"
-              className="text-sm font-semibold text-teal-700 hover:text-teal-900"
-            >
-              Transfer history
-            </Link>
+            {!isProductionReceiver && (
+              <Link
+                to="/material-transfer"
+                className="text-sm font-semibold text-teal-700 hover:text-teal-900"
+              >
+                Transfer history
+              </Link>
+            )}
           </div>
           </div>
 
@@ -534,10 +539,10 @@ export default function ProductionWarehousePage() {
                       <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
                       <p className="text-xs text-slate-400">MES floor ledger</p>
                     </div>
-                    <div className="hidden lg:block" onClick={(event) => event.stopPropagation()}>
+                    {!isProductionReceiver && <div className="hidden lg:block" onClick={(event) => event.stopPropagation()}>
                       <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Floor minimum</label>
                       <div className="mt-1 flex items-center gap-1"><SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" /><input type="number" min="0" step="0.01" value={thresholdDraft[m.raw_material_id] ?? String(m.production_reorder_level || '')} onChange={(event) => setThresholdDraft((draft) => ({ ...draft, [m.raw_material_id]: event.target.value }))} onBlur={(event) => saveProductionThreshold(m.raw_material_id, event.target.value)} className="w-20 border border-slate-200 bg-white px-1.5 py-1 text-right font-mono text-xs text-slate-700 focus:border-teal-500 focus:outline-none" /><span className="text-[10px] text-slate-400">{m.unit}</span></div>
-                    </div>
+                    </div>}
                     <div className="text-right hidden sm:block">
                       <p className="text-slate-600 flex items-center gap-1"><Calendar className="w-3 h-3" />{format(new Date(m.last_transfer), 'dd MMM yyyy')}</p>
                       <p className="text-xs text-slate-400">Last transfer</p>

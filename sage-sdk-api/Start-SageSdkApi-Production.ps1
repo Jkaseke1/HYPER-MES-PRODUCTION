@@ -16,6 +16,6 @@ $env:HYPER_SAGE_ENVIRONMENT = "Production"
 $env:HYPER_SAGE_API_URL = "http://127.0.0.1:5090/"
 $env:HYPER_SAGE_LIVE_COMPANY_DATABASE = $liveDatabase
 $env:HYPER_SAGE_WRITE_MODE = if ($EnableGrnWrites) { "Enabled" } else { "Disabled" }
-$env:HYPER_SAGE_ALLOWED_OPERATIONS = "goods-receipts"
+$env:HYPER_SAGE_ALLOWED_OPERATIONS = "goods-receipts,warehouse-transfers"
 
 & (Join-Path $PSScriptRoot "Start-SageSdkApi.ps1")

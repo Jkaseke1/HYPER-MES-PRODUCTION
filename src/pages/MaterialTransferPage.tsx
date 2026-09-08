@@ -356,7 +356,8 @@ export default function MaterialTransferPage() {
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
-  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant'].includes(profile?.role || '');
+  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
+  const canCreateTransfer = !['production_receiver'].includes(profile?.role || '');
   const activeSagePosts = transfers.filter((transfer) => {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
@@ -405,12 +406,14 @@ export default function MaterialTransferPage() {
                 <CheckCircle2 className="h-4 w-4" /> Production Receiving ({statusCounts.in_buffer})
               </Link>
             )}
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
-            >
-              <Plus className="h-4 w-4" /> New Transfer
-            </button>
+            {canCreateTransfer && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
+              >
+                <Plus className="h-4 w-4" /> New Transfer
+              </button>
+            )}
           </div>
         </div>
         <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">

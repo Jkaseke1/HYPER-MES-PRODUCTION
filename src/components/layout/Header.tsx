@@ -209,7 +209,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   }, []);
 
   useEffect(() => {
-    const receivingRoles = ['admin', 'production_manager', 'supervisor', 'operator', 'logistics', 'finance', 'accountant'];
+    const receivingRoles = ['admin', 'production_manager', 'supervisor', 'operator', 'logistics', 'finance', 'accountant', 'production_receiver'];
     if (!receivingRoles.includes(profile?.role || '')) {
       setIncomingProductionTransfers([]);
       return;

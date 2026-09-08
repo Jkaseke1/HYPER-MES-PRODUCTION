@@ -39,7 +39,7 @@ export const APPROVAL_PERMISSIONS = {
   work_order: ['supervisor', 'admin'],
   reconciliation_period: ['production_manager', 'finance', 'admin'],
   material_transfer: ['production_manager', 'supervisor', 'logistics', 'admin'],  // Only Production/Logistics approves final acceptance
-  material_transfer_step2: ['production_manager', 'supervisor', 'logistics', 'admin', 'finance'],  // Step 2: Buffer → Production
+  material_transfer_step2: ['production_manager', 'supervisor', 'logistics', 'admin', 'finance', 'production_receiver'],  // Step 2: Buffer → Production
   weigh_bridge_ticket: ['warehouse_manager', 'logistics', 'procurement', 'admin'],
   macropack_order: ['procurement', 'supervisor', 'production_manager', 'admin'],
   chick_booking: ['finance', 'accountant', 'logistics', 'admin'],
@@ -52,7 +52,7 @@ export const APPROVAL_PERMISSIONS = {
 // - Final step: in_buffer → received (stock moves to Production Floor). Production/Supervisor/Admin/Finance can approve.
 export const TWO_STEP_MATERIAL_TRANSFER = {
   step2: { 
-    roles: ['production_manager', 'supervisor', 'admin', 'finance'], 
+    roles: ['production_manager', 'supervisor', 'admin', 'finance', 'production_receiver'],
     fromStatus: 'in_buffer', 
     toStatus: 'received', 
     label: 'Accept to Production' 
