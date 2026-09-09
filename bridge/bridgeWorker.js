@@ -39,28 +39,42 @@ async function verifySdkConnection() {
   const apiKey = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
   if (!apiKey) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY');
 
-  const response = await fetch(`${baseUrl}/api/v1/sdk/connection`, {
-    headers: { 'X-Hyper-Api-Key': apiKey },
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.message || `Sage SDK connection check failed: HTTP ${response.status}`);
-  if (ENFORCE_SAGE_IDENTITY) {
-    const expectedEnvironment = process.env.SAGE_EXPECTED_ENVIRONMENT;
-    const expectedDatabase = process.env.SAGE_EXPECTED_COMPANY_DATABASE;
-    if (!expectedEnvironment || !expectedDatabase) {
-      throw new Error('Sage identity enforcement requires SAGE_EXPECTED_ENVIRONMENT and SAGE_EXPECTED_COMPANY_DATABASE');
-    }
-    if (String(body.environment || '').toLowerCase() !== expectedEnvironment.toLowerCase()) {
-      throw new Error(`Sage SDK environment is ${body.environment || 'unknown'}, expected ${expectedEnvironment}`);
-    }
-    if (String(body.companyDatabase || '').toLowerCase() !== expectedDatabase.toLowerCase()) {
-      throw new Error(`Sage SDK database is ${body.companyDatabase || 'unknown'}, expected ${expectedDatabase}`);
+  const maxAttempts = 20;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/sdk/connection`, {
+        headers: { 'X-Hyper-Api-Key': apiKey },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || `Sage SDK connection check failed: HTTP ${response.status}`);
+      if (ENFORCE_SAGE_IDENTITY) {
+        const expectedEnvironment = process.env.SAGE_EXPECTED_ENVIRONMENT;
+        const expectedDatabase = process.env.SAGE_EXPECTED_COMPANY_DATABASE;
+        if (!expectedEnvironment || !expectedDatabase) {
+          throw new Error('Sage identity enforcement requires SAGE_EXPECTED_ENVIRONMENT and SAGE_EXPECTED_COMPANY_DATABASE');
+        }
+        if (String(body.environment || '').toLowerCase() !== expectedEnvironment.toLowerCase()) {
+          throw new Error(`Sage SDK environment is ${body.environment || 'unknown'}, expected ${expectedEnvironment}`);
+        }
+        if (String(body.companyDatabase || '').toLowerCase() !== expectedDatabase.toLowerCase()) {
+          throw new Error(`Sage SDK database is ${body.companyDatabase || 'unknown'}, expected ${expectedDatabase}`);
+        }
+      }
+      console.log(`PlantControl Sage SDK connection: ${body.sdkConnection || 'verified'}`);
+      console.log(`Sage environment: ${body.environment || 'unknown'}`);
+      console.log(`Sage company database: ${body.companyDatabase || 'unknown'}`);
+      return body;
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) break;
+      console.warn(`Sage SDK not ready (attempt ${attempt}/${maxAttempts}): ${error.message}. Retrying in 3s...`);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
   }
-  console.log(`PlantControl Sage SDK connection: ${body.sdkConnection || 'verified'}`);
-  console.log(`Sage environment: ${body.environment || 'unknown'}`);
-  console.log(`Sage company database: ${body.companyDatabase || 'unknown'}`);
-  return body;
+
+  throw lastError;
 }
 
 async function queueSageStockSync(itemCodes, reason, options = {}) {
