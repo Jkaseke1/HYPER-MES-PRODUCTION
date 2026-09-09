@@ -109,7 +109,7 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
           quantity: Number(stock.quantity || 0),
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'sage_code,warehouse_id' });
+        }, { onConflict: 'raw_material_id,warehouse_id' });
         if (error) throw new Error(error.message);
         synced += 1;
       } catch (error) {
