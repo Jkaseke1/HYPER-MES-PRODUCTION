@@ -359,67 +359,23 @@ export default function AdminUsersPage() {
 
     setSaving(true);
     try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: userForm.password,
-        options: {
-          data: {
-            full_name: userForm.full_name,
-            role: userForm.role,
-          },
+      const { error: functionError } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: cleanEmail,
+          password: userForm.password,
+          full_name: userForm.full_name,
+          phone: userForm.phone,
+          role: userForm.role,
+          role_ids: userRoles,
+          branch_access: userBranches,
         },
       });
 
-      if (authError) {
-        if (authError.message?.includes('Database error') || (authError as any).status === 500) {
-          throw new Error('Database trigger issue on user creation. Please run the SQL fix script in Supabase SQL Editor.');
-        }
-        throw authError;
-      }
+      if (functionError) throw functionError;
 
-      if (authData.user) {
-        const userId = authData.user.id;
-        // Try to insert profile first, if it exists due to trigger, update it
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: userId,
-            full_name: userForm.full_name,
-            phone: userForm.phone,
-            role: userForm.role,
-            email: userForm.email,
-          }, {
-            onConflict: 'id'
-          });
-        
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          throw profileError;
-        }
-
-        // Assign roles
-        if (userRoles.length > 0) {
-          await supabase.from('user_roles').insert(
-            userRoles.map(roleId => ({ user_id: userId, role_id: roleId }))
-          );
-        }
-
-        // Assign branch access
-        if (userBranches.length > 0) {
-          await supabase.from('user_branch_access').insert(
-            userBranches.map(ub => ({
-              user_id: userId,
-              branch_id: ub.branch_id,
-              access_level: ub.access_level,
-            }))
-          );
-        }
-
-        toast.success('User created successfully!');
-        setCreateUserModal(false);
-        fetchData();
-      }
+      toast.success('User created successfully!');
+      setCreateUserModal(false);
+      fetchData();
     } catch (error: any) {
       toast.error(`Error creating user: ${error.message}`);
     } finally {
