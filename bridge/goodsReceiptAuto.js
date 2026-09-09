@@ -93,6 +93,7 @@ async function handleGoodsReceipt(syncEvent) {
       supplier_order_no,
       external_reference,
       wb_transaction_no,
+      approved_by,
       vat_mode,
       vat_tax_type_id,
       vat_code,
@@ -118,6 +119,21 @@ async function handleGoodsReceipt(syncEvent) {
 
   if (grn.status !== 'approved') {
     throw new Error(`GRN ${grn.grn_number || grn.id} is not approved; current status is ${grn.status}`);
+  }
+
+  let plantControlUser = 'PlantControl';
+  if (grn.approved_by) {
+    const { data: approver, error: approverError } = await supabase
+      .from('profiles')
+      .select('full_name,email')
+      .eq('id', grn.approved_by)
+      .maybeSingle();
+
+    if (approverError) {
+      throw new Error(`Approver profile query failed: ${approverError.message}`);
+    }
+
+    plantControlUser = (approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
   }
 
   const supplierCode = (grn.suppliers?.sage_code || grn.suppliers?.code || '').trim();
@@ -176,6 +192,7 @@ async function handleGoodsReceipt(syncEvent) {
     vatTaxTypeId: grn.vat_tax_type_id ?? null,
     vatCode: grn.vat_code || '',
     vatRate: grn.vat_rate ?? null,
+    userName: plantControlUser.substring(0, 50),
     lines,
     confirmPost: true,
   };

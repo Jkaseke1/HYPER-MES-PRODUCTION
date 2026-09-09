@@ -13,6 +13,7 @@ namespace SDK_Test
         public string ExternalReference { get; set; }
         public string Warehouse { get; set; }
         public DateTime ReceivedDate { get; set; }
+        public string UserName { get; set; }
         public string VatMode { get; set; }
         public int? VatTaxTypeId { get; set; }
         public string VatCode { get; set; }

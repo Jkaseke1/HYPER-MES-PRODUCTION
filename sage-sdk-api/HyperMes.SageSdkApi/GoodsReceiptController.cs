@@ -263,6 +263,18 @@ namespace SDK_Test
                 ? DateTime.Today
                 : request.ReceivedDate.Date;
 
+            // Evolution records the current SDK agent in the Sage audit trail.
+            // Resolve the PlantControl approver to a real Sage agent before any
+            // document object is created so a missing mapping cannot post as SDK.
+            var sageAgentName = Trim(FirstNonBlank(request.UserName, "PlantControl"), 50);
+            var sageAgent = Agent.GetByName(sageAgentName);
+            if (sageAgent == null)
+                throw new InvalidOperationException(
+                    "No active Sage agent was found for PlantControl user '" + sageAgentName + "'. " +
+                    "Create or map this user in Sage before posting the GRN.");
+
+            DatabaseContext.CurrentAgent = sageAgent;
+
             var purchaseOrder = new PurchaseOrder
             {
                 Supplier = new Supplier(request.SupplierCode.Trim()),
@@ -341,6 +353,9 @@ namespace SDK_Test
 
             if (string.IsNullOrWhiteSpace(request.SupplierCode))
                 return "SupplierCode is required.";
+
+            if (string.IsNullOrWhiteSpace(request.UserName))
+                return "UserName is required.";
 
             if (request.Lines == null || request.Lines.Length == 0)
                 return "At least one goods-receipt line is required.";
