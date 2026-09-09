@@ -564,6 +564,30 @@ export default function GoodsReceivedPage() {
   const wbVariancePct = wbNettMassValue > 0 ? Math.abs((totalReceivedQty - wbNettMassValue) / wbNettMassValue) * 100 : 0;
   const selectedSync = viewing ? syncByGrnId[viewing.id] : undefined;
   const selectedGrvNumber = getSageGrvNumber(selectedSync);
+  const viewedGrossTotal = viewItems.reduce((sum, item) => sum + Number(item.received_qty || 0) * Number(item.unit_cost || 0), 0);
+  const viewedVatMode = (viewing as any)?.vat_mode || 'pending_finance';
+  const viewedVatTreatment = (viewing as any)?.vat_treatment || null;
+  const viewedVatRate = Number((viewing as any)?.vat_rate || 0);
+  const viewedIsInclusive = viewedVatMode === 'inclusive';
+  const viewedIsZeroTax = viewedVatTreatment === 'zero_rated' || viewedVatTreatment === 'exempt' || viewedVatMode === 'no_vat';
+  const viewedNetTotal = viewedIsInclusive && viewedVatRate > 0
+    ? viewedGrossTotal / (1 + viewedVatRate / 100)
+    : viewedGrossTotal;
+  const viewedVatAmount = viewedIsZeroTax
+    ? 0
+    : viewedIsInclusive
+      ? viewedGrossTotal - viewedNetTotal
+      : viewedGrossTotal * (viewedVatRate / 100);
+  const viewedInvoiceTotal = viewedIsInclusive ? viewedGrossTotal : viewedGrossTotal + viewedVatAmount;
+  const viewedVatLabel = viewedVatTreatment === 'zero_rated'
+    ? 'Zero Rated'
+    : viewedVatTreatment === 'exempt' || viewedVatMode === 'no_vat'
+      ? 'Exempt / No VAT'
+      : viewedVatMode === 'inclusive'
+        ? 'Tax Inclusive'
+        : viewedVatMode === 'exclusive'
+          ? 'Tax Exclusive'
+          : 'Finance review pending';
 
   if (loading) {
     return (
@@ -1592,6 +1616,29 @@ export default function GoodsReceivedPage() {
                   <Scale className="w-4 h-4 text-slate-600" />
                   <h3 className="text-sm font-bold text-slate-800">Line Items</h3>
                   <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-teal-200 bg-teal-50/50 p-3 md:grid-cols-5">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">VAT Treatment</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">{viewedVatLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Sage Tax</p>
+                    <p className="mt-1 font-mono text-xs font-bold text-slate-900">{(viewing as any)?.vat_code || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Rate</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">{viewedVatRate.toFixed(2)}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">VAT Amount</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">${formatMoney(viewedVatAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Invoice Total</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">${formatMoney(viewedInvoiceTotal)}</p>
+                  </div>
                 </div>
 
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm flex-1 overflow-y-auto">
