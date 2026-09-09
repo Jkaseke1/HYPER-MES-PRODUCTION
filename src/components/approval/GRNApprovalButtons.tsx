@@ -6,11 +6,11 @@ import { useAuth } from '../../context/AuthContext';
 interface GRNApprovalButtonsProps {
   grnId: string;
   currentStatus: string;
-  vatMode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | null;
+  vatMode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated' | null;
   vatReviewedAt?: string | null;
   onApproved: () => void;
   onRejected: () => void;
-  onTaxReviewed?: (vatMode: 'exclusive' | 'inclusive' | 'no_vat') => void;
+  onTaxReviewed?: (vatMode: 'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated') => void;
   className?: string;
 }
 
@@ -29,8 +29,8 @@ export default function GRNApprovalButtons({
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showVatModal, setShowVatModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
-  const [selectedVatMode, setSelectedVatMode] = useState<'exclusive' | 'inclusive' | 'no_vat'>(
-    vatMode === 'inclusive' || vatMode === 'no_vat' ? vatMode : 'exclusive'
+  const [selectedVatMode, setSelectedVatMode] = useState<'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated'>(
+    vatMode === 'inclusive' || vatMode === 'no_vat' || vatMode === 'zero_rated' ? vatMode : 'exclusive'
   );
 
   // Single-step approval: Finance, Accountant, or Admin can approve
@@ -165,6 +165,7 @@ export default function GRNApprovalButtons({
       const { error } = await supabase.rpc('record_grn_vat_review', {
         p_grn_id: grnId,
         p_vat_mode: selectedVatMode,
+        p_no_vat_treatment: selectedVatMode === 'no_vat' ? 'exempt' : selectedVatMode === 'zero_rated' ? 'zero_rated' : null,
       });
       if (error) throw error;
 
@@ -229,7 +230,8 @@ export default function GRNApprovalButtons({
               {[
                 ['exclusive', 'Tax Exclusive', 'Entered unit costs exclude VAT. VAT is added to the supplier payable.'],
                 ['inclusive', 'Tax Inclusive', 'Entered unit costs include VAT. Sage must calculate the net stock value and VAT portion.'],
-                ['no_vat', 'No VAT', 'Use only for an exempt or zero-rated supplier invoice.'],
+                ['no_vat', 'No VAT - Exempt', 'No VAT is recorded as an exempt supply.'],
+                ['zero_rated', 'Tax Exclusive - Zero Rated', 'Entered unit costs exclude VAT. Sage records a zero-rated supply at 0%.'],
               ].map(([value, label, description]) => (
                 <label key={value} className={`block border rounded-lg p-3 cursor-pointer ${selectedVatMode === value ? 'border-[#ff9100] bg-orange-50' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <input
@@ -237,7 +239,7 @@ export default function GRNApprovalButtons({
                     name="vat-mode"
                     value={value}
                     checked={selectedVatMode === value}
-                    onChange={() => setSelectedVatMode(value as 'exclusive' | 'inclusive' | 'no_vat')}
+                    onChange={() => setSelectedVatMode(value as 'exclusive' | 'inclusive' | 'no_vat' | 'zero_rated')}
                     className="mr-2 accent-[#ff9100]"
                   />
                   <span className="text-sm font-semibold text-slate-800">{label}</span>
@@ -245,7 +247,13 @@ export default function GRNApprovalButtons({
                 </label>
               ))}
             </div>
-            {selectedVatMode !== 'no_vat' && (
+            {selectedVatMode === 'zero_rated' && (
+              <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>02 Zero Rate</strong> at <strong>0%</strong>.</p>
+            )}
+            {selectedVatMode === 'no_vat' && (
+              <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>03 Exempt</strong> at <strong>0%</strong>.</p>
+            )}
+            {(selectedVatMode === 'exclusive' || selectedVatMode === 'inclusive') && (
               <p className="mt-4 rounded-lg bg-[#0b0b30]/5 border border-[#0b0b30]/10 px-3 py-2 text-xs text-[#0b0b30]">Sage tax code: <strong>515 Taxable Input</strong> at <strong>15.5%</strong>.</p>
             )}
             <div className="flex justify-end gap-3 mt-5">

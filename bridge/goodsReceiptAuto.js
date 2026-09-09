@@ -93,6 +93,10 @@ async function handleGoodsReceipt(syncEvent) {
       supplier_order_no,
       external_reference,
       wb_transaction_no,
+      vat_mode,
+      vat_tax_type_id,
+      vat_code,
+      vat_rate,
       suppliers (
         id,
         name,
@@ -168,6 +172,10 @@ async function handleGoodsReceipt(syncEvent) {
     externalReference: grn.external_reference || grn.wb_transaction_no || '',
     warehouse: warehouseCode,
     receivedDate: grn.received_date,
+    vatMode: grn.vat_mode || '',
+    vatTaxTypeId: grn.vat_tax_type_id ?? null,
+    vatCode: grn.vat_code || '',
+    vatRate: grn.vat_rate ?? null,
     lines,
     confirmPost: true,
   };
@@ -192,7 +200,7 @@ async function handleGoodsReceipt(syncEvent) {
   );
 
   const grvNumber = result.grvNumber || result.goodsReceipt?.grvNumber || result.documentNumber;
-  console.log(`  Sage standalone GRV response: ${result.status || 'ok'} - ${grvNumber || result.message || 'posted'}`);
+  console.log(`  Sage GRV response: ${result.status || 'ok'} - ${grvNumber || result.message || 'posted'}`);
 
   if (grvNumber) {
     const { error: sequenceError } = await supabase.rpc('advance_sage_grv_sequence', {
@@ -206,8 +214,8 @@ async function handleGoodsReceipt(syncEvent) {
 
   return {
     message: grvNumber
-      ? `Posted to Sage standalone GRV ${grvNumber} from MES ${grn.grn_number}`
-      : `Posted to Sage standalone GRV from MES ${grn.grn_number}`,
+      ? `Posted to Sage GRV ${grvNumber} from MES ${grn.grn_number}`
+      : `Posted to Sage GRV from MES ${grn.grn_number}`,
     sage_response: result,
     details: {
       sdkGoodsReceipt: body,

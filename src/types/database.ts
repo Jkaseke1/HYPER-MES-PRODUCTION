@@ -126,6 +126,7 @@ export interface GoodsReceivedNote {
   supplier_order_no?: string | null;
   external_reference?: string | null;
   vat_mode?: 'pending_finance' | 'exclusive' | 'inclusive' | 'no_vat' | null;
+  vat_treatment?: 'taxable' | 'zero_rated' | 'exempt' | null;
   vat_tax_type_id?: number | null;
   vat_code?: string | null;
   vat_rate?: number | null;
