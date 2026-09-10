@@ -80,6 +80,7 @@ export default function GoodsReceivedPage() {
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
+  const [unregisteredSupplierName, setUnregisteredSupplierName] = useState('');
   const [receivedDate, setReceivedDate] = useState(localDateInputValue);
   const [notes, setNotes] = useState('');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
@@ -260,10 +261,12 @@ export default function GoodsReceivedPage() {
   };
 
   const handleSaveGRN = async () => {
-    if (!supplierId || items.length === 0 || !items[0].raw_material_id) {
+    if ((!supplierId || (supplierId === 'other' && !unregisteredSupplierName.trim())) || items.length === 0 || !items[0].raw_material_id) {
       toast.error('Please fill in all required fields');
       return;
     }
+
+    const selectedSupplierId = supplierId === 'other' ? null : supplierId;
 
     if (weighBridgeTicketId) {
       const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
@@ -276,7 +279,7 @@ export default function GoodsReceivedPage() {
         toast.error('Select an open weighbridge ticket. A linked or cancelled ticket cannot be reused.');
         return;
       }
-      if (ticket.supplier_id !== supplierId) {
+      if (ticket.supplier_id !== selectedSupplierId) {
         toast.error('The weighbridge ticket supplier must match the GRN supplier.');
         return;
       }
@@ -304,7 +307,8 @@ export default function GoodsReceivedPage() {
       // Create GRN header
       const grnData: any = {
         grn_number: grnNumber,
-        supplier_id: supplierId,
+        supplier_id: selectedSupplierId,
+        unregistered_supplier_name: supplierId === 'other' ? unregisteredSupplierName.trim() : null,
         warehouse_id: warehouse?.id,
         received_date: receivedDate,
         status: 'pending_costing',
@@ -359,6 +363,7 @@ export default function GoodsReceivedPage() {
 
   const resetForm = () => {
     setSupplierId('');
+    setUnregisteredSupplierName('');
     setReceivedDate(localDateInputValue());
     setNotes('');
     setSupplierInvoiceNo('');
@@ -561,6 +566,9 @@ export default function GoodsReceivedPage() {
     return code ? `${code} - ${supplier.name}` : supplier.name;
   };
 
+  const grnSupplierLabel = (grn: any) =>
+    supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
+
   const filteredGRNs = grns.filter(grn => {
     const matchesSearch = grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
       grn.suppliers?.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -740,7 +748,7 @@ export default function GoodsReceivedPage() {
                           <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">{grn.grn_number}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium text-slate-900 truncate" title={supplierLabel(grn.suppliers)}>{supplierLabel(grn.suppliers)}</TableCell>
+                      <TableCell className="font-medium text-slate-900 truncate" title={grnSupplierLabel(grn)}>{grnSupplierLabel(grn)}</TableCell>
                       <TableCell className="hidden xl:table-cell text-slate-600 font-mono text-xs truncate">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
                       <TableCell>{getStatusBadge(grn.status)}</TableCell>
@@ -791,7 +799,7 @@ export default function GoodsReceivedPage() {
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-slate-900 text-base">{supplierLabel(grn.suppliers)}</h4>
+                    <h4 className="font-bold text-slate-900 text-base">{grnSupplierLabel(grn)}</h4>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Received: {format(new Date(grn.received_date), 'PPP')}
                     </p>
@@ -892,11 +900,15 @@ export default function GoodsReceivedPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(320px,1.35fr)_220px_minmax(260px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
-                        <Select value={supplierId} onValueChange={setSupplierId}>
+                        <Select value={supplierId} onValueChange={(value) => {
+                          setSupplierId(value);
+                          if (value !== 'other') setUnregisteredSupplierName('');
+                        }}>
                           <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500 focus:ring-orange-500/20">
                             <SelectValue placeholder="Select supplier..." />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="other">Other - supplier not in system</SelectItem>
                             {suppliers.map((supplier) => (
                               <SelectItem key={supplier.id} value={supplier.id}>
                                 {supplierLabel(supplier)}
@@ -904,6 +916,14 @@ export default function GoodsReceivedPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        {supplierId === 'other' && (
+                          <Input
+                            value={unregisteredSupplierName}
+                            onChange={(e) => setUnregisteredSupplierName(e.target.value)}
+                            placeholder="Enter supplier name"
+                            className="mt-2 bg-white border-slate-300 font-medium focus:border-orange-500"
+                          />
+                        )}
                       </div>
 
                       <div className="space-y-1.5">
@@ -1021,7 +1041,8 @@ export default function GoodsReceivedPage() {
                             if (ticket) {
                               const matchedMaterial = materials.find((m) => m.code === ticket.product_code || (m as any).sage_code === ticket.product_code);
                               if (ticket.supplier_id) {
-                                setSupplierId(ticket.supplier_id);
+                                setSupplierId(ticket.supplier_id || 'other');
+                                setUnregisteredSupplierName(ticket.supplier_id ? '' : (ticket.unregistered_supplier_name || ''));
                               }
                               if (ticket.ticket_no && !externalReference) {
                                 setExternalReference(ticket.ticket_no);
@@ -1574,7 +1595,7 @@ export default function GoodsReceivedPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="border-l-3 border-l-blue-500 bg-white rounded-lg border border-slate-200 p-2.5">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Supplier</p>
-                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{supplierLabel(viewing?.suppliers) || 'N/A'}</p>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{grnSupplierLabel(viewing)}</p>
                   </div>
                   <div className="border-l-3 border-l-amber-500 bg-white rounded-lg border border-slate-200 p-2.5">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Warehouse</p>

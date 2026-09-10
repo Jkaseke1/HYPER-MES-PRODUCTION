@@ -109,6 +109,7 @@ export interface GoodsReceivedNote {
   id: string;
   grn_number: string;
   supplier_id: string | null;
+  unregistered_supplier_name?: string | null;
   warehouse_id: string | null;
   weigh_bridge_ticket_id?: string | null;
   received_date: string;
