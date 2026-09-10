@@ -726,16 +726,16 @@ export default function GoodsReceivedPage() {
         </CardHeader>
         <CardContent className="p-0">
           {/* Desktop Table View */}
-          <div className="hidden md:block">
-            <Table className="table-fixed w-full">
+          <div className="hidden md:block overflow-x-auto">
+            <Table className="table-fixed w-full min-w-[1040px]">
               <TableHeader>
                 <TableRow className="bg-slate-100/70 hover:bg-slate-100/70">
                   <TableHead className="w-[155px] font-bold text-slate-700">GRN Number</TableHead>
                   <TableHead className="font-bold text-slate-700">Supplier</TableHead>
                   <TableHead className="hidden xl:table-cell w-[105px] font-bold text-slate-700">Weigh Bridge</TableHead>
                   <TableHead className="w-[118px] font-bold text-slate-700">Received</TableHead>
-                  <TableHead className="w-[104px] font-bold text-slate-700">Status</TableHead>
-                  <TableHead className="w-[180px] font-bold text-slate-700">Sage Live Status</TableHead>
+                  <TableHead className="w-[160px] font-bold text-slate-700">Status</TableHead>
+                  <TableHead className="w-[250px] font-bold text-slate-700">Sage Live Status</TableHead>
                   <TableHead className="w-[100px] text-right font-bold text-slate-700 pr-5">Inspect</TableHead>
                 </TableRow>
               </TableHeader>
@@ -760,8 +760,8 @@ export default function GoodsReceivedPage() {
                       <TableCell className="font-medium text-slate-900 truncate" title={grnSupplierLabel(grn)}>{grnSupplierLabel(grn)}</TableCell>
                       <TableCell className="hidden xl:table-cell text-slate-600 font-mono text-xs truncate">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
                       <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell>{getStatusBadge(grn.status)}</TableCell>
-                      <TableCell>{getSageBadge(grn.id)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getSageBadge(grn.id)}</TableCell>
                       <TableCell className="text-right pr-5">
                         <Button
                           variant="outline"
