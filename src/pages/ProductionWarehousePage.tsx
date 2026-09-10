@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, ArrowRightLeft, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -48,6 +48,15 @@ interface PendingTransfer {
   raw_materials?: { name: string; code: string; unit?: string };
 }
 
+interface IncomingBundle {
+  key: string;
+  transfers: PendingTransfer[];
+  purpose: string;
+  requester: string;
+  createdAt: string;
+  totalQuantity: number;
+}
+
 type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 
 export default function ProductionWarehousePage() {
@@ -58,6 +67,8 @@ export default function ProductionWarehousePage() {
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [receivingBundleKey, setReceivingBundleKey] = useState<string | null>(null);
+  const [expandedIncomingBundle, setExpandedIncomingBundle] = useState<string | null>(null);
   const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
@@ -248,6 +259,23 @@ export default function ProductionWarehousePage() {
     return diff <= 7;
   }).length;
   const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const incomingBundles = useMemo<IncomingBundle[]>(() => {
+    const groups = new Map<string, PendingTransfer[]>();
+    pendingAcceptanceTransfers.forEach((transfer) => {
+      const dateKey = format(new Date(transfer.created_at), 'yyyy-MM-dd');
+      const requesterKey = transfer.requester?.full_name || 'Unknown requester';
+      const key = `${dateKey}|${transfer.purpose || 'Unspecified'}|${requesterKey}`;
+      groups.set(key, [...(groups.get(key) || []), transfer]);
+    });
+    return [...groups.entries()].map(([key, group]) => ({
+      key,
+      transfers: group,
+      purpose: group[0].purpose || 'Unspecified transfer',
+      requester: group[0].requester?.full_name || 'Unknown requester',
+      createdAt: group[0].created_at,
+      totalQuantity: group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0),
+    }));
+  }, [pendingAcceptanceTransfers]);
   const stockHealth = useMemo(() => {
     const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
     const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
@@ -315,6 +343,28 @@ export default function ProductionWarehousePage() {
     toast.success('Production threshold saved.');
   }
 
+  async function handleReceiveBundle(bundle: IncomingBundle) {
+    setReceivingBundleKey(bundle.key);
+    setReceiptNotice(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('User not authenticated');
+      const failures: string[] = [];
+      for (const transfer of bundle.transfers) {
+        const { error } = await supabase.rpc('approve_material_transfer_to_production', { p_transfer_id: transfer.id, p_approved_by: user.id });
+        if (error) failures.push(`${transfer.raw_materials?.name || transfer.transfer_number}: ${error.message}`);
+      }
+      await fetchTransfers(true);
+      setReceiptNotice(failures.length
+        ? { tone: 'error', message: `${bundle.transfers.length - failures.length} of ${bundle.transfers.length} lines received. ${failures.join(' | ')}` }
+        : { tone: 'success', message: `${bundle.transfers.length} materials received into Production Warehouse.` });
+    } catch (err: any) {
+      setReceiptNotice({ tone: 'error', message: err?.message || 'The transfer bundle could not be received.' });
+    } finally {
+      setReceivingBundleKey(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
       <section className="flex flex-wrap items-center justify-between gap-4 bg-[#101936] px-5 py-5 text-white shadow-sm">
@@ -378,48 +428,51 @@ export default function ProductionWarehousePage() {
           </div>
 
           <div className="divide-y divide-teal-100 px-5">
-            {pendingAcceptanceTransfers.map(pt => (
-              <div key={pt.id} className="grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-slate-200 bg-white text-slate-600">
-                    <Package className="h-4 w-4" />
+            {incomingBundles.map((bundle) => {
+              const isOpen = expandedIncomingBundle === bundle.key;
+              const isReceiving = receivingBundleKey === bundle.key;
+              return (
+                <div key={bundle.key} className="py-3">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+                    <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="flex min-w-0 items-start gap-3 text-left">
+                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700">
+                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">Raw Materials to Production</p>
+                          <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
+                          <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> {bundle.requester}</span>
+                          <span className="inline-flex items-center gap-1"><ClipboardList className="h-3.5 w-3.5" /> {bundle.purpose}</span>
+                        </div>
+                      </div>
+                    </button>
+                    <div className="border-l border-teal-200 pl-4 text-right">
+                      <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
+                      <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
+                    </div>
+                    <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                      {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Receiving bundle</> : <><CheckCircle2 className="h-4 w-4" /> Receive bundle</>}
+                    </button>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p>
-                      <span className="font-mono text-xs text-slate-500">{pt.raw_materials?.code || 'No code'}</span>
-                      <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">Holding Bay</span>
+                  {isOpen && (
+                    <div className="mt-3 overflow-hidden border border-slate-200 bg-slate-50">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material</span><span>Transfer</span><span>Quantity</span></div>
+                      {bundle.transfers.map((pt) => (
+                        <div key={pt.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
+                          <div><p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{pt.raw_materials?.code}</span></p><p className="text-xs text-slate-500">Holding Bay · ready for Production Warehouse 19</p></div>
+                          <span className="font-mono text-xs text-slate-500">{pt.transfer_number}</span>
+                          <span className="font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span className="inline-flex items-center gap-1"><ArrowRightLeft className="h-3.5 w-3.5 text-teal-600" /> RM Warehouse to Production</span>
-                      <span className="font-mono">{pt.transfer_number}</span>
-                      <span>{format(new Date(pt.created_at), 'dd MMM, HH:mm')}</span>
-                      {pt.requester?.full_name && <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> {pt.requester.full_name}</span>}
-                      {pt.purpose && <span className="inline-flex items-center gap-1"><ClipboardList className="h-3.5 w-3.5" /> {pt.purpose}</span>}
-                    </div>
-                    </div>
-                </div>
-                <div className="border-l border-teal-200 pl-4 text-right">
-                  <p className="font-mono text-lg font-bold text-slate-900">{Number(pt.quantity).toLocaleString()}</p>
-                  <p className="text-xs font-medium text-slate-500">{pt.unit}</p>
-                </div>
-                <button
-                  disabled={acceptingId === pt.id}
-                  onClick={() => setReceiptToConfirm(pt)}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60"
-                >
-                  {acceptingId === pt.id ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" /> Receiving
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" /> Receive into Production
-                    </>
                   )}
-                </button>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
