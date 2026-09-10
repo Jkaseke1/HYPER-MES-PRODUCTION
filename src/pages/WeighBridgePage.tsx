@@ -34,6 +34,7 @@ interface WBTicket {
   driver_signed: boolean;
   status: 'open' | 'linked' | 'cancelled';
   created_at: string;
+  created_by_user?: { full_name?: string | null; email?: string | null } | null;
   grn_number?: string;
 }
 
@@ -508,6 +509,10 @@ export default function WeighBridgePage() {
                       <span className="text-slate-500">Driver</span>
                       <span className="font-bold text-slate-900">{viewTicket.driver_name || '—'}</span>
                     </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-slate-500">ID / Licence</span>
+                      <span className="font-mono font-bold text-slate-900 text-right">{viewTicket.driver_id || '—'}</span>
+                    </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Time In</span>
                       <span className="font-mono text-slate-800">{viewTicket.time_in ? format(new Date(viewTicket.time_in), 'dd MMM HH:mm') : '—'}</span>
@@ -515,6 +520,12 @@ export default function WeighBridgePage() {
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Time Out</span>
                       <span className="font-mono text-slate-800">{viewTicket.time_out ? format(new Date(viewTicket.time_out), 'dd MMM HH:mm') : '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Driver signed</span>
+                      <span className={`font-bold ${viewTicket.driver_signed ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {viewTicket.driver_signed ? 'Yes' : 'No'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -525,6 +536,7 @@ export default function WeighBridgePage() {
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product / Raw Material</span>
                 <p className="font-extrabold text-slate-900 text-sm">{viewTicket.product_name || '—'} <span className="font-mono font-bold text-blue-700">({viewTicket.product_code || '—'})</span></p>
                 <p className="text-[11px] text-slate-500">Supplier: {(viewTicket as any).suppliers?.name || viewTicket.unregistered_supplier_name || '—'}</p>
+                <p className="text-[11px] text-slate-500">Created by: {viewTicket.created_by_user?.full_name || viewTicket.created_by_user?.email || '—'}</p>
                 {!viewTicket.supplier_id && viewTicket.unregistered_supplier_name && (
                   <p className="text-[11px] font-semibold text-amber-700">Finance follow-up required before GRN linking</p>
                 )}
