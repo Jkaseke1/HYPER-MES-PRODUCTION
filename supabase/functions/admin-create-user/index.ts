@@ -68,9 +68,38 @@ Deno.serve(async (request) => {
     user_metadata: { full_name: fullName, role },
   });
 
-  if (createError || !created.user) return json({ error: createError?.message || 'Auth user could not be created.' }, 422);
+  let userId = created?.user?.id;
+  let createdNewAuthUser = Boolean(userId);
 
-  const userId = created.user.id;
+  // The old Admin Users delete flow removed only the profile, leaving Auth users behind.
+  // Recover that orphaned account when an administrator intentionally recreates it.
+  if (createError && !userId && /already registered|already exists|duplicate|email/i.test(createError.message || '')) {
+    const { data: users, error: listError } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const existingUser = users?.users?.find((candidate) => candidate.email?.toLowerCase() === email);
+    if (listError || !existingUser) {
+      return json({ error: createError.message || 'An account with this email already exists.' }, 409);
+    }
+
+    const { data: existingProfile } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('id', existingUser.id)
+      .maybeSingle();
+    if (existingProfile) {
+      return json({ error: 'An account with this email already exists. Edit the existing user instead.' }, 409);
+    }
+
+    const { error: updateError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, role },
+    });
+    if (updateError) return json({ error: updateError.message }, 422);
+    userId = existingUser.id;
+    createdNewAuthUser = false;
+  }
+
+  if (!userId) return json({ error: createError?.message || 'Auth user could not be created.' }, 422);
   try {
     const { error: profileError } = await adminClient.from('profiles').upsert({
       id: userId,
@@ -99,7 +128,7 @@ Deno.serve(async (request) => {
       if (error) throw error;
     }
   } catch (error) {
-    await adminClient.auth.admin.deleteUser(userId);
+    if (createdNewAuthUser) await adminClient.auth.admin.deleteUser(userId);
     return json({ error: error instanceof Error ? error.message : 'User profile setup failed.' }, 422);
   }
 

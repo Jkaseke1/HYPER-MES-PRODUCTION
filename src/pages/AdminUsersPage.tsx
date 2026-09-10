@@ -393,13 +393,10 @@ export default function AdminUsersPage() {
     if (!userToDelete) return;
     setSaving(true);
     try {
-      // Delete user roles and branch access first
-      await supabase.from('user_roles').delete().eq('user_id', userToDelete.id);
-      await supabase.from('user_branch_access').delete().eq('user_id', userToDelete.id);
-      
-      // Note: We can't delete auth users via client SDK, only profiles
-      // Admin should use Supabase dashboard to fully delete auth users
-      await supabase.from('profiles').delete().eq('id', userToDelete.id);
+      const { error } = await supabase.functions.invoke('admin-delete-user', {
+        body: { user_id: userToDelete.id },
+      });
+      if (error) throw error;
 
       toast.success('User profile deleted successfully!');
       setDeleteModal(false);
