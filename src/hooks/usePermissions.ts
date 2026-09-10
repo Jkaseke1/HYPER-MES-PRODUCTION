@@ -235,6 +235,7 @@ function getLegacyPermissions(role: string): string[] {
         ...basePermissions,
         'raw_materials.view',
         'grn.view',
+        'warehouse.view',
         'production.view',
         'dispatch.view',
         'sales.view',

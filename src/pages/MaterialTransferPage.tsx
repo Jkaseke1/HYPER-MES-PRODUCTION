@@ -378,7 +378,7 @@ export default function MaterialTransferPage() {
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
   const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
-  const canCreateTransfer = !['production_receiver'].includes(profile?.role || '');
+  const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
   const activeSagePosts = transfers.filter((transfer) => {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
