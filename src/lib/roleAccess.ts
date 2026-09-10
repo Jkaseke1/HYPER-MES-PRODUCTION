@@ -6,6 +6,7 @@ const rolePaths: Record<string, string[]> = {
   weighbridge: ['/weigh-bridge'],
   weigh_bridge: ['/weigh-bridge'],
   production_receiver: ['/production-warehouse'],
+  warehouse_clerk: ['/goods-received', '/material-transfer', '/warehouse'],
   raw_material_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices'],
   warehouse_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices'],
   production_manager: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
@@ -17,7 +18,7 @@ const rolePaths: Record<string, string[]> = {
 };
 
 const roleLandingPaths: Record<string, string> = {
-  weighbridge: '/weigh-bridge', weigh_bridge: '/weigh-bridge', production_receiver: '/production-warehouse', raw_material_manager: '/warehouse', warehouse_manager: '/warehouse', production_manager: '/production-orders', supervisor: '/production-orders', operator: '/production-orders', logistics: '/dispatch', finance: '/goods-received', accountant: '/goods-received',
+  weighbridge: '/weigh-bridge', weigh_bridge: '/weigh-bridge', production_receiver: '/production-warehouse', warehouse_clerk: '/goods-received', raw_material_manager: '/warehouse', warehouse_manager: '/warehouse', production_manager: '/production-orders', supervisor: '/production-orders', operator: '/production-orders', logistics: '/dispatch', finance: '/goods-received', accountant: '/goods-received',
 };
 
 export function isFullAccessRole(role: MesRole): boolean {

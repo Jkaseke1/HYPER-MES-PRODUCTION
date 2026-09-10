@@ -385,6 +385,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     production_manager: 'Production Manager',
     supervisor: 'Supervisor',
     warehouse_manager: 'Warehouse Manager',
+    warehouse_clerk: 'Warehouse Clerk',
     raw_material_manager: 'Raw Material Manager',
     weighbridge: 'Weighbridge Operator',
     logistics: 'Logistics Officer',

@@ -197,6 +197,14 @@ function getLegacyPermissions(role: string): string[] {
         'reports.view',
         'settings.view',
       ];
+
+    case 'warehouse_clerk':
+      return [
+        ...basePermissions,
+        'raw_materials.view',
+        'grn.view', 'grn.create',
+        'warehouse.view', 'warehouse.transfer',
+      ];
     
     case 'supervisor':
       return [

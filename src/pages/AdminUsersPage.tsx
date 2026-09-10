@@ -1119,6 +1119,7 @@ export default function AdminUsersPage() {
                   <option value="supervisor">Supervisor</option>
                   <option value="production_manager">Production Manager</option>
                   <option value="warehouse_manager">Warehouse Manager</option>
+                  <option value="warehouse_clerk">Warehouse Clerk</option>
                   <option value="raw_material_manager">Raw Materials Manager</option>
                   <option value="logistics">Logistics Officer</option>
                   <option value="finance">Finance / Accountant</option>
@@ -1373,6 +1374,7 @@ export default function AdminUsersPage() {
                 <option value="md">Managing Director (MD)</option>
                 <option value="production_manager">Production Manager</option>
                 <option value="warehouse_manager">Warehouse Manager</option>
+                <option value="warehouse_clerk">Warehouse Clerk</option>
                 <option value="logistics">Logistics Officer</option>
                 <option value="finance">Finance / Accountant</option>
                 <option value="supervisor">Supervisor</option>
