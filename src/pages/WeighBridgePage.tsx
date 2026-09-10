@@ -32,10 +32,11 @@ interface WBTicket {
   nett_mass: number;
   comment: string;
   driver_signed: boolean;
-  status: 'open' | 'linked' | 'cancelled';
+  status: 'open' | 'in_grn' | 'linked' | 'cancelled';
   created_at: string;
   created_by_user?: { full_name?: string | null; email?: string | null } | null;
   grn_number?: string;
+  grn_status?: string;
 }
 
 const emptyWBForm = {
@@ -61,6 +62,7 @@ const emptyWBForm = {
 
 const STATUS_STYLES: Record<string, { label: string; bg: string; color: string; border: string }> = {
   open: { label: 'Open Ticket', bg: 'bg-amber-50', color: 'text-amber-700', border: 'border-amber-200' },
+  in_grn: { label: 'In GRN Workflow', bg: 'bg-blue-50', color: 'text-blue-700', border: 'border-blue-200' },
   linked: { label: 'Linked to GRN', bg: 'bg-emerald-50', color: 'text-emerald-700', border: 'border-emerald-200' },
   cancelled: { label: 'Cancelled', bg: 'bg-slate-100', color: 'text-slate-500', border: 'border-slate-200' },
 };
@@ -92,8 +94,20 @@ export default function WeighBridgePage() {
           console.error('Error loading WB tickets:', error);
         }
       } else if (data) {
-        setTickets(data);
-        cacheData('weigh_bridge_tickets_all', data);
+        const ticketIds = data.map((ticket: any) => ticket.id);
+        const { data: grns } = ticketIds.length
+          ? await supabase
+            .from('goods_received_notes')
+            .select('id, grn_number, status, weigh_bridge_ticket_id')
+            .in('weigh_bridge_ticket_id', ticketIds)
+          : { data: [] };
+        const grnByTicket = new Map((grns || []).map((grn: any) => [grn.weigh_bridge_ticket_id, grn]));
+        const enriched = data.map((ticket: any) => {
+          const grn = grnByTicket.get(ticket.id);
+          return { ...ticket, grn_number: grn?.grn_number, grn_status: grn?.status };
+        });
+        setTickets(enriched);
+        cacheData('weigh_bridge_tickets_all', enriched);
       }
     } catch {
       const cached = await getCachedData('weigh_bridge_tickets_all');
@@ -203,6 +217,7 @@ export default function WeighBridgePage() {
   });
 
   const openCount = tickets.filter(t => t.status === 'open').length;
+  const inGrnCount = tickets.filter(t => t.status === 'in_grn').length;
   const linkedCount = tickets.filter(t => t.status === 'linked').length;
   const todayCount = tickets.filter(t => {
     const d = new Date(t.created_at);
@@ -256,6 +271,7 @@ export default function WeighBridgePage() {
             <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
               <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Register</p><p className="mt-2 text-3xl font-bold">{tickets.length}</p><p className="mt-1 text-xs text-slate-400">Vehicle tickets</p></div>
               <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting GRN</p><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{openCount}</p><p className="mt-1 text-xs text-slate-400">Ready to link</p></div>
+              <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">In GRN Workflow</p><p className="mt-2 text-3xl font-bold text-blue-300">{inGrnCount}</p><p className="mt-1 text-xs text-slate-400">Being processed</p></div>
               <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Linked to GRN</p><p className="mt-2 text-3xl font-bold text-emerald-300">{linkedCount}</p><p className="mt-1 text-xs text-slate-400">Intake handed over</p></div>
               <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">This Month</p><p className="mt-2 text-3xl font-bold text-cyan-300">{thisMonthCount}</p><p className="mt-1 text-xs text-slate-400">Vehicles weighed</p></div>
               <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live intake activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Open {openCount}</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Loader2 className="h-3.5 w-3.5" />Today {todayCount}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Linked {linkedCount}</span></div><p className="mt-2 text-xs text-slate-400">{totalNettMassKg.toLocaleString()} kg recorded</p></div>
@@ -266,7 +282,7 @@ export default function WeighBridgePage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">
             <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
               <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-                {['all', 'open', 'linked', 'cancelled'].map((st) => (
+                {['all', 'open', 'in_grn', 'linked', 'cancelled'].map((st) => (
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
@@ -276,7 +292,7 @@ export default function WeighBridgePage() {
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                     }`}
                   >
-                    {st === 'all' ? 'All Tickets' : st}
+                    {st === 'all' ? 'All Tickets' : st === 'in_grn' ? 'In GRN Workflow' : st}
                   </button>
                 ))}
               </div>
@@ -328,6 +344,15 @@ export default function WeighBridgePage() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map(t => {
                     const stStyle = STATUS_STYLES[t.status] || STATUS_STYLES.open;
+                    const grnStage = t.grn_status === 'pending_costing'
+                      ? 'Awaiting costing'
+                      : t.grn_status === 'pending_finance'
+                        ? 'Awaiting Finance'
+                        : t.grn_status === 'approved'
+                          ? 'Approved - Sage posting'
+                          : t.grn_status === 'rejected'
+                            ? 'GRN rejected'
+                            : '';
 
                     return (
                       <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
@@ -361,7 +386,7 @@ export default function WeighBridgePage() {
                               <>
                                 <CheckCircle className="w-3 h-3 text-emerald-600" /> Linked to GRN
                               </>
-                            ) : stStyle.label}
+                            ) : t.status === 'in_grn' && t.grn_number ? `${grnStage || 'GRN in progress'} · ${t.grn_number}` : stStyle.label}
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-right">

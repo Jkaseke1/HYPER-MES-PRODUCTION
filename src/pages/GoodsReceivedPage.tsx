@@ -349,6 +349,15 @@ export default function GoodsReceivedPage() {
 
       if (itemsError) throw itemsError;
 
+      if (weighBridgeTicketId) {
+        const { error: ticketError } = await supabase
+          .from('weigh_bridge_tickets')
+          .update({ status: 'in_grn', updated_at: new Date().toISOString() })
+          .eq('id', weighBridgeTicketId)
+          .eq('status', 'open');
+        if (ticketError) throw ticketError;
+      }
+
       toast.success('GRN created successfully');
       setModalOpen(false);
       resetForm();
@@ -1518,7 +1527,7 @@ export default function GoodsReceivedPage() {
               </Button>
             </div>
           )}
-          {viewing && viewing.status === 'pending' && (
+          {viewing && (viewing.status === 'pending_finance' || viewing.status === 'pending') && (
             <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
               <GRNApprovalButtons
                 grnId={viewing.id}

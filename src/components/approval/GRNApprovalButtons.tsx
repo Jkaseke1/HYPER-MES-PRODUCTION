@@ -33,7 +33,7 @@ export default function GRNApprovalButtons({
     vatMode === 'inclusive' || vatMode === 'no_vat' || vatMode === 'zero_rated' ? vatMode : 'exclusive'
   );
 
-  // Finance approves only after Production costing has submitted the GRN.
+  // Finance and Administrators approve only after costing has submitted the GRN.
   const canApprove = (
     profile?.role === 'finance' || 
     profile?.role === 'accountant' || 
