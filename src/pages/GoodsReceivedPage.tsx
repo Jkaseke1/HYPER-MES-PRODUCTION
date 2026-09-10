@@ -61,6 +61,7 @@ function formatMoney(value: number | string | null | undefined) {
 
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
+  const canCompleteGrnCosting = ['admin', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
@@ -75,6 +76,7 @@ export default function GoodsReceivedPage() {
   const [saving, setSaving] = useState(false);
   const [retryingSagePost, setRetryingSagePost] = useState(false);
   const [showRetrySageDialog, setShowRetrySageDialog] = useState(false);
+  const [submittingCosting, setSubmittingCosting] = useState(false);
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
@@ -305,7 +307,7 @@ export default function GoodsReceivedPage() {
         supplier_id: supplierId,
         warehouse_id: warehouse?.id,
         received_date: receivedDate,
-        status: 'pending',
+        status: 'pending_costing',
         notes: notes || null,
         supplier_invoice_no: supplierInvoiceNo.trim() || null,
         supplier_delivery_note_no: supplierDeliveryNoteNo.trim() || null,
@@ -382,6 +384,38 @@ export default function GoodsReceivedPage() {
     setViewModalOpen(true);
   };
 
+  const submitGrnCosting = async () => {
+    if (!viewing || !canCompleteGrnCosting || viewing.status !== 'pending_costing') return;
+    const missingCost = viewItems.some((item) => Number(item.unit_cost) <= 0);
+    if (missingCost) {
+      toast.error('Enter a positive unit cost for every GRN line before sending it to Finance.');
+      return;
+    }
+
+    setSubmittingCosting(true);
+    try {
+      const updates = viewItems.map((item) => supabase
+        .from('grn_items')
+        .update({ unit_cost: Number(item.unit_cost) })
+        .eq('id', item.id)
+        .eq('grn_id', viewing.id));
+      const results = await Promise.all(updates);
+      const updateError = results.find((result) => result.error)?.error;
+      if (updateError) throw updateError;
+
+      const { error } = await supabase.rpc('submit_grn_for_finance', { p_grn_id: viewing.id });
+      if (error) throw error;
+
+      toast.success(`${viewing.grn_number} sent to Finance for approval.`);
+      setViewModalOpen(false);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not submit GRN costing.');
+    } finally {
+      setSubmittingCosting(false);
+    }
+  };
+
   const addItem = () => {
     setItems([...items, { ...emptyItem }]);
   };
@@ -402,12 +436,16 @@ export default function GoodsReceivedPage() {
     return Number.isNaN(parsed) ? '' : parsed;
   };
 
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending_costing' | 'pending_finance' | 'pending' | 'approved' | 'rejected'>('all');
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
         return <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 font-semibold">Approved</Badge>;
+      case 'pending_costing':
+        return <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/20 border border-orange-500/30 px-2.5 py-0.5 font-semibold">Awaiting Costing</Badge>;
+      case 'pending_finance':
+        return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 font-semibold">Awaiting Finance</Badge>;
       case 'pending':
         return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 font-semibold">Pending</Badge>;
       case 'rejected':
@@ -534,7 +572,7 @@ export default function GoodsReceivedPage() {
 
   const stats = {
     total: grns.length,
-    pending: grns.filter(g => g.status === 'pending').length,
+    pending: grns.filter(g => g.status === 'pending' || g.status === 'pending_finance').length,
     approved: grns.filter(g => g.status === 'approved').length,
     thisMonth: grns.filter(g => {
       const grnDate = new Date(g.created_at);
@@ -640,7 +678,7 @@ export default function GoodsReceivedPage() {
           />
         </div>
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {(['all', 'pending', 'approved', 'rejected'] as const).map((st) => (
+          {(['all', 'pending_costing', 'pending_finance', 'approved', 'rejected'] as const).map((st) => (
             <button
               key={st}
               onClick={() => setStatusFilter(st)}
@@ -650,7 +688,7 @@ export default function GoodsReceivedPage() {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {st}
+              {st === 'pending_costing' ? 'costing' : st === 'pending_finance' ? 'finance' : st}
             </button>
           ))}
         </div>
@@ -1239,7 +1277,8 @@ export default function GoodsReceivedPage() {
                             onChange={(e) => updateItem(index, 'unit_cost', parseLineItemNumber(e.target.value))}
                             step="0.0001"
                             className="bg-white border-slate-200 font-medium"
-                            placeholder="0.0000"
+                            placeholder={canCompleteGrnCosting ? '0.0000' : 'Completed by Production'}
+                            disabled={!canCompleteGrnCosting}
                           />
                         </div>
                         <div className="space-y-1.5">
@@ -1446,6 +1485,18 @@ export default function GoodsReceivedPage() {
           </div>
 
           {/* Approval Actions */}
+          {viewing && viewing.status === 'pending_costing' && canCompleteGrnCosting && (
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-orange-200 bg-orange-50 px-5 py-3">
+              <div>
+                <p className="text-sm font-bold text-orange-900">Production costing required</p>
+                <p className="text-xs text-orange-800">Enter the unit cost for each line, then submit this GRN to Finance.</p>
+              </div>
+              <Button type="button" onClick={submitGrnCosting} disabled={submittingCosting} className="shrink-0 bg-orange-600 text-white hover:bg-orange-700">
+                {submittingCosting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                {submittingCosting ? 'Submitting...' : 'Save Costing & Send to Finance'}
+              </Button>
+            </div>
+          )}
           {viewing && viewing.status === 'pending' && (
             <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
               <GRNApprovalButtons
@@ -1665,7 +1716,18 @@ export default function GoodsReceivedPage() {
                           </TableCell>
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
                           <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
-                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">${Number(item.unit_cost || 0).toFixed(4)}</TableCell>
+                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">
+                            {viewing.status === 'pending_costing' && canCompleteGrnCosting ? (
+                              <Input
+                                type="number"
+                                min="0.0001"
+                                step="0.0001"
+                                value={item.unit_cost ?? ''}
+                                onChange={(event) => setViewItems((current) => current.map((line) => line.id === item.id ? { ...line, unit_cost: event.target.value === '' ? '' : Number(event.target.value) } : line))}
+                                className="h-8 w-24 text-right text-xs"
+                              />
+                            ) : `$${Number(item.unit_cost || 0).toFixed(4)}`}
+                          </TableCell>
                           <TableCell className="text-xs text-right font-bold text-emerald-700 py-2 px-3">${formatMoney(item.received_qty * item.unit_cost)}</TableCell>
                           <TableCell className="text-xs text-slate-600 py-2 px-3">
                             {item.batch_number ? (

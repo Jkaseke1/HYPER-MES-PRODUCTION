@@ -66,7 +66,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
           const { data: grns } = await supabase
             .from('goods_received_notes')
             .select('id, grn_number, status, created_at, received_by, suppliers(name)')
-            .eq('status', 'pending')
+            .in('status', ['pending_finance', 'pending'])
             .order('created_at', { ascending: false });
           grns?.forEach((g: any) => {
             approvalsMap.set(`grn:${g.id}`, {

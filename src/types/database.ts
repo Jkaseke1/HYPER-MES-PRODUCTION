@@ -132,7 +132,7 @@ export interface GoodsReceivedNote {
   vat_rate?: number | null;
   vat_reviewed_by?: string | null;
   vat_reviewed_at?: string | null;
-  status: 'pending' | 'rm_approved' | 'approved' | 'rejected' | 'inspecting';
+  status: 'pending_costing' | 'pending_finance' | 'pending' | 'rm_approved' | 'approved' | 'rejected' | 'inspecting';
   notes: string;
   received_by: string | null;
   total_value: number;
@@ -143,6 +143,8 @@ export interface GoodsReceivedNote {
   accountant_approved_at?: string | null;
   approved_by?: string | null;
   approved_at?: string | null;
+  costing_completed_by?: string | null;
+  costing_completed_at?: string | null;
   rejection_reason?: string | null;
   wb_transaction_no?: string | null;
   wb_vehicle_reg?: string | null;

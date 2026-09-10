@@ -33,12 +33,12 @@ export default function GRNApprovalButtons({
     vatMode === 'inclusive' || vatMode === 'no_vat' || vatMode === 'zero_rated' ? vatMode : 'exclusive'
   );
 
-  // Single-step approval: Finance, Accountant, or Admin can approve
+  // Finance approves only after Production costing has submitted the GRN.
   const canApprove = (
     profile?.role === 'finance' || 
     profile?.role === 'accountant' || 
     profile?.role === 'admin'
-  ) && currentStatus === 'pending';
+  ) && currentStatus === 'pending_finance';
   
   // Same roles can reject
   const canReject = canApprove;
