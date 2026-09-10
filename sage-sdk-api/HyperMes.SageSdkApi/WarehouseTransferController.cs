@@ -43,9 +43,9 @@ namespace SDK_Test
                     return Content(HttpStatusCode.BadRequest, new
                     {
                         status = "failed",
-                        environment = "UAT",
+                        environment = SageRuntime.EnvironmentName,
                         action = "warehouse-transfer-validation",
-                        message = "Sage UAT could not validate this warehouse transfer.",
+                        message = "Sage " + SageRuntime.EnvironmentName + " could not validate this warehouse transfer.",
                         exceptionMessage = retryException.Message,
                         initialExceptionMessage = initialException.Message
                     });
@@ -55,11 +55,11 @@ namespace SDK_Test
             return Ok(new
             {
                 status = "validated",
-                environment = "UAT",
+                environment = SageRuntime.EnvironmentName,
                 action = "warehouse-transfer",
                 sageConnection = "verified",
                 sagePosting = "not performed",
-                message = "Validated against Sage UAT. No Sage transfer was created.",
+                message = "Validated against Sage " + SageRuntime.EnvironmentName + ". No Sage transfer was created.",
                 transfer = TransferSummary(request)
             });
         }
@@ -96,10 +96,10 @@ namespace SDK_Test
                 return Ok(new
                 {
                     status = "posted",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "warehouse-transfer",
                     sagePosting = "completed",
-                    message = "Warehouse transfer posted to Sage UAT.",
+                    message = "Warehouse transfer posted to Sage " + SageRuntime.EnvironmentName + ".",
                     transfer = TransferSummary(request)
                 });
             }
@@ -111,9 +111,9 @@ namespace SDK_Test
                 return Content(HttpStatusCode.InternalServerError, new
                 {
                     status = "failed",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "warehouse-transfer",
-                    message = "Sage UAT could not post this warehouse transfer.",
+                    message = "Sage " + SageRuntime.EnvironmentName + " could not post this warehouse transfer.",
                     exception = ex.GetType().FullName,
                     exceptionMessage = ex.Message
                 });
