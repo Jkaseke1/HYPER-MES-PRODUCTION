@@ -88,6 +88,8 @@ async function handleMaterialTransferToProduction(event) {
       purpose,
       notes,
       status,
+      production_approved_by,
+      approved_by,
       production_order_id,
       raw_materials (
         id,
@@ -110,6 +112,18 @@ async function handleMaterialTransferToProduction(event) {
   const sageCode = transfer.raw_materials?.sage_code || transfer.raw_materials?.code;
   const quantity = Number(transfer.quantity || 0);
 
+  let plantControlUser = 'PlantControl';
+  const plantControlUserId = transfer.production_approved_by || transfer.approved_by;
+  if (plantControlUserId) {
+    const { data: approver, error: approverError } = await supabase
+      .from('profiles')
+      .select('full_name,email')
+      .eq('id', plantControlUserId)
+      .maybeSingle();
+    if (approverError) throw new Error(`Approver profile query failed: ${approverError.message}`);
+    plantControlUser = (approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
+  }
+
   if (!sageCode) {
     throw new Error(`No Sage code for material ${transfer.raw_materials?.name || transfer.raw_materials?.id || transfer.raw_material_id}`);
   }
@@ -125,6 +139,7 @@ async function handleMaterialTransferToProduction(event) {
     quantity,
     reference: buildReference(transfer),
     reference2: `MES material transfer ${transfer.transfer_number || transfer.id}`.substring(0, 50),
+    userName: plantControlUser.substring(0, 50),
     confirmPost: true,
   };
 

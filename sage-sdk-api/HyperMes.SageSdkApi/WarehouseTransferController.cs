@@ -178,6 +178,24 @@ namespace SDK_Test
 
         private static WarehouseTransfer CreateTransfer(WarehouseTransferRequest request, string reference)
         {
+            // Evolution records the current SDK agent in the audit trail.
+            // Use the PlantControl approver when a matching active Sage Agent exists,
+            // but keep posting if the optional Sage-agent mapping is absent.
+            var sageAgentName = (request.UserName ?? "PlantControl").Trim();
+            if (sageAgentName.Length > 50) sageAgentName = sageAgentName.Substring(0, 50);
+            try
+            {
+                var sageAgent = Agent.GetByName(sageAgentName);
+                if (sageAgent != null && sageAgent.IsActive)
+                    DatabaseContext.CurrentAgent = sageAgent;
+                else
+                    Console.WriteLine("Sage agent mapping not found for PlantControl user '" + sageAgentName + "'; continuing with the SDK agent.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Sage agent mapping skipped for PlantControl user '" + sageAgentName + "': " + ex.Message);
+            }
+
             return new WarehouseTransfer
             {
                 Account = new InventoryItem(request.ItemCode.Trim().ToUpperInvariant()),
