@@ -3,7 +3,7 @@ export type MesRole = string | null | undefined;
 const fullAccessRoles = new Set(['admin', 'md']);
 
 const rolePaths: Record<string, string[]> = {
-  weighbridge: ['/weigh-bridge'],
+  weighbridge: ['/weigh-bridge', '/goods-received', '/material-transfer', '/warehouse'],
   weigh_bridge: ['/weigh-bridge'],
   production_receiver: ['/production-warehouse'],
   warehouse_clerk: ['/goods-received', '/material-transfer', '/warehouse'],
