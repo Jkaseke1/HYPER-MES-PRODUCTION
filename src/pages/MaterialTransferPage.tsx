@@ -677,77 +677,87 @@ export default function MaterialTransferPage() {
                   <Package className="w-4 h-4 text-teal-600" />
                   <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Materials to Transfer</p>
                 </div>
-                <button
-                  onClick={addTransferLine}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                  Add Material Line
-                </button>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {transferLines.length} line{transferLines.length === 1 ? '' : 's'}
+                </span>
               </div>
 
-              <div className="space-y-2.5">
-                {transferLines.map((line, index) => {
-                  const material = rawMaterials.find(m => m.id === line.raw_material_id);
-                  const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
-                  const insufficient = line.quantity > rmBalance;
-                  return (
-                    <div key={line.id} className="grid grid-cols-12 gap-3 items-center p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                      <div className="col-span-1 flex items-center justify-center">
-                        <span className="text-xs font-extrabold text-slate-400">#{index + 1}</span>
-                      </div>
-                      <div className="col-span-6 space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Raw Material *</label>
-                        <select
-                          value={line.raw_material_id}
-                          onChange={(e) => updateTransferLine(line.id, 'raw_material_id', e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-500 bg-white outline-none"
-                        >
-                          <option value="">Select raw material</option>
-                          {rawMaterials.map((mat) => {
-                            const bal = rmWarehouseBalances[mat.id] ?? 0;
-                            return (
-                              <option key={mat.id} value={mat.id}>
-                                {mat.name} ({mat.code}) — Sage RM available now: {bal.toLocaleString()} {mat.unit}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                      <div className="col-span-4 space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transfer Qty (kg) *</label>
-                        <input
-                          type="number"
-                          value={line.quantity || ''}
-                          onChange={(e) => updateTransferLine(line.id, 'quantity', e.target.value ? parseFloat(e.target.value) : 0)}
-                          className={`w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-teal-500 outline-none bg-white ${
-                            insufficient ? 'border-red-400 bg-red-50 text-red-900' : 'border-slate-300'
-                          }`}
-                          placeholder="0.00"
-                          step="0.01"
-                        />
-                        {line.raw_material_id && insufficient && (
-                          <p className="text-[10px] text-red-600 font-bold mt-0.5">⚠ Exceeds RM Stock ({rmBalance.toLocaleString()} {material?.unit})</p>
-                        )}
-                        {line.raw_material_id && !insufficient && (
-                          <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                            Sage RM now {rmBalance.toLocaleString()} {material?.unit}; after receipt: {(rmBalance - Number(line.quantity || 0)).toLocaleString()} {material?.unit}
-                          </p>
-                        )}
-                      </div>
-                      <div className="col-span-1 flex items-center justify-center pt-4">
-                        <button
-                          onClick={() => removeTransferLine(line.id)}
-                          disabled={transferLines.length === 1}
-                          className="p-2 hover:bg-red-100 text-red-600 rounded-xl transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                          title="Remove line"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <div className="min-w-[700px]">
+                  <div className="grid grid-cols-[44px_minmax(0,1.45fr)_minmax(180px,0.9fr)_44px] items-center gap-3 bg-slate-50 px-3 py-2.5 border-b border-slate-200">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">#</span>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Raw material *</span>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Transfer quantity (kg) *</span>
+                    <span className="sr-only">Actions</span>
+                  </div>
+
+                  <div className="divide-y divide-slate-200 bg-white">
+                    {transferLines.map((line, index) => {
+                      const material = rawMaterials.find(m => m.id === line.raw_material_id);
+                      const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+                      const insufficient = line.quantity > rmBalance;
+                      return (
+                        <div key={line.id} className="grid grid-cols-[44px_minmax(0,1.45fr)_minmax(180px,0.9fr)_44px] items-start gap-3 px-3 py-3 hover:bg-slate-50/70 transition-colors">
+                          <span className="pt-2 text-xs font-extrabold text-slate-400">{index + 1}</span>
+                          <select
+                            aria-label={`Raw material line ${index + 1}`}
+                            value={line.raw_material_id}
+                            onChange={(e) => updateTransferLine(line.id, 'raw_material_id', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-bold focus:ring-2 focus:ring-teal-500 bg-white outline-none"
+                          >
+                            <option value="">Select raw material</option>
+                            {rawMaterials.map((mat) => {
+                              const bal = rmWarehouseBalances[mat.id] ?? 0;
+                              return (
+                                <option key={mat.id} value={mat.id}>
+                                  {mat.name} ({mat.code}) — Sage RM available: {bal.toLocaleString()} {mat.unit}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <div>
+                            <input
+                              aria-label={`Transfer quantity for line ${index + 1}`}
+                              type="number"
+                              value={line.quantity || ''}
+                              onChange={(e) => updateTransferLine(line.id, 'quantity', e.target.value ? parseFloat(e.target.value) : 0)}
+                              className={`w-full px-3 py-2.5 border rounded-lg text-xs font-mono font-bold focus:ring-2 focus:ring-teal-500 outline-none bg-white ${
+                                insufficient ? 'border-red-400 bg-red-50 text-red-900' : 'border-slate-300'
+                              }`}
+                              placeholder="0.00"
+                              step="0.01"
+                            />
+                            {line.raw_material_id && insufficient && (
+                              <p className="mt-1 text-[10px] font-bold text-red-600">Exceeds RM stock: {rmBalance.toLocaleString()} {material?.unit}</p>
+                            )}
+                            {line.raw_material_id && !insufficient && (
+                              <p className="mt-1 text-[10px] font-semibold text-slate-500">
+                                After transfer: {(rmBalance - Number(line.quantity || 0)).toLocaleString()} {material?.unit}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removeTransferLine(line.id)}
+                            disabled={transferLines.length === 1}
+                            className="mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-30"
+                            title="Remove line"
+                            aria-label={`Remove material line ${index + 1}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={addTransferLine}
+                    className="flex w-full items-center justify-center gap-2 border-t border-slate-200 bg-white px-3 py-3 text-xs font-bold text-teal-700 transition-colors hover:bg-teal-50"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    Add line
+                  </button>
+                </div>
               </div>
             </div>
           </div>
