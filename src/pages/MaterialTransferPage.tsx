@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Fragment, useState, useEffect, useRef } from 'react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -110,6 +110,7 @@ export default function MaterialTransferPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const fetchInProgress = useRef(false);
@@ -350,6 +351,26 @@ export default function MaterialTransferPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const transferGroups = Object.values(filteredTransfers.reduce<Record<string, {
+    key: string;
+    transfers: MaterialTransfer[];
+  }>>((groups, transfer) => {
+    const groupDate = transfer.transfer_date || transfer.created_at || 'undated';
+    const groupKey = [
+      groupDate.slice(0, 10),
+      transfer.purpose || 'No purpose',
+      transfer.requested_by || 'unknown',
+      transfer.production_order_id || 'no-order',
+    ].join('|');
+    if (!groups[groupKey]) groups[groupKey] = { key: groupKey, transfers: [] };
+    groups[groupKey].transfers.push(transfer);
+    return groups;
+  }, {}));
+
+  const toggleTransferGroup = (groupKey: string) => {
+    setExpandedGroups((current) => ({ ...current, [groupKey]: !current[groupKey] }));
+  };
+
   const statusCounts = {
     all: transfers.length,
     in_buffer: transfers.filter(t => t.status === 'in_buffer').length,
@@ -473,79 +494,114 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
-                {['Date', 'Material', 'From Warehouse', 'To Location', 'Quantity', 'Initiated By', 'RM Balance', 'Buffer Balance', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => (
-                  <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Quantity', 'RM Balance', 'Buffer Balance'].includes(header) ? 'text-right' : 'text-left'}`}>
+                {['Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => (
+                  <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Lines', 'Total quantity'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredTransfers.length === 0 ? (
+              {transferGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
               ) : (
-                filteredTransfers.map((transfer) => {
-                  const transferDate = transfer.transfer_date || transfer.created_at;
-                  const quantity = Math.abs(transfer.quantity || 0);
-                  const rmBalance = rmWarehouseBalances[transfer.raw_material_id] ?? 0;
-                  const bufferBalance = bufferWarehouseBalances[transfer.raw_material_id] ?? 0;
-                  const sageSyncLog = sageSyncLogs[transfer.id];
+                transferGroups.map((group) => {
+                  const firstTransfer = group.transfers[0];
+                  const expanded = expandedGroups[group.key] ?? false;
+                  const totalQuantity = group.transfers.reduce((sum, transfer) => sum + Math.abs(transfer.quantity || 0), 0);
+                  const statuses = [...new Set(group.transfers.map((transfer) => transfer.status))];
+                  const syncLogs = group.transfers.map((transfer) => sageSyncLogs[transfer.id]).filter(Boolean);
+                  const hasFailedSync = syncLogs.some((log) => log.status === 'failed');
+                  const allPosted = syncLogs.length === group.transfers.length && syncLogs.every((log) => log.status === 'success');
+                  const hasActiveSync = syncLogs.some((log) => ['pending', 'processing', 'retry'].includes(log.status));
+                  const transferDate = firstTransfer.transfer_date || firstTransfer.created_at;
+                  const requester = (firstTransfer as any).requester?.full_name || (firstTransfer as any).requester?.email || '—';
                   return (
-                    <tr
-                      key={transfer.id}
-                      className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => setViewTransfer(transfer)}
-                    >
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          {transferDate ? format(new Date(transferDate), 'dd MMM yyyy') : '-'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <p className="text-sm font-medium text-slate-800">{transfer.raw_materials?.name || '-'}</p>
-                        <p className="text-xs text-slate-500">{transfer.raw_materials?.code || ''}</p>
-                      </td>
-                      <td className="px-3 py-2 text-sm text-slate-600">{transfer.warehouses?.name || '-'}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1.5 text-sm text-slate-700">
-                          <Factory className="w-3.5 h-3.5 text-slate-400" />
-                          {transfer.to_location || 'Production Floor'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
-                        {quantity.toLocaleString()} {transfer.unit || 'kg'}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-700 font-medium">
-                        {(transfer as any).requester?.full_name || (transfer as any).requester?.email || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-right font-medium text-slate-700">
-                        {rmBalance.toLocaleString()} {transfer.unit || 'kg'}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-right font-medium text-emerald-700">
-                        {bufferBalance.toLocaleString()} {transfer.unit || 'kg'}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-slate-600">{transfer.purpose || '-'}</td>
-                      <td className="px-3 py-2">
-                        <StatusBadge status={transfer.status || 'pending'} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <SageSyncBadge log={sageSyncLog} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setViewTransfer(transfer); }}
-                          className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
-                          title="View details"
-                        >
-                          <Eye className="w-4 h-4 text-slate-500" />
-                        </button>
-                      </td>
-                    </tr>
+                    <Fragment key={group.key}>
+                      <tr
+                        className="cursor-pointer bg-white hover:bg-slate-50"
+                        onClick={() => toggleTransferGroup(group.key)}
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                            {expanded ? <ChevronDown className="h-4 w-4 text-teal-600" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            {transferDate ? format(new Date(transferDate), 'dd MMM yyyy') : '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <p className="text-sm font-bold text-slate-800">{firstTransfer.warehouses?.name || 'Raw Materials'} <span className="font-normal text-slate-400">to</span> Production</p>
+                          <p className="text-xs text-slate-500">{group.transfers.length === 1 ? 'Single-material transfer' : 'Grouped material transfer bundle'}</p>
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{group.transfers.length}</td>
+                        <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity.toLocaleString()} kg</td>
+                        <td className="px-3 py-3 text-xs font-medium text-slate-700">{requester}</td>
+                        <td className="px-3 py-3 text-sm text-slate-600">{firstTransfer.purpose || '-'}</td>
+                        <td className="px-3 py-3">
+                          {statuses.length === 1 ? <StatusBadge status={statuses[0] || 'pending'} /> : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          {hasFailedSync ? <span className="text-xs font-bold text-red-700">Sage failed</span> : allPosted ? <span className="text-xs font-bold text-emerald-700">Posted to Sage</span> : hasActiveSync ? <span className="text-xs font-bold text-amber-700">Posting</span> : <span className="text-xs font-semibold text-slate-500">Not queued</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleTransferGroup(group.key); }}
+                            className="rounded-lg p-1.5 transition-colors hover:bg-slate-100"
+                            title={expanded ? 'Hide materials' : 'Show materials'}
+                            aria-label={expanded ? 'Hide materials' : 'Show materials'}
+                          >
+                            {expanded ? <ChevronDown className="h-4 w-4 text-teal-600" /> : <Eye className="h-4 w-4 text-slate-500" />}
+                          </button>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr key={`${group.key}-details`} className="bg-slate-50/70">
+                          <td colSpan={9} className="px-5 py-3">
+                            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                              <table className="w-full text-xs">
+                                <thead className="bg-slate-50 text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                                  <tr>
+                                    <th className="px-3 py-2">Material</th>
+                                    <th className="px-3 py-2 text-right">Quantity</th>
+                                    <th className="px-3 py-2 text-right">RM balance</th>
+                                    <th className="px-3 py-2 text-right">Buffer balance</th>
+                                    <th className="px-3 py-2">Status</th>
+                                    <th className="px-3 py-2">Sage</th>
+                                    <th className="px-3 py-2" />
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {group.transfers.map((transfer) => {
+                                    const quantity = Math.abs(transfer.quantity || 0);
+                                    return (
+                                      <tr key={transfer.id} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 font-semibold text-slate-800">
+                                          {transfer.raw_materials?.name || '-'} <span className="font-mono text-slate-400">{transfer.raw_materials?.code || ''}</span>
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-mono font-bold text-slate-700">{quantity.toLocaleString()} {transfer.unit || 'kg'}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-slate-600">{(rmWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-emerald-700">{(bufferWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
+                                        <td className="px-3 py-2"><StatusBadge status={transfer.status || 'pending'} /></td>
+                                        <td className="px-3 py-2"><SageSyncBadge log={sageSyncLogs[transfer.id]} /></td>
+                                        <td className="px-3 py-2 text-right">
+                                          <button onClick={() => setViewTransfer(transfer)} className="rounded-lg p-1.5 transition-colors hover:bg-slate-100" title="View transfer audit" aria-label="View transfer audit">
+                                            <Eye className="h-4 w-4 text-slate-500" />
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })
               )}
