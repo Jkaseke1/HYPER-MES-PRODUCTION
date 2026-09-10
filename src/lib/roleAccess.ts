@@ -6,7 +6,7 @@ const rolePaths: Record<string, string[]> = {
   weighbridge: ['/weigh-bridge', '/goods-received', '/material-transfer', '/warehouse'],
   weigh_bridge: ['/weigh-bridge'],
   production_receiver: ['/production-warehouse'],
-  warehouse_clerk: ['/goods-received', '/material-transfer', '/warehouse'],
+  warehouse_clerk: ['/weigh-bridge', '/goods-received', '/material-transfer', '/warehouse'],
   raw_material_manager: ['/weigh-bridge', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices'],
   warehouse_manager: ['/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices'],
   production_manager: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
