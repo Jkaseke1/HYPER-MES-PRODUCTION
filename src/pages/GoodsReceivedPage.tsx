@@ -76,6 +76,7 @@ export default function GoodsReceivedPage() {
   const [editingGrn, setEditingGrn] = useState<GoodsReceivedNote | null>(null);
   const [editSupplierId, setEditSupplierId] = useState('');
   const [editUnregisteredSupplierName, setEditUnregisteredSupplierName] = useState('');
+  const [editWeighBridgeTicketId, setEditWeighBridgeTicketId] = useState('none');
   const [editManualGrvNumber, setEditManualGrvNumber] = useState('');
   const [editReceivedDate, setEditReceivedDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -101,6 +102,7 @@ export default function GoodsReceivedPage() {
   const [externalReference, setExternalReference] = useState('');
   const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
   const [wbTickets, setWbTickets] = useState<any[]>([]);
+  const [correctionWbTickets, setCorrectionWbTickets] = useState<any[]>([]);
   const [wbExpanded, setWbExpanded] = useState(false);
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
@@ -125,11 +127,12 @@ export default function GoodsReceivedPage() {
   async function fetchData(showLoading = true) {
     if (showLoading) setLoading(true);
     try {
-      const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
+      const [grnsRes, suppliersRes, materialsRes, wbRes, correctionWbRes] = await Promise.all([
         supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(ticket_no, status, vehicle_reg, nett_mass)').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
         supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code)').eq('status', 'open').order('created_at', { ascending: false }),
+        supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code, sage_code)').in('status', ['open', 'in_grn', 'linked']).order('created_at', { ascending: false }),
       ]);
 
       if (grnsRes.data) {
@@ -158,6 +161,7 @@ export default function GoodsReceivedPage() {
         setWbTickets(wbRes.data as any);
         cacheData('weigh_bridge_tickets', wbRes.data);
       }
+      if (correctionWbRes.data) setCorrectionWbTickets(correctionWbRes.data as any);
 
       if (!navigator.onLine || grnsRes.error) {
         const cachedGrns = await getCachedData('goods_received_notes');
@@ -172,6 +176,7 @@ export default function GoodsReceivedPage() {
         if (cachedSuppliers) setSuppliers(cachedSuppliers);
         if (cachedMaterials) setMaterials(cachedMaterials);
         if (cachedWb) setWbTickets(cachedWb);
+        if (cachedWb) setCorrectionWbTickets(cachedWb);
       }
     } catch {
       const cachedGrns = await getCachedData('goods_received_notes');
@@ -186,6 +191,7 @@ export default function GoodsReceivedPage() {
       if (cachedSuppliers) setSuppliers(cachedSuppliers);
       if (cachedMaterials) setMaterials(cachedMaterials);
       if (cachedWb) setWbTickets(cachedWb);
+      if (cachedWb) setCorrectionWbTickets(cachedWb);
     }
     if (showLoading) setLoading(false);
   }
@@ -430,6 +436,7 @@ export default function GoodsReceivedPage() {
     setEditingGrn(viewing);
     setEditSupplierId(viewing.supplier_id || 'other');
     setEditUnregisteredSupplierName(viewing.unregistered_supplier_name || '');
+    setEditWeighBridgeTicketId((viewing as any).weigh_bridge_ticket_id || 'none');
     setEditManualGrvNumber((viewing as any).manual_grv_number || '');
     setEditReceivedDate(viewing.received_date || localDateInputValue());
     setEditNotes(viewing.notes || '');
@@ -444,11 +451,49 @@ export default function GoodsReceivedPage() {
     }
     setSavingGrnEdit(true);
     try {
+      const oldTicketId = (editingGrn as any).weigh_bridge_ticket_id || null;
+      const newTicketId = editWeighBridgeTicketId === 'none' ? null : editWeighBridgeTicketId;
+      const ticketSupplierId = editSupplierId === 'other' ? null : editSupplierId;
+      const ticketSupplierName = editSupplierId === 'other' ? editUnregisteredSupplierName.trim() : null;
+      const selectedTicket = newTicketId
+        ? correctionWbTickets.find((ticket) => ticket.id === newTicketId)
+        : null;
+
+      if (newTicketId && (!selectedTicket || !['open', 'in_grn', 'linked'].includes(selectedTicket.status))) {
+        throw new Error('The selected weighbridge ticket is no longer available for correction. Refresh and try again.');
+      }
+
+      // Keep the source ticket and GRN aligned. A replaced ticket is released,
+      // while the selected ticket is reserved for this GRN until approval.
+      if (oldTicketId && oldTicketId !== newTicketId) {
+        const { error } = await supabase
+          .from('weigh_bridge_tickets')
+          .update({ status: 'open', updated_at: new Date().toISOString() })
+          .eq('id', oldTicketId)
+          .in('status', ['in_grn', 'linked']);
+        if (error) throw error;
+      }
+
+      if (newTicketId) {
+        const { error } = await supabase
+          .from('weigh_bridge_tickets')
+          .update({
+            status: 'in_grn',
+            supplier_id: ticketSupplierId,
+            unregistered_supplier_name: ticketSupplierName,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', newTicketId)
+          .in('status', ['open', 'in_grn', 'linked']);
+        if (error) throw error;
+      }
+
       const { error: headerError } = await supabase
         .from('goods_received_notes')
         .update({
           supplier_id: editSupplierId === 'other' ? null : editSupplierId,
           unregistered_supplier_name: editSupplierId === 'other' ? editUnregisteredSupplierName.trim() : null,
+          weigh_bridge_ticket_id: newTicketId,
           manual_grv_number: editManualGrvNumber.trim(),
           received_date: editReceivedDate,
           notes: editNotes.trim() || null,
@@ -1986,6 +2031,21 @@ export default function GoodsReceivedPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Manual GRV Number *</Label>
                 <Input value={editManualGrvNumber} onChange={(e) => setEditManualGrvNumber(e.target.value)} placeholder="e.g. GRV-10437" className="font-mono font-semibold" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Linked weighbridge</Label>
+                <Select value={editWeighBridgeTicketId} onValueChange={setEditWeighBridgeTicketId}>
+                  <SelectTrigger><SelectValue placeholder="Select ticket" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No weighbridge ticket</SelectItem>
+                    {correctionWbTickets.map((ticket) => (
+                      <SelectItem key={ticket.id} value={ticket.id}>
+                        {ticket.ticket_no} {ticket.product_code ? `- ${ticket.product_code}` : ''} ({ticket.status})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-500">Changing this also releases the old ticket and reserves the new one.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Received Date *</Label>
