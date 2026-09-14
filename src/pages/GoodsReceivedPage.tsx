@@ -893,11 +893,11 @@ export default function GoodsReceivedPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="px-3 py-3" title={(grn as any).manual_grv_number || 'No manual GRV reference'}>
+                      <TableCell className="w-[105px] max-w-[105px] overflow-hidden px-3 py-3" title={(grn as any).manual_grv_number || 'No manual GRV reference'}>
                         <p className="font-mono text-xs font-bold text-slate-900">{(grn as any).manual_grv_number || '—'}</p>
-                        <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
+                        <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
                       </TableCell>
-                      <TableCell className="w-[230px] max-w-[230px] px-3 py-3" title={grnSupplierLabel(grn)}>
+                      <TableCell className="w-[230px] max-w-[230px] overflow-hidden px-3 py-3" title={grnSupplierLabel(grn)}>
                         <p className="line-clamp-2 whitespace-normal break-words font-bold leading-4 text-slate-900">{grnSupplierLabel(grn)}</p>
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Supplier receipt</p>
                       </TableCell>
