@@ -81,6 +81,7 @@ export default function WeighBridgePage() {
   const [form, setForm] = useState(emptyWBForm);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
 
   const canCorrectTickets = hasRole(['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager']);
 
@@ -152,6 +153,8 @@ export default function WeighBridgePage() {
   async function openNewTicketModal() {
     const nextTicketNo = await generateNextTicketNo();
     setForm({ ...emptyWBForm, wb_transaction_no: nextTicketNo });
+    setEditing(false);
+    setEditingTicketId(null);
     setNewOpen(true);
   }
 
@@ -190,6 +193,7 @@ export default function WeighBridgePage() {
     }
     setViewTicket(null);
     setForm(ticketToForm(ticket));
+    setEditingTicketId(ticket.id);
     setEditing(true);
   }
 
@@ -231,6 +235,10 @@ export default function WeighBridgePage() {
       alert('Select a supplier, or record the supplier name for Finance.');
       return;
     }
+    if (editing && !editingTicketId) {
+      alert('This ticket could not be identified for editing. Close the form and open the ticket again.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -254,13 +262,14 @@ export default function WeighBridgePage() {
         driver_signed: form.wb_driver_signed,
       };
       const query = editing
-        ? supabase.from('weigh_bridge_tickets').update(payload).eq('id', viewTicket?.id)
+        ? supabase.from('weigh_bridge_tickets').update(payload).eq('id', editingTicketId || '')
         : supabase.from('weigh_bridge_tickets').insert({ ...payload, status: 'open', created_by: profile?.id || null });
       const { error } = await query;
       if (error) throw error;
       setNewOpen(false);
       setForm(emptyWBForm);
       setEditing(false);
+      setEditingTicketId(null);
       setViewTicket(null);
       await fetchTickets();
     } catch (err: any) {
