@@ -62,6 +62,16 @@ type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 export default function ProductionWarehousePage() {
   const { profile } = useAuth();
   const isProductionReceiver = profile?.role === 'production_receiver';
+  // Keep the UI aligned with approve_material_transfer_to_production on the API.
+  const canApproveMaterialTransfer = [
+    'admin',
+    'production_manager',
+    'supervisor',
+    'logistics',
+    'finance',
+    'accountant',
+    'production_receiver',
+  ].includes(profile?.role || '');
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
@@ -454,9 +464,11 @@ export default function ProductionWarehousePage() {
                       <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                       <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
                     </div>
-                    <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
-                      {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Receiving bundle</> : <><CheckCircle2 className="h-4 w-4" /> Receive bundle</>}
-                    </button>
+                    {canApproveMaterialTransfer && (
+                      <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                        {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing approval</> : <><CheckCircle2 className="h-4 w-4" /> Approve &amp; receive</>}
+                      </button>
+                    )}
                   </div>
                   {isOpen && (
                     <div className="mt-3 overflow-hidden border border-slate-200 bg-slate-50">
