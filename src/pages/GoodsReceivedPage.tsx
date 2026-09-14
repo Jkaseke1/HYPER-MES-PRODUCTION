@@ -62,6 +62,7 @@ function formatMoney(value: number | string | null | undefined) {
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canCompleteGrnCosting = ['admin', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
+  const canManageGrnCorrections = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
@@ -71,6 +72,16 @@ export default function GoodsReceivedPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
+  const [grnEditOpen, setGrnEditOpen] = useState(false);
+  const [editingGrn, setEditingGrn] = useState<GoodsReceivedNote | null>(null);
+  const [editSupplierId, setEditSupplierId] = useState('');
+  const [editUnregisteredSupplierName, setEditUnregisteredSupplierName] = useState('');
+  const [editManualGrvNumber, setEditManualGrvNumber] = useState('');
+  const [editReceivedDate, setEditReceivedDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editItems, setEditItems] = useState<any[]>([]);
+  const [savingGrnEdit, setSavingGrnEdit] = useState(false);
+  const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
   const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
   const notifiedSyncRef = useRef<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -83,6 +94,7 @@ export default function GoodsReceivedPage() {
   const [unregisteredSupplierName, setUnregisteredSupplierName] = useState('');
   const [receivedDate, setReceivedDate] = useState(localDateInputValue);
   const [notes, setNotes] = useState('');
+  const [manualGrvNumber, setManualGrvNumber] = useState('');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
   const [supplierDeliveryNoteNo, setSupplierDeliveryNoteNo] = useState('');
   const [supplierOrderNo, setSupplierOrderNo] = useState('');
@@ -124,6 +136,15 @@ export default function GoodsReceivedPage() {
         setGrns(grnsRes.data as any);
         cacheData('goods_received_notes', grnsRes.data);
         await fetchSageSyncStatuses(grnsRes.data as any[], false);
+        const grnIds = grnsRes.data.map((row: any) => row.id);
+        const { data: grnItems } = grnIds.length
+          ? await supabase.from('grn_items').select('grn_id, received_qty').in('grn_id', grnIds)
+          : { data: [] };
+        const totals: Record<string, number> = {};
+        (grnItems || []).forEach((row: any) => {
+          totals[row.grn_id] = (totals[row.grn_id] || 0) + Number(row.received_qty || 0);
+        });
+        setTonnageByGrnId(totals);
       }
       if (suppliersRes.data) {
         setSuppliers(suppliersRes.data as any);
@@ -261,7 +282,7 @@ export default function GoodsReceivedPage() {
   };
 
   const handleSaveGRN = async () => {
-    if ((!supplierId || (supplierId === 'other' && !unregisteredSupplierName.trim())) || items.length === 0 || !items[0].raw_material_id) {
+    if ((!supplierId || (supplierId === 'other' && !unregisteredSupplierName.trim())) || !manualGrvNumber.trim() || items.length === 0 || !items[0].raw_material_id) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -311,6 +332,7 @@ export default function GoodsReceivedPage() {
         unregistered_supplier_name: supplierId === 'other' ? unregisteredSupplierName.trim() : null,
         warehouse_id: warehouse?.id,
         received_date: receivedDate,
+        manual_grv_number: manualGrvNumber.trim(),
         status: 'pending_costing',
         notes: notes || null,
         supplier_invoice_no: supplierInvoiceNo.trim() || null,
@@ -375,6 +397,7 @@ export default function GoodsReceivedPage() {
     setUnregisteredSupplierName('');
     setReceivedDate(localDateInputValue());
     setNotes('');
+    setManualGrvNumber('');
     setSupplierInvoiceNo('');
     setSupplierDeliveryNoteNo('');
     setSupplierOrderNo('');
@@ -396,6 +419,68 @@ export default function GoodsReceivedPage() {
       .eq('grn_id', grn.id);
     setViewItems(data || []);
     setViewModalOpen(true);
+  };
+
+  const openGrnCorrection = () => {
+    if (!viewing || !canManageGrnCorrections) return;
+    if (!['pending', 'pending_costing', 'pending_finance'].includes(viewing.status)) {
+      toast.error('Approved or rejected GRNs are locked. Correct the GRN before final approval.');
+      return;
+    }
+    setEditingGrn(viewing);
+    setEditSupplierId(viewing.supplier_id || 'other');
+    setEditUnregisteredSupplierName(viewing.unregistered_supplier_name || '');
+    setEditManualGrvNumber((viewing as any).manual_grv_number || '');
+    setEditReceivedDate(viewing.received_date || localDateInputValue());
+    setEditNotes(viewing.notes || '');
+    setEditItems(viewItems.map((item) => ({ ...item })));
+    setGrnEditOpen(true);
+  };
+
+  const saveGrnCorrection = async () => {
+    if (!editingGrn || !editManualGrvNumber.trim() || (!editSupplierId || (editSupplierId === 'other' && !editUnregisteredSupplierName.trim()))) {
+      toast.error('Manual GRV number and supplier are required.');
+      return;
+    }
+    setSavingGrnEdit(true);
+    try {
+      const { error: headerError } = await supabase
+        .from('goods_received_notes')
+        .update({
+          supplier_id: editSupplierId === 'other' ? null : editSupplierId,
+          unregistered_supplier_name: editSupplierId === 'other' ? editUnregisteredSupplierName.trim() : null,
+          manual_grv_number: editManualGrvNumber.trim(),
+          received_date: editReceivedDate,
+          notes: editNotes.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingGrn.id);
+      if (headerError) throw headerError;
+
+      const updates = editItems.map((item) => supabase
+        .from('grn_items')
+        .update({
+          received_qty: Number(item.received_qty) || 0,
+          unit_cost: Number(item.unit_cost) || 0,
+          batch_number: item.batch_number || null,
+          expiry_date: item.expiry_date || null,
+        })
+        .eq('id', item.id)
+        .eq('grn_id', editingGrn.id));
+      const results = await Promise.all(updates);
+      const itemError = results.find((result) => result.error)?.error;
+      if (itemError) throw itemError;
+
+      toast.success(`${editingGrn.grn_number} corrected successfully.`);
+      setGrnEditOpen(false);
+      setViewModalOpen(false);
+      setEditingGrn(null);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(`Could not save GRN correction: ${error.message}`);
+    } finally {
+      setSavingGrnEdit(false);
+    }
   };
 
   const submitGrnCosting = async () => {
@@ -578,6 +663,18 @@ export default function GoodsReceivedPage() {
   const grnSupplierLabel = (grn: any) =>
     supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
 
+  const getGrnQueuePriority = (grn: any) => {
+    const sync = syncByGrnId[grn.id];
+
+    // Keep work requiring attention above completed receipts. An approved GRN
+    // remains visible near the top while Sage is queued, processing, or failed.
+    if (grn.status === 'pending_costing') return 0;
+    if (grn.status === 'pending_finance' || grn.status === 'pending') return 1;
+    if (grn.status === 'approved' && sync?.status !== 'success') return 2;
+    if (grn.status === 'rejected') return 3;
+    return 4;
+  };
+
   const filteredGRNs = grns.filter(grn => {
     const matchesSearch = grn.grn_number.toLowerCase().includes(search.toLowerCase()) ||
       grn.suppliers?.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -585,6 +682,10 @@ export default function GoodsReceivedPage() {
       grn.suppliers?.sage_code?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || grn.status === statusFilter;
     return matchesSearch && matchesStatus;
+  }).sort((a, b) => {
+    const priorityDifference = getGrnQueuePriority(a) - getGrnQueuePriority(b);
+    if (priorityDifference !== 0) return priorityDifference;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   const stats = {
@@ -596,6 +697,14 @@ export default function GoodsReceivedPage() {
       const now = new Date();
       return grnDate.getMonth() === now.getMonth() && grnDate.getFullYear() === now.getFullYear();
     }).length,
+  };
+
+  const statusCounts = {
+    all: grns.length,
+    pending_costing: grns.filter(g => g.status === 'pending_costing').length,
+    pending_finance: grns.filter(g => g.status === 'pending_finance').length,
+    approved: grns.filter(g => g.status === 'approved').length,
+    rejected: grns.filter(g => g.status === 'rejected').length,
   };
 
   const sageActivity = Object.values(syncByGrnId).reduce(
@@ -684,43 +793,58 @@ export default function GoodsReceivedPage() {
       </StickyOperationsPanel>
 
       {/* Search & Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search by GRN number, supplier, or Sage code..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-slate-50/50 border-slate-200 focus:bg-white"
-          />
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-md">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search GRN, supplier, Sage code..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10 border-slate-200 bg-slate-50/70 pl-10 text-sm focus:bg-white"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+            <span>Showing <strong className="text-slate-900">{filteredGRNs.length}</strong> of {grns.length}</span>
+            {(search || statusFilter !== 'all') && (
+              <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="font-semibold text-teal-700 hover:text-teal-900">
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-          {(['all', 'pending_costing', 'pending_finance', 'approved', 'rejected'] as const).map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all shrink-0 ${
-                statusFilter === st
-                  ? 'bg-slate-900 text-white shadow'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {st === 'pending_costing' ? 'costing' : st === 'pending_finance' ? 'finance' : st}
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto px-3 py-2.5">
+          {(['all', 'pending_costing', 'pending_finance', 'approved', 'rejected'] as const).map((st) => {
+            const labels = { all: 'All GRNs', pending_costing: 'Costing', pending_finance: 'Finance', approved: 'Approved', rejected: 'Rejected' };
+            return (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all ${statusFilter === st ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-100'}`}
+              >
+                {labels[st]}
+                <span className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] ${statusFilter === st ? 'bg-white/15 text-white' : 'bg-white text-slate-500 ring-1 ring-slate-200'}`}>
+                  {statusCounts[st]}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* GRNs View: Desktop Table + Mobile Card Grid */}
-      <Card className="border border-slate-200 shadow-md overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 py-3 px-5">
+      <Card className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
+        <CardHeader className="border-b border-slate-200 bg-white px-5 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-900">Delivery Register</CardTitle>
-              <CardDescription className="text-xs text-slate-500">View, inspect, and approve incoming goods notes</CardDescription>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg font-extrabold tracking-tight text-slate-900">Delivery Register</CardTitle>
+                <span className="h-2 w-2 rounded-full bg-emerald-500" title="Live register" />
+              </div>
+              <CardDescription className="mt-1 text-xs text-slate-500">Inspect receipts, follow approval progress, and confirm Sage posting.</CardDescription>
             </div>
-            <Badge variant="outline" className="font-mono text-xs text-slate-600 bg-white">
-              {filteredGRNs.length} record(s)
+            <Badge variant="outline" className="bg-slate-50 font-mono text-xs text-slate-600">
+              {filteredGRNs.length} shown
             </Badge>
           </div>
         </CardHeader>
@@ -729,45 +853,58 @@ export default function GoodsReceivedPage() {
           <div className="hidden md:block overflow-x-auto">
             <Table className="table-fixed w-full min-w-[1040px]">
               <TableHeader>
-                <TableRow className="bg-slate-100/70 hover:bg-slate-100/70">
-                  <TableHead className="w-[155px] font-bold text-slate-700">GRN Number</TableHead>
-                  <TableHead className="font-bold text-slate-700">Supplier</TableHead>
-                  <TableHead className="hidden xl:table-cell w-[105px] font-bold text-slate-700">Weigh Bridge</TableHead>
-                  <TableHead className="w-[118px] font-bold text-slate-700">Received</TableHead>
-                  <TableHead className="w-[160px] font-bold text-slate-700">Status</TableHead>
-                  <TableHead className="w-[250px] font-bold text-slate-700">Sage Live Status</TableHead>
-                  <TableHead className="w-[100px] text-right font-bold text-slate-700 pr-5">Inspect</TableHead>
+                <TableRow className="bg-slate-50 hover:bg-slate-50">
+                  <TableHead className="w-[145px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
+                  <TableHead className="w-[125px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
+                  <TableHead className="px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
+                  <TableHead className="hidden w-[120px] px-5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500 xl:table-cell">Weighbridge</TableHead>
+                  <TableHead className="w-[115px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
+                  <TableHead className="w-[110px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
+                  <TableHead className="w-[150px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Workflow</TableHead>
+                  <TableHead className="w-[215px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
+                  <TableHead className="w-[75px] px-4 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredGRNs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-slate-400 py-12">
+                    <TableCell colSpan={9} className="text-center text-slate-400 py-12">
                       No Goods Received Notes found matching criteria
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredGRNs.map((grn) => (
-                    <TableRow key={grn.id} className="hover:bg-slate-50/80 transition-colors">
-                      <TableCell className="font-semibold">
+                    <TableRow key={grn.id} className={`transition-colors hover:bg-slate-50/80 ${grn.status === 'approved' ? 'border-l-2 border-l-emerald-400' : grn.status === 'rejected' ? 'border-l-2 border-l-rose-400' : 'border-l-2 border-l-amber-300'}`}>
+                      <TableCell className="px-4 py-3 font-semibold">
                         <div className="flex items-center gap-2">
                           {(grn as any).wb_transaction_no && (
                             <span title="Weigh Bridge data captured"><Scale className="w-4 h-4 text-emerald-600 shrink-0" /></span>
                           )}
-                          <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded border border-slate-200">{grn.grn_number}</span>
+                          <div>
+                            <span className="font-mono text-xs font-bold text-slate-900">{grn.grn_number}</span>
+                            <p className="mt-1 text-[10px] font-medium text-slate-400">Receipt register</p>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium text-slate-900 truncate" title={grnSupplierLabel(grn)}>{grnSupplierLabel(grn)}</TableCell>
-                      <TableCell className="hidden xl:table-cell text-slate-600 font-mono text-xs truncate">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || '-'}</TableCell>
-                      <TableCell className="text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell className="whitespace-nowrap">{getStatusBadge(grn.status)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{getSageBadge(grn.id)}</TableCell>
-                      <TableCell className="text-right pr-5">
+                      <TableCell className="max-w-[270px] px-4 py-3" title={grnSupplierLabel(grn)}>
+                        <p className="font-mono text-xs font-bold text-slate-900">{(grn as any).manual_grv_number || '—'}</p>
+                        <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
+                      </TableCell>
+                      <TableCell className="max-w-[270px] px-4 py-3" title={grnSupplierLabel(grn)}>
+                        <p className="truncate font-bold text-slate-900">{grnSupplierLabel(grn)}</p>
+                        <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Supplier receipt</p>
+                      </TableCell>
+                      <TableCell className="hidden px-4 py-3 font-mono text-xs text-slate-600 xl:table-cell">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || <span className="text-slate-300">—</span>}</TableCell>
+                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="px-4 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
+                      <TableCell className="whitespace-nowrap px-4 py-3">{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell className="whitespace-nowrap px-4 py-3">{getSageBadge(grn.id)}</TableCell>
+                      <TableCell className="px-4 py-3 text-right">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleViewGRN(grn)}
-                          className="hover:bg-orange-50 hover:text-orange-700 border-slate-300 font-semibold"
+                          className="h-9 w-9 border-slate-300 p-0 font-semibold hover:bg-orange-50 hover:text-orange-700"
                         >
                           <Eye className="h-4 w-4" />
                           <span className="sr-only">Inspect {grn.grn_number}</span>
@@ -809,8 +946,9 @@ export default function GoodsReceivedPage() {
 
                   <div>
                     <h4 className="font-bold text-slate-900 text-base">{grnSupplierLabel(grn)}</h4>
+                    <p className="text-xs font-mono font-semibold text-slate-600 mt-1">Manual GRV: {(grn as any).manual_grv_number || '—'}</p>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Received: {format(new Date(grn.received_date), 'PPP')}
+                      Received: {format(new Date(grn.received_date), 'PPP')} · Tonnage: {(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
                     </p>
                   </div>
 
@@ -874,7 +1012,7 @@ export default function GoodsReceivedPage() {
             <div className="border-b border-slate-200 bg-white px-4 py-2.5">
               <div className="mx-auto grid max-w-[1380px] grid-cols-2 gap-2 md:grid-cols-4">
                 {[
-                  ['01', 'Receipt details', Boolean(supplierId && receivedDate)],
+                  ['01', 'Receipt details', Boolean(supplierId && receivedDate && manualGrvNumber.trim())],
                   ['02', 'Finance references', Boolean(supplierInvoiceNo || supplierDeliveryNoteNo || supplierOrderNo || externalReference)],
                   ['03', 'Weighbridge', Boolean(weighBridgeTicketId)],
                   ['04', 'Material lines', items.every((item) => Boolean(item.raw_material_id && Number(item.received_qty) > 0))],
@@ -906,7 +1044,7 @@ export default function GoodsReceivedPage() {
                     <span className="text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
                   </div>
                   <div className="p-4">
-                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(320px,1.35fr)_220px_minmax(260px,1fr)]">
+                    <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1.2fr)_200px_minmax(240px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
                         <Select value={supplierId} onValueChange={(value) => {
@@ -946,15 +1084,16 @@ export default function GoodsReceivedPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="notes" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Delivery Notes</Label>
-                        <Textarea
-                          id="notes"
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Optional delivery note..."
-                          rows={1}
-                          className="h-10 min-h-10 resize-none bg-white border-slate-300 text-sm"
+                        <Label htmlFor="manual_grv_number" className="text-xs font-bold uppercase tracking-wide text-slate-700">Manual GRV Number *</Label>
+                        <Input
+                          id="manual_grv_number"
+                          value={manualGrvNumber}
+                          onChange={(e) => setManualGrvNumber(e.target.value)}
+                          placeholder="e.g. GRV-10437"
+                          required
+                          className="border-slate-300 bg-white font-mono font-semibold focus:border-orange-500"
                         />
+                        <p className="text-[10px] text-slate-400">Supplier/manual GRV reference</p>
                       </div>
                     </div>
                   </div>
@@ -1502,6 +1641,11 @@ export default function GoodsReceivedPage() {
                     {viewing.status}
                   </Badge>
                 )}
+                {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
+                  <Button type="button" size="sm" onClick={openGrnCorrection} className="bg-orange-500 text-white hover:bg-orange-600">
+                    Edit GRV
+                  </Button>
+                )}
               </div>
             </div>
             {/* Close Button */}
@@ -1622,6 +1766,10 @@ export default function GoodsReceivedPage() {
                 <div className="border-l-3 border-l-teal-500 bg-white rounded-lg border border-slate-200 p-2.5">
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Sage GRV Number</p>
                   <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{selectedGrvNumber || '-'}</p>
+                </div>
+                <div className="border-l-3 border-l-orange-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Manual GRV Number</p>
+                  <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{(viewing as any)?.manual_grv_number || '-'}</p>
                 </div>
 
                 {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
@@ -1795,6 +1943,81 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manager GRV correction modal */}
+      <Dialog open={grnEditOpen} onOpenChange={setGrnEditOpen}>
+        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[92vh] overflow-hidden p-0 [&>button.absolute]:hidden">
+          <DialogHeader className="shrink-0 bg-slate-900 px-5 py-4 text-white">
+            <div className="flex items-center justify-between pr-10">
+              <div>
+                <DialogTitle className="text-lg font-extrabold text-white">Correct GRV {editingGrn?.grn_number}</DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-slate-300">Manager correction window before Finance approval. The original initiator remains unchanged.</DialogDescription>
+              </div>
+              <Badge className="border border-orange-300/30 bg-orange-500/15 text-orange-200">Manager only</Badge>
+            </div>
+            <button onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
+              <X className="h-4 w-4" />
+            </button>
+          </DialogHeader>
+          <div className="max-h-[calc(92vh-74px)] overflow-y-auto bg-slate-50 p-5">
+            <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Supplier *</Label>
+                <Select value={editSupplierId} onValueChange={(value) => { setEditSupplierId(value); if (value !== 'other') setEditUnregisteredSupplierName(''); }}>
+                  <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="other">Other - supplier not in system</SelectItem>
+                    {suppliers.map((supplier) => <SelectItem key={supplier.id} value={supplier.id}>{supplierLabel(supplier)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {editSupplierId === 'other' && <Input value={editUnregisteredSupplierName} onChange={(e) => setEditUnregisteredSupplierName(e.target.value)} placeholder="Supplier name" />}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Manual GRV Number *</Label>
+                <Input value={editManualGrvNumber} onChange={(e) => setEditManualGrvNumber(e.target.value)} placeholder="e.g. GRV-10437" className="font-mono font-semibold" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Received Date *</Label>
+                <Input type="date" value={editReceivedDate} onChange={(e) => setEditReceivedDate(e.target.value)} />
+              </div>
+              <div className="md:col-span-3 space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correction note</Label>
+                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Explain the correction for the audit trail" rows={2} />
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-extrabold text-slate-900">GRV line corrections</p>
+                <p className="mt-1 text-xs text-slate-500">Correct received quantity, unit cost, batch, or expiry. Material identity remains fixed.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow className="bg-white"><TableHead>Material</TableHead><TableHead className="w-28 text-right">Received kg</TableHead><TableHead className="w-28 text-right">Unit cost</TableHead><TableHead className="w-36">Batch</TableHead><TableHead className="w-40">Expiry</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {editItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell><p className="text-xs font-bold text-slate-900">{item.raw_materials?.name || 'Material'}</p><p className="font-mono text-[10px] text-slate-500">{item.raw_materials?.code || '-'}</p></TableCell>
+                        <TableCell><Input type="number" min="0" step="0.001" value={item.received_qty ?? ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, received_qty: e.target.value === '' ? '' : Number(e.target.value) } : line))} className="h-8 text-right text-xs" /></TableCell>
+                        <TableCell><Input type="number" min="0" step="0.0001" value={item.unit_cost ?? ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, unit_cost: e.target.value === '' ? '' : Number(e.target.value) } : line))} className="h-8 text-right text-xs" /></TableCell>
+                        <TableCell><Input value={item.batch_number || ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, batch_number: e.target.value } : line))} className="h-8 text-xs" /></TableCell>
+                        <TableCell><Input type="date" value={item.expiry_date || ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, expiry_date: e.target.value } : line))} className="h-8 text-xs" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setGrnEditOpen(false)} disabled={savingGrnEdit}>Cancel</Button>
+              <Button type="button" onClick={saveGrnCorrection} disabled={savingGrnEdit} className="bg-orange-600 text-white hover:bg-orange-700">
+                {savingGrnEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                {savingGrnEdit ? 'Saving correction...' : 'Save GRV correction'}
+              </Button>
             </div>
           </div>
         </DialogContent>

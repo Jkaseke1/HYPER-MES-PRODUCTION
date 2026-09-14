@@ -181,7 +181,7 @@ export default function GRNApprovalButtons({
                     : 'bg-[#0b0b30] hover:bg-[#171750] text-white'
                 }`}
               >
-                {vatReviewedAt ? 'VAT Configured' : 'Set VAT Configuration'}
+                {vatReviewedAt ? 'Edit VAT' : 'Set VAT Configuration'}
               </button>
               <button
                 onClick={handleApprove}
@@ -209,7 +209,11 @@ export default function GRNApprovalButtons({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-lg w-full p-6">
             <h3 className="text-lg font-bold text-[#0b0b30]">Finance VAT Review</h3>
-            <p className="text-sm text-slate-600 mt-1 mb-5">Raw-material GRNs default to Tax Exclusive using Sage Taxable Input 515 at 15.5%.</p>
+            <p className="text-sm text-slate-600 mt-1 mb-5">
+              {vatReviewedAt
+                ? 'Update the VAT treatment before approving this GRN. The revised Finance decision will be recorded in the audit trail.'
+                : 'Raw-material GRNs default to Tax Exclusive using Sage Taxable Input 515 at 15.5%.'}
+            </p>
             <div className="space-y-3">
               {[
                 ['exclusive', 'Tax Exclusive', 'Entered unit costs exclude VAT. VAT is added to the supplier payable.'],

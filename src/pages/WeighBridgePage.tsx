@@ -82,7 +82,7 @@ export default function WeighBridgePage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const canCorrectTickets = hasRole(['admin', 'raw_material_manager', 'rm_manager']);
+  const canCorrectTickets = hasRole(['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager']);
 
   async function fetchTickets(silent = false) {
     if (!silent) setLoading(true);
@@ -184,8 +184,8 @@ export default function WeighBridgePage() {
 
   function openEditTicket(ticket: WBTicket) {
     if (!canCorrectTickets) return;
-    if (ticket.status !== 'open') {
-      alert('Only open tickets can be corrected. Tickets already in the GRN workflow are locked for audit integrity.');
+    if (!['open', 'in_grn'].includes(ticket.status)) {
+      alert('Only open or in-GRN tickets can be corrected. Linked tickets are locked for audit integrity.');
       return;
     }
     setViewTicket(null);
@@ -301,8 +301,8 @@ export default function WeighBridgePage() {
   const totalNettMassKg = tickets.reduce((sum, t) => sum + (Number(t.nett_mass) || 0), 0);
 
   return (
-    <div className="h-[calc(100vh-2rem)] flex flex-col bg-slate-50/60 p-4 md:p-6 overflow-hidden">
-      <div className="mx-auto flex h-full w-full max-w-[1600px] flex-col space-y-5">
+    <div className="min-h-[calc(100vh-4rem)] overflow-x-hidden bg-slate-50/60 p-3 md:p-5">
+      <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col space-y-4">
 
         {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
         <div className="shrink-0 space-y-3.5">
@@ -379,7 +379,7 @@ export default function WeighBridgePage() {
         </div>
 
         {/* SCROLLABLE TABLE / CONTENT SECTION (Scrolls underneath static top) */}
-        <div className="flex-1 overflow-y-auto min-h-0 bg-white rounded-2xl border border-slate-200 shadow-sm relative">
+        <div className="h-[58vh] min-h-[360px] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-sm relative">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <div className="w-8 h-8 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin mb-2" />
@@ -464,7 +464,7 @@ export default function WeighBridgePage() {
                             >
                               <Eye className="w-3.5 h-3.5" /> View
                             </button>
-                            {canCorrectTickets && t.status === 'open' && (
+                            {canCorrectTickets && ['open', 'in_grn'].includes(t.status) && (
                               <button
                                 onClick={() => openEditTicket(t)}
                                 className="inline-flex items-center justify-center w-8 h-8 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
@@ -677,7 +677,7 @@ export default function WeighBridgePage() {
                   {viewTicket.status === 'linked' ? `Linked to ${viewTicket.grn_number || 'GRN'}` : STATUS_STYLES[viewTicket.status]?.label}
                 </span>
                 <div className="flex items-center gap-2">
-                  {canCorrectTickets && viewTicket.status === 'open' && (
+                  {canCorrectTickets && ['open', 'in_grn'].includes(viewTicket.status) && (
                     <button
                       onClick={() => openEditTicket(viewTicket)}
                       className="inline-flex items-center gap-1.5 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold hover:bg-blue-100"

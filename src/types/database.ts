@@ -113,6 +113,7 @@ export interface GoodsReceivedNote {
   warehouse_id: string | null;
   weigh_bridge_ticket_id?: string | null;
   received_date: string;
+  manual_grv_number?: string | null;
   weigh_bridge_ticket_no?: string | null;
   weigh_bridge_ticket_date?: string | null;
   weigh_bridge_ticket_weight?: number | null;
