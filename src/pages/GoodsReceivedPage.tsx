@@ -856,7 +856,7 @@ export default function GoodsReceivedPage() {
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
                   <TableHead className="w-[145px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
                   <TableHead className="w-[125px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
-                  <TableHead className="px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
+                  <TableHead className="w-[260px] min-w-[260px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
                   <TableHead className="hidden w-[120px] px-5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500 xl:table-cell">Weighbridge</TableHead>
                   <TableHead className="w-[115px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
                   <TableHead className="w-[110px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
@@ -890,7 +890,7 @@ export default function GoodsReceivedPage() {
                         <p className="font-mono text-xs font-bold text-slate-900">{(grn as any).manual_grv_number || '—'}</p>
                         <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
                       </TableCell>
-                      <TableCell className="max-w-[270px] px-4 py-3" title={grnSupplierLabel(grn)}>
+                      <TableCell className="w-[260px] min-w-[260px] max-w-[260px] px-4 py-3" title={grnSupplierLabel(grn)}>
                         <p className="truncate font-bold text-slate-900">{grnSupplierLabel(grn)}</p>
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Supplier receipt</p>
                       </TableCell>
