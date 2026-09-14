@@ -126,7 +126,7 @@ export default function GoodsReceivedPage() {
     if (showLoading) setLoading(true);
     try {
       const [grnsRes, suppliersRes, materialsRes, wbRes] = await Promise.all([
-        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name)').order('created_at', { ascending: false }),
+        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(ticket_no, status, vehicle_reg, nett_mass)').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
         supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code)').eq('status', 'open').order('created_at', { ascending: false }),
@@ -663,6 +663,13 @@ export default function GoodsReceivedPage() {
   const grnSupplierLabel = (grn: any) =>
     supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
 
+  const grnWeighbridgeLabel = (grn: any) => {
+    const linkedTicket = Array.isArray(grn?.weigh_bridge_tickets)
+      ? grn.weigh_bridge_tickets[0]
+      : grn?.weigh_bridge_tickets;
+    return grn?.wb_transaction_no || grn?.weigh_bridge_ticket_no || linkedTicket?.ticket_no || '';
+  };
+
   const getGrnQueuePriority = (grn: any) => {
     const sync = syncByGrnId[grn.id];
 
@@ -851,18 +858,18 @@ export default function GoodsReceivedPage() {
         <CardContent className="p-0">
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-            <Table className="table-fixed w-full min-w-[1040px]">
+            <Table className="table-fixed w-full min-w-0">
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
-                  <TableHead className="w-[145px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
-                  <TableHead className="w-[125px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
-                  <TableHead className="w-[260px] min-w-[260px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
-                  <TableHead className="hidden w-[120px] px-5 text-[11px] font-extrabold uppercase tracking-wide text-slate-500 xl:table-cell">Weighbridge</TableHead>
-                  <TableHead className="w-[115px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
-                  <TableHead className="w-[110px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
-                  <TableHead className="w-[150px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Workflow</TableHead>
-                  <TableHead className="w-[215px] px-4 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
-                  <TableHead className="w-[75px] px-4 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
+                  <TableHead className="w-[135px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
+                  <TableHead className="w-[105px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
+                  <TableHead className="w-[230px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
+                  <TableHead className="w-[105px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Weighbridge</TableHead>
+                  <TableHead className="w-[108px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
+                  <TableHead className="w-[100px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
+                  <TableHead className="w-[130px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Workflow</TableHead>
+                  <TableHead className="w-[190px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
+                  <TableHead className="w-[60px] px-3 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -875,9 +882,9 @@ export default function GoodsReceivedPage() {
                 ) : (
                   filteredGRNs.map((grn) => (
                     <TableRow key={grn.id} className={`transition-colors hover:bg-slate-50/80 ${grn.status === 'approved' ? 'border-l-2 border-l-emerald-400' : grn.status === 'rejected' ? 'border-l-2 border-l-rose-400' : 'border-l-2 border-l-amber-300'}`}>
-                      <TableCell className="px-4 py-3 font-semibold">
+                      <TableCell className="px-3 py-3 font-semibold">
                         <div className="flex items-center gap-2">
-                          {(grn as any).wb_transaction_no && (
+                          {grnWeighbridgeLabel(grn) && (
                             <span title="Weigh Bridge data captured"><Scale className="w-4 h-4 text-emerald-600 shrink-0" /></span>
                           )}
                           <div>
@@ -886,20 +893,20 @@ export default function GoodsReceivedPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[270px] px-4 py-3" title={grnSupplierLabel(grn)}>
+                      <TableCell className="px-3 py-3" title={(grn as any).manual_grv_number || 'No manual GRV reference'}>
                         <p className="font-mono text-xs font-bold text-slate-900">{(grn as any).manual_grv_number || '—'}</p>
                         <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
                       </TableCell>
-                      <TableCell className="w-[260px] min-w-[260px] max-w-[260px] px-4 py-3" title={grnSupplierLabel(grn)}>
-                        <p className="truncate font-bold text-slate-900">{grnSupplierLabel(grn)}</p>
+                      <TableCell className="w-[230px] max-w-[230px] px-3 py-3" title={grnSupplierLabel(grn)}>
+                        <p className="line-clamp-2 whitespace-normal break-words font-bold leading-4 text-slate-900">{grnSupplierLabel(grn)}</p>
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Supplier receipt</p>
                       </TableCell>
-                      <TableCell className="hidden px-4 py-3 font-mono text-xs text-slate-600 xl:table-cell">{(grn as any).wb_transaction_no || (grn as any).weigh_bridge_ticket_no || <span className="text-slate-300">—</span>}</TableCell>
-                      <TableCell className="px-4 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell className="px-4 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
-                      <TableCell className="whitespace-nowrap px-4 py-3">{getStatusBadge(grn.status)}</TableCell>
-                      <TableCell className="whitespace-nowrap px-4 py-3">{getSageBadge(grn.id)}</TableCell>
-                      <TableCell className="px-4 py-3 text-right">
+                      <TableCell className="px-3 py-3 font-mono text-xs text-slate-600">{grnWeighbridgeLabel(grn) || <span className="text-slate-300">—</span>}</TableCell>
+                      <TableCell className="px-3 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
+                      <TableCell className="whitespace-nowrap px-3 py-3">{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell className="whitespace-nowrap px-3 py-3">{getSageBadge(grn.id)}</TableCell>
+                      <TableCell className="px-3 py-3 text-right">
                         <Button
                           variant="outline"
                           size="sm"
@@ -931,9 +938,9 @@ export default function GoodsReceivedPage() {
                       <span className="font-mono text-xs font-bold bg-slate-900 text-white px-2 py-1 rounded">
                         {grn.grn_number}
                       </span>
-                      {(grn as any).wb_transaction_no && (
+                      {grnWeighbridgeLabel(grn) && (
                         <Badge variant="outline" className="text-[10px] text-teal-700 border-teal-300 bg-teal-50">
-                          <Scale className="w-3 h-3 mr-1 text-teal-600 inline" /> WB Ticket
+                          <Scale className="w-3 h-3 mr-1 text-teal-600 inline" /> {grnWeighbridgeLabel(grn)}
                         </Badge>
                       )}
                     </div>
@@ -1788,14 +1795,14 @@ export default function GoodsReceivedPage() {
                 ) : null}
 
                 {/* Weigh Bridge Ticket */}
-                {viewing && (viewing as any).wb_transaction_no && (
+                {viewing && grnWeighbridgeLabel(viewing) && (
                   <div className="bg-white rounded-lg border border-teal-200 p-2.5">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Scale className="w-3.5 h-3.5 text-teal-600" />
                       <h3 className="text-xs font-semibold text-slate-700">Weigh Bridge Ticket</h3>
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                      <div><span className="text-slate-400">Ticket:</span> <span className="font-mono text-slate-800">{(viewing as any).wb_transaction_no}</span></div>
+                      <div><span className="text-slate-400">Ticket:</span> <span className="font-mono text-slate-800">{grnWeighbridgeLabel(viewing)}</span></div>
                       <div><span className="text-slate-400">Vehicle:</span> <span className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</span></div>
                       <div><span className="text-slate-400">Haulier:</span> <span className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</span></div>
                       <div><span className="text-slate-400">Driver:</span> <span className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</span></div>
