@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import {
   Scale, Plus, Search, Eye, CheckCircle, X, RefreshCw,
-  Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus, Loader2
+  Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus, Loader2,
+  Pencil, Trash2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 import { cacheData, getCachedData } from '../lib/offlineSync';
@@ -69,6 +71,7 @@ const STATUS_STYLES: Record<string, { label: string; bg: string; color: string; 
 
 export default function WeighBridgePage() {
   const { profile } = useAuth();
+  const { hasRole } = usePermissions();
   const [tickets, setTickets] = useState<WBTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -77,6 +80,9 @@ export default function WeighBridgePage() {
   const [viewTicket, setViewTicket] = useState<WBTicket | null>(null);
   const [form, setForm] = useState(emptyWBForm);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const canCorrectTickets = hasRole(['admin', 'raw_material_manager', 'rm_manager']);
 
   async function fetchTickets(silent = false) {
     if (!silent) setLoading(true);
@@ -153,6 +159,64 @@ export default function WeighBridgePage() {
     setForm(prev => ({ ...prev, [field]: value }));
   }
 
+  function ticketToForm(ticket: WBTicket) {
+    return {
+      wb_transaction_no: ticket.ticket_no || '',
+      wb_vehicle_reg: ticket.vehicle_reg || '',
+      wb_haulier_code: ticket.haulier_code || 'HYPER',
+      wb_product_code: ticket.product_code || '',
+      wb_product_name: ticket.product_name || '',
+      wb_supplier_id: ticket.supplier_id || '',
+      wb_unregistered_supplier_name: ticket.unregistered_supplier_name || '',
+      wb_finance_note: ticket.finance_note || '',
+      wb_comment: ticket.comment || '',
+      wb_trailer_number: ticket.trailer_number || '',
+      wb_driver_name: ticket.driver_name || '',
+      wb_driver_id: ticket.driver_id || '',
+      wb_time_in: ticket.time_in ? ticket.time_in.slice(0, 16) : '',
+      wb_first_mass: ticket.first_mass == null ? '' : String(ticket.first_mass),
+      wb_time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
+      wb_second_mass: ticket.second_mass == null ? '' : String(ticket.second_mass),
+      wb_nett_mass: ticket.nett_mass == null ? '' : String(ticket.nett_mass),
+      wb_driver_signed: Boolean(ticket.driver_signed),
+    };
+  }
+
+  function openEditTicket(ticket: WBTicket) {
+    if (!canCorrectTickets) return;
+    if (ticket.status !== 'open') {
+      alert('Only open tickets can be corrected. Tickets already in the GRN workflow are locked for audit integrity.');
+      return;
+    }
+    setViewTicket(null);
+    setForm(ticketToForm(ticket));
+    setEditing(true);
+  }
+
+  async function handleDeleteTicket(ticket: WBTicket) {
+    if (!canCorrectTickets) return;
+    if (ticket.status !== 'open' || ticket.grn_number) {
+      alert('Only an open, unlinked ticket can be deleted. Use edit before it enters the GRN workflow.');
+      return;
+    }
+    if (!window.confirm(`Delete weighbridge ticket ${ticket.ticket_no}? This cannot be undone.`)) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('weigh_bridge_tickets')
+        .delete()
+        .eq('id', ticket.id);
+      if (error) throw error;
+      setViewTicket(null);
+      await fetchTickets();
+    } catch (err: any) {
+      alert(`Failed to delete ticket: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.wb_transaction_no) {
@@ -188,14 +252,17 @@ export default function WeighBridgePage() {
         nett_mass: form.wb_nett_mass ? parseFloat(form.wb_nett_mass) : null,
         comment: form.wb_comment,
         driver_signed: form.wb_driver_signed,
-        status: 'open',
-        created_by: profile?.id || null,
       };
-      const { error } = await supabase.from('weigh_bridge_tickets').insert(payload);
+      const query = editing
+        ? supabase.from('weigh_bridge_tickets').update(payload).eq('id', viewTicket?.id)
+        : supabase.from('weigh_bridge_tickets').insert({ ...payload, status: 'open', created_by: profile?.id || null });
+      const { error } = await query;
       if (error) throw error;
       setNewOpen(false);
       setForm(emptyWBForm);
-      fetchTickets();
+      setEditing(false);
+      setViewTicket(null);
+      await fetchTickets();
     } catch (err: any) {
       alert(`Failed to save ticket: ${err.message}`);
     } finally {
@@ -390,12 +457,34 @@ export default function WeighBridgePage() {
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-right">
-                          <button
-                            onClick={() => setViewTicket(t)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-xs font-bold"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View Ticket
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setViewTicket(t)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-xs font-bold"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </button>
+                            {canCorrectTickets && t.status === 'open' && (
+                              <button
+                                onClick={() => openEditTicket(t)}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                title="Edit ticket"
+                                aria-label={`Edit ${t.ticket_no}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canCorrectTickets && t.status === 'open' && !t.grn_number && (
+                              <button
+                                onClick={() => handleDeleteTicket(t)}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                title="Delete ticket"
+                                aria-label={`Delete ${t.ticket_no}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -409,7 +498,7 @@ export default function WeighBridgePage() {
       </div>
 
       {/* New Ticket Modal */}
-      <Dialog open={newOpen} onOpenChange={() => setNewOpen(false)}>
+      <Dialog open={newOpen || editing} onOpenChange={() => { setNewOpen(false); setEditing(false); }}>
         <DialogContent className="max-w-[1100px] w-[96vw] max-h-[94vh] p-0 overflow-hidden flex flex-col sm:!max-w-[1100px] rounded-lg border-0 shadow-2xl [&>button.absolute]:hidden">
           {/* Header */}
           <div className="bg-[#09072c] border-b-4 border-orange-500 text-white px-6 py-4 flex-shrink-0 relative">
@@ -425,8 +514,8 @@ export default function WeighBridgePage() {
                 <Scale className="w-5 h-5 text-orange-300" />
               </div>
               <div>
-                <h2 className="text-lg font-extrabold tracking-tight">New Weighbridge Ticket</h2>
-                <p className="text-slate-300 text-xs mt-0.5">Record gross & tare vehicle weights — link to a GRN after saving</p>
+                <h2 className="text-lg font-extrabold tracking-tight">{editing ? 'Edit Weighbridge Ticket' : 'New Weighbridge Ticket'}</h2>
+                <p className="text-slate-300 text-xs mt-0.5">{editing ? 'Correct the ticket before it is linked and posted' : 'Record gross & tare vehicle weights — link to a GRN after saving'}</p>
               </div>
             </div>
           </div>
@@ -455,7 +544,7 @@ export default function WeighBridgePage() {
                 className="px-5 py-2.5 text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
               >
                 <Scale className="w-4 h-4" />
-                {saving ? 'Saving Ticket...' : 'Save WeighBridge Ticket'}
+                {saving ? 'Saving Ticket...' : editing ? 'Save Corrections' : 'Save WeighBridge Ticket'}
               </button>
             </div>
           </form>
@@ -587,12 +676,30 @@ export default function WeighBridgePage() {
                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_STYLES[viewTicket.status]?.bg || ''} ${STATUS_STYLES[viewTicket.status]?.color || ''} ${STATUS_STYLES[viewTicket.status]?.border || ''}`}>
                   {viewTicket.status === 'linked' ? `Linked to ${viewTicket.grn_number || 'GRN'}` : STATUS_STYLES[viewTicket.status]?.label}
                 </span>
-                <button
-                  onClick={() => setViewTicket(null)}
-                  className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-2">
+                  {canCorrectTickets && viewTicket.status === 'open' && (
+                    <button
+                      onClick={() => openEditTicket(viewTicket)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold hover:bg-blue-100"
+                    >
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
+                  {canCorrectTickets && viewTicket.status === 'open' && !viewTicket.grn_number && (
+                    <button
+                      onClick={() => handleDeleteTicket(viewTicket)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 border border-red-200 bg-red-50 text-red-700 rounded-xl text-xs font-bold hover:bg-red-100"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Delete
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setViewTicket(null)}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </DialogContent>
