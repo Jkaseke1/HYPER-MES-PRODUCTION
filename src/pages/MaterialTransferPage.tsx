@@ -113,6 +113,7 @@ export default function MaterialTransferPage() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  const [transferError, setTransferError] = useState<string[] | null>(null);
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -258,10 +259,11 @@ export default function MaterialTransferPage() {
 
   async function createTransfers() {
     setSaving(true);
+    setTransferError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) {
-        alert('User not authenticated');
+        setTransferError(['Your session has expired. Sign in again before creating a transfer.']);
         setSaving(false);
         return;
       }
@@ -270,7 +272,7 @@ export default function MaterialTransferPage() {
       const fromWarehouseId = rmWarehouse?.id;
 
       if (!fromWarehouseId) {
-        alert('Raw Materials Warehouse not found. Please contact admin.');
+        setTransferError(['The Raw Materials Warehouse could not be found. Please contact an administrator.']);
         setSaving(false);
         return;
       }
@@ -278,10 +280,25 @@ export default function MaterialTransferPage() {
       // Validate all lines
       const validLines = transferLines.filter(line => line.raw_material_id && line.quantity > 0);
       if (validLines.length === 0) {
-        alert('Please add at least one material with quantity > 0');
+        setTransferError(['Add at least one material with a quantity greater than zero.']);
         setSaving(false);
         return;
       }
+
+      const seenMaterials = new Set<string>();
+      const duplicateLine = validLines.find((line) => {
+        if (seenMaterials.has(line.raw_material_id)) return true;
+        seenMaterials.add(line.raw_material_id);
+        return false;
+      });
+      if (duplicateLine) {
+        const material = rawMaterials.find((m) => m.id === duplicateLine.raw_material_id);
+        setTransferError([`${material?.name || 'This raw material'} is already on another line. Combine the quantities on the existing line, then save.`]);
+        setSaving(false);
+        return;
+      }
+
+      const transferBatchKey = crypto.randomUUID();
 
       // Sage is the stock authority for RM transfers. The bridge refreshes this
       // balance from the configured Sage company and verifies it again when posting.
@@ -289,7 +306,7 @@ export default function MaterialTransferPage() {
         const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
         const material = rawMaterials.find(m => m.id === line.raw_material_id);
         if (line.quantity > rmBalance) {
-          alert(`Insufficient Sage RM stock for ${material?.name || 'material'}. Available: ${rmBalance.toLocaleString()} kg, Requested: ${line.quantity.toLocaleString()} kg`);
+          setTransferError([`${material?.name || 'Material'} cannot be transferred because RM stock is insufficient. Available: ${rmBalance.toLocaleString()} kg; requested: ${line.quantity.toLocaleString()} kg.`]);
           setSaving(false);
           return;
         }
@@ -309,6 +326,7 @@ export default function MaterialTransferPage() {
           p_notes: sharedForm.notes || null,
           p_production_order_id: sharedForm.production_order_id || null,
           p_requested_by: user.id,
+          p_transfer_batch_key: transferBatchKey,
         });
 
         if (error) {
@@ -317,7 +335,9 @@ export default function MaterialTransferPage() {
       }
 
       if (errors.length > 0) {
-        alert(`Some transfers failed:\n${errors.join('\n')}`);
+        setTransferError(errors.map((message) => message.toLowerCase().includes('duplicate key')
+          ? 'A transfer reference was already used while saving this line. Retry this material; the system will generate a new reference.'
+          : message));
         setSaving(false);
         return;
       }
@@ -335,7 +355,7 @@ export default function MaterialTransferPage() {
       fetchData();
     } catch (err: any) {
       console.error('Unexpected error:', err);
-      alert(`Error: ${err.message}`);
+      setTransferError([err.message || 'The transfer could not be saved. Please try again.']);
     } finally {
       setSaving(false);
     }
@@ -379,6 +399,32 @@ export default function MaterialTransferPage() {
   };
   const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
   const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
+  const canReverseTransfer = profile?.role === 'admin';
+
+  async function reverseTransfer(transfer: MaterialTransfer) {
+    if (!canReverseTransfer) return;
+    const reason = window.prompt(`Reason for reversing ${transfer.transfer_number}?`, 'Duplicate material transfer');
+    if (reason === null) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) { alert('User not authenticated'); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.rpc('reverse_material_transfer', {
+        p_transfer_id: transfer.id,
+        p_reversed_by: user.id,
+        p_reason: reason,
+      });
+      if (error) throw error;
+      setViewTransfer(null);
+      setSuccessMessage(`${transfer.raw_materials?.name || 'Material transfer'} reversed and returned to RM Warehouse.`);
+      window.setTimeout(() => setSuccessMessage(''), 4000);
+      await fetchData();
+    } catch (error: any) {
+      alert(`Could not reverse transfer: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
   const activeSagePosts = transfers.filter((transfer) => {
     const status = sageSyncLogs[transfer.id]?.status;
     return status === 'pending' || status === 'processing' || status === 'retry';
@@ -429,7 +475,7 @@ export default function MaterialTransferPage() {
             )}
             {canCreateTransfer && (
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={() => { setTransferError(null); setShowCreate(true); }}
                 className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
               >
                 <Plus className="h-4 w-4" /> New Transfer
@@ -636,6 +682,22 @@ export default function MaterialTransferPage() {
               </button>
             </div>
           </div>
+
+          {transferError && (
+            <div role="alert" className="mx-6 mt-4 flex items-start gap-3 border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-extrabold">Transfer could not be completed</p>
+                <p className="mt-1 text-xs text-red-800">Correct the items below and try again. No new line is created for a failed item.</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-red-800">
+                  {transferError.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}
+                </ul>
+              </div>
+              <button type="button" onClick={() => setTransferError(null)} className="rounded p-1 text-red-700 hover:bg-red-100" aria-label="Dismiss transfer error">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50">
             {/* Shared Header Fields */}
@@ -868,6 +930,17 @@ export default function MaterialTransferPage() {
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={viewTransfer?.status || 'pending'} />
+              {viewTransfer && canReverseTransfer && viewTransfer.status === 'in_buffer' && (
+                <button
+                  onClick={() => reverseTransfer(viewTransfer)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                  title="Reverse this transfer and return the quantity to RM Warehouse"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Reverse transfer
+                </button>
+              )}
               <button
                 onClick={() => setViewTransfer(null)}
                 className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors text-slate-400 hover:text-white"
