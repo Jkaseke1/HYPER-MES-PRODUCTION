@@ -21,6 +21,7 @@ import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import toast from 'react-hot-toast';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import ReadOnlyAiReview from '../components/operations/ReadOnlyAiReview';
 
 interface GRNItem {
   raw_material_id: string;
@@ -817,6 +818,7 @@ export default function GoodsReceivedPage() {
     <div className="space-y-4 p-4 sm:p-5 max-w-[1600px] mx-auto">
       <StockTakeFrozenBanner />
       
+      <ReadOnlyAiReview />
       <StickyOperationsPanel>
         <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
           <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
