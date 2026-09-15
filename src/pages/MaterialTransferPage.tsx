@@ -303,10 +303,12 @@ export default function MaterialTransferPage() {
       // Sage is the stock authority for RM transfers. The bridge refreshes this
       // balance from the configured Sage company and verifies it again when posting.
       for (const line of validLines) {
-        const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+        const sageRmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+        const bufferBalance = bufferWarehouseBalances[line.raw_material_id] || 0;
+        const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
         const material = rawMaterials.find(m => m.id === line.raw_material_id);
         if (line.quantity > rmBalance) {
-          setTransferError([`${material?.name || 'Material'} cannot be transferred because RM stock is insufficient. Available: ${rmBalance.toLocaleString()} kg; requested: ${line.quantity.toLocaleString()} kg.`]);
+          setTransferError([`${material?.name || 'Material'} cannot be transferred because available Sage RM stock after Buffer allocation is insufficient. Available: ${rmBalance.toLocaleString()} kg; requested: ${line.quantity.toLocaleString()} kg.`]);
           setSaving(false);
           return;
         }
@@ -812,7 +814,9 @@ export default function MaterialTransferPage() {
                   <div className="divide-y divide-slate-200 bg-white">
                     {transferLines.map((line, index) => {
                       const material = rawMaterials.find(m => m.id === line.raw_material_id);
-                      const rmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+                      const sageRmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+                      const bufferBalance = bufferWarehouseBalances[line.raw_material_id] || 0;
+                      const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
                       const insufficient = line.quantity > rmBalance;
                       return (
                         <div key={line.id} className="grid grid-cols-[44px_minmax(0,1.45fr)_minmax(180px,0.9fr)_44px] items-start gap-3 px-3 py-3 hover:bg-slate-50/70 transition-colors">
@@ -828,7 +832,7 @@ export default function MaterialTransferPage() {
                               const bal = rmWarehouseBalances[mat.id] ?? 0;
                               return (
                                 <option key={mat.id} value={mat.id}>
-                                  {mat.name} ({mat.code}) — Sage RM available: {bal.toLocaleString()} {mat.unit}
+                                  {mat.name} ({mat.code}) — transferable from Sage RM: {Math.max(0, bal - (bufferWarehouseBalances[mat.id] || 0)).toLocaleString()} {mat.unit}
                                 </option>
                               );
                             })}
