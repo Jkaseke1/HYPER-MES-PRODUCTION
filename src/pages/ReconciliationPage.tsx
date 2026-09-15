@@ -12,7 +12,7 @@ interface ReconRawMaterial {
   variance: number;
   variance_percentage: number;
   last_synced: string;
-  status: 'OK' | 'LOW_VARIANCE' | 'HIGH_VARIANCE';
+  status: 'OK' | 'LOW_VARIANCE' | 'HIGH_VARIANCE' | 'NO_SAGE_DATA';
   created_at: string;
   updated_at: string;
 }
@@ -27,7 +27,8 @@ interface LastReconciliation {
 const statusConfig = {
   OK: { color: 'emerald', icon: CheckCircle, label: 'OK' },
   LOW_VARIANCE: { color: 'amber', icon: TrendingUp, label: 'Low Variance' },
-  HIGH_VARIANCE: { color: 'red', icon: AlertTriangle, label: 'High Variance' }
+  HIGH_VARIANCE: { color: 'red', icon: AlertTriangle, label: 'High Variance' },
+  NO_SAGE_DATA: { color: 'slate', icon: Clock, label: 'No Sage Data' },
 };
 
 export default function ReconciliationPage() {
@@ -39,28 +40,48 @@ export default function ReconciliationPage() {
   async function fetchReconciliationData() {
     setLoading(true);
     try {
-      // For now, fetch raw materials directly since recon_raw_materials table doesn't exist yet
-      const { data: rawMaterials, error: rawError } = await supabase
-        .from('raw_materials')
-        .select('*')
-        .order('name');
+      const [rawMaterialsRes, sageRes, warehousesRes, mesRes] = await Promise.all([
+        supabase.from('raw_materials').select('id, name, code, sage_code, unit, created_at, updated_at').eq('is_active', true).order('name'),
+        supabase.from('sage_stock_balances').select('raw_material_id, quantity, last_synced_at').eq('warehouse_id', 18),
+        supabase.from('warehouses').select('id, code').eq('is_active', true),
+        supabase.from('warehouse_stock_balances').select('raw_material_id, warehouse_id, quantity'),
+      ]);
 
-      if (rawError) throw rawError;
+      if (rawMaterialsRes.error) throw rawMaterialsRes.error;
+      if (sageRes.error) throw sageRes.error;
+      if (warehousesRes.error) throw warehousesRes.error;
+      if (mesRes.error) throw mesRes.error;
 
-      // Transform raw materials to reconciliation format
-      const reconData = rawMaterials?.map(material => ({
-        id: material.id,
-        material_name: material.name,
-        sage_code: material.sage_code || '',
-        sage_quantity: material.current_stock || 0,
-        mes_quantity: material.current_stock || 0,
-        variance: 0,
-        variance_percentage: 0,
-        last_synced: material.updated_at,
-        status: 'OK' as const,
-        created_at: material.created_at,
-        updated_at: material.updated_at
-      })) || [];
+      const warehouseCodes = Object.fromEntries((warehousesRes.data || []).map((warehouse: any) => [warehouse.id, String(warehouse.code || '').toUpperCase()]));
+      const sageByMaterial = Object.fromEntries((sageRes.data || []).map((row: any) => [row.raw_material_id, row]));
+      const mesByMaterial: Record<string, number> = {};
+      (mesRes.data || []).forEach((row: any) => {
+        const code = warehouseCodes[row.warehouse_id];
+        if (code === 'RM' || code === 'BUFFER') {
+          mesByMaterial[row.raw_material_id] = (mesByMaterial[row.raw_material_id] || 0) + Number(row.quantity || 0);
+        }
+      });
+
+      const reconData = (rawMaterialsRes.data || []).map((material: any) => {
+        const sageRow = sageByMaterial[material.id];
+        const sageQuantity = sageRow ? Number(sageRow.quantity || 0) : 0;
+        const mesQuantity = mesByMaterial[material.id] || 0;
+        const variance = mesQuantity - sageQuantity;
+        const variancePercentage = sageQuantity === 0 ? (mesQuantity === 0 ? 0 : 100) : (variance / sageQuantity) * 100;
+        return {
+          id: material.id,
+          material_name: material.name,
+          sage_code: material.sage_code || material.code || '',
+          sage_quantity: sageQuantity,
+          mes_quantity: mesQuantity,
+          variance,
+          variance_percentage: variancePercentage,
+          last_synced: sageRow?.last_synced_at || null,
+          status: sageRow ? getStatus(variancePercentage) : 'NO_SAGE_DATA' as const,
+          created_at: material.created_at,
+          updated_at: material.updated_at,
+        };
+      });
 
       setMaterials(reconData);
 
@@ -100,8 +121,8 @@ export default function ReconciliationPage() {
   };
 
   const getStatus = (variancePercentage: number): 'OK' | 'LOW_VARIANCE' | 'HIGH_VARIANCE' => {
-    if (Math.abs(variancePercentage) <= 5) return 'OK';
-    if (Math.abs(variancePercentage) <= 15) return 'LOW_VARIANCE';
+    if (Math.abs(variancePercentage) <= 0.5) return 'OK';
+    if (Math.abs(variancePercentage) <= 1) return 'LOW_VARIANCE';
     return 'HIGH_VARIANCE';
   };
 
@@ -121,7 +142,7 @@ export default function ReconciliationPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Reconciliation</h1>
-          <p className="text-sm text-slate-600 mt-1">Compare Sage and MES inventory data</p>
+          <p className="text-sm text-slate-600 mt-1">Read-only variance check: Sage RM versus MES RM plus Production Buffer</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <RefreshCw className="w-3 h-3" />
@@ -158,7 +179,7 @@ export default function ReconciliationPage() {
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-blue-900">Reconciliation Schedule</h3>
             <p className="text-sm text-blue-700 mt-1">
-              Reconciliation runs automatically every night at 11pm
+              Variance status is calculated from the latest read-only Sage snapshot and MES warehouse balances.
             </p>
             {lastReconciliation && (
               <p className="text-xs text-blue-600 mt-2">
@@ -245,7 +266,7 @@ export default function ReconciliationPage() {
                         <div className="text-sm text-slate-700">
                           {material.last_synced 
                             ? new Date(material.last_synced).toLocaleDateString()
-                            : 'Never'
+                            : 'No Sage snapshot'
                           }
                         </div>
                       </td>
