@@ -8,7 +8,6 @@ import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import ReadOnlyAiReview from '../components/operations/ReadOnlyAiReview';
 
 interface MaterialTransfer {
   id: string;
@@ -448,7 +447,6 @@ export default function MaterialTransferPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <ReadOnlyAiReview area="transfers" />
       <StockTakeFrozenBanner />
 
       <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg">
