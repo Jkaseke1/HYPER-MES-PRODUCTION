@@ -313,7 +313,7 @@ export default function WeighBridgePage() {
   return (
     <div className="min-h-[calc(100vh-4rem)] overflow-x-hidden bg-slate-50/60 p-3 md:p-5">
       <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col space-y-4">
-        <ReadOnlyAiReview />
+        <ReadOnlyAiReview area="weighbridge" />
 
         {/* STATIC FIXED TOP SECTION (Pinned at top, does NOT scroll) */}
         <div className="shrink-0 space-y-3.5">

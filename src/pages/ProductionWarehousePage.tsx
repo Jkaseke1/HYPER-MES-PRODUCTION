@@ -378,7 +378,7 @@ export default function ProductionWarehousePage() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
-      <ReadOnlyAiReview />
+      <ReadOnlyAiReview area="production" />
       <section className="flex flex-wrap items-center justify-between gap-4 bg-[#101936] px-5 py-5 text-white shadow-sm">
         <div>
           <div className="flex items-center gap-2">
