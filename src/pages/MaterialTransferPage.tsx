@@ -294,6 +294,12 @@ export default function MaterialTransferPage() {
         return;
       }
 
+      if (!/^HFIST\d+$/i.test(sharedForm.purpose.trim())) {
+        setTransferError(['Enter the IST number in the format HFIST followed by digits, for example HFIST11589.']);
+        setSaving(false);
+        return;
+      }
+
       const seenMaterials = new Set<string>();
       const duplicateLine = validLines.find((line) => {
         if (seenMaterials.has(line.raw_material_id)) return true;
@@ -410,7 +416,7 @@ export default function MaterialTransferPage() {
   };
   const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
   const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
-  const canReverseTransfer = profile?.role === 'admin';
+  const canReverseTransfer = ['admin', 'finance'].includes(profile?.role || '');
 
   async function reverseTransfer(transfer: MaterialTransfer) {
     if (!canReverseTransfer) return;
@@ -551,7 +557,7 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
-                {['Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Purpose', 'Status', 'Sage', 'Actions'].map((header) => (
+                {['Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'IST', 'Status', 'Sage', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Lines', 'Total quantity'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
@@ -717,7 +723,7 @@ export default function MaterialTransferPage() {
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-teal-600" />
-                    <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Transfer Details & Purpose</p>
+                    <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Transfer Details & IST</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -733,15 +739,23 @@ export default function MaterialTransferPage() {
                   </div>
 
                   <div>
-                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Purpose / Reason *</label>
-                    <input
-                      type="text"
-                      value={sharedForm.purpose}
-                      onChange={(e) => setSharedForm({ ...sharedForm, purpose: e.target.value })}
-                      className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-teal-500 outline-none bg-white"
-                      placeholder="e.g., For Batch BATCH-2026-000003"
-                      required
-                    />
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">IST reference *</label>
+                    <div className="flex overflow-hidden rounded-xl border border-slate-300 bg-white focus-within:ring-2 focus-within:ring-teal-500">
+                      <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3.5 text-xs font-bold text-slate-600">HFIST</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={sharedForm.purpose.replace(/^HFIST/i, '')}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '');
+                          setSharedForm({ ...sharedForm, purpose: digits ? `HFIST${digits}` : '' });
+                        }}
+                        className="min-w-0 flex-1 px-3.5 py-2 text-xs font-medium outline-none"
+                        placeholder="11589"
+                        aria-label="IST number"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1023,7 +1037,7 @@ export default function MaterialTransferPage() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block font-medium">Purpose:</span>
+                          <span className="text-slate-400 block font-medium">IST reference:</span>
                           <span className="font-bold text-slate-900">{viewTransfer.purpose || '-'}</span>
                         </div>
                       </div>

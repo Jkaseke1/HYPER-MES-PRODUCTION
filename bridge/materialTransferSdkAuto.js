@@ -63,6 +63,8 @@ function postJson(urlString, apiKey, body) {
 }
 
 function buildReference(transfer) {
+  const istReference = (transfer.purpose || '').trim().match(/^HFIST\d+$/i)?.[0];
+  if (istReference) return istReference.toUpperCase();
   const transferNumber = (transfer.transfer_number || '').trim();
   if (transferNumber) return transferNumber;
   return `MT-${String(transfer.id).slice(0, 17)}`;
