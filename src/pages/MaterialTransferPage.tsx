@@ -417,6 +417,48 @@ export default function MaterialTransferPage() {
   const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
   const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
   const canReverseTransfer = ['admin', 'finance'].includes(profile?.role || '');
+  const canAddIstLine = ['admin', 'finance'].includes(profile?.role || '');
+
+  async function addMaterialLineToIst(transfer: MaterialTransfer) {
+    if (!canAddIstLine || transfer.status !== 'in_buffer') return;
+    const materialCode = window.prompt('Enter the PlantControl or Sage material code to add:');
+    if (materialCode === null) return;
+    const material = rawMaterials.find((item) =>
+      item.code.toLowerCase() === materialCode.trim().toLowerCase() ||
+      (item.sage_code || '').toLowerCase() === materialCode.trim().toLowerCase()
+    );
+    if (!material) {
+      setTransferError(['Material code not found. Enter the PlantControl or Sage code exactly as shown in the material list.']);
+      return;
+    }
+    const quantityText = window.prompt(`Enter quantity in ${material.unit || 'kg'} for ${material.name}:`);
+    if (quantityText === null) return;
+    const quantity = Number(quantityText);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setTransferError(['Enter a quantity greater than zero.']);
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('Your session has expired. Sign in again.');
+      const { error } = await supabase.rpc('add_material_transfer_line_to_ist', {
+        p_existing_transfer_id: transfer.id,
+        p_raw_material_id: material.id,
+        p_quantity: quantity,
+        p_requested_by: user.id,
+      });
+      if (error) throw error;
+      setViewTransfer(null);
+      setSuccessMessage(`${material.name} was added to ${transfer.purpose || 'the IST'} as a new audited transfer line.`);
+      window.setTimeout(() => setSuccessMessage(''), 5000);
+      await fetchData();
+    } catch (error: any) {
+      setTransferError([`Could not add material line: ${error.message}`]);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function reverseTransfer(transfer: MaterialTransfer) {
     if (!canReverseTransfer) return;
@@ -967,6 +1009,18 @@ export default function MaterialTransferPage() {
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   Reverse transfer
+                </button>
+              )}
+              {viewTransfer && canAddIstLine && viewTransfer.status === 'in_buffer' && (
+                <button
+                  type="button"
+                  onClick={() => addMaterialLineToIst(viewTransfer)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-800 hover:bg-teal-100 disabled:opacity-50"
+                  title="Add a new audited material line to this IST"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add line to IST
                 </button>
               )}
               <button
