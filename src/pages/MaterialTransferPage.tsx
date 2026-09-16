@@ -175,6 +175,15 @@ export default function MaterialTransferPage() {
   };
 
   const updateTransferLine = (id: string, field: string, value: any) => {
+    if (field === 'raw_material_id' && value) {
+      const alreadySelected = transferLines.some((line) => line.id !== id && line.raw_material_id === value);
+      if (alreadySelected) {
+        const material = rawMaterials.find((item) => item.id === value);
+        setTransferError([`${material?.name || 'This raw material'} is already on another line. Combine the quantities on the existing line.`]);
+        return;
+      }
+      setTransferError(null);
+    }
     setTransferLines(transferLines.map(line =>
       line.id === id ? { ...line, [field]: value } : line
     ));
@@ -830,8 +839,9 @@ export default function MaterialTransferPage() {
                             <option value="">Select raw material</option>
                             {rawMaterials.map((mat) => {
                               const bal = rmWarehouseBalances[mat.id] ?? 0;
+                              const usedOnAnotherLine = transferLines.some((otherLine) => otherLine.id !== line.id && otherLine.raw_material_id === mat.id);
                               return (
-                                <option key={mat.id} value={mat.id}>
+                                <option key={mat.id} value={mat.id} disabled={usedOnAnotherLine}>
                                   {mat.name} ({mat.code}) — transferable from Sage RM: {Math.max(0, bal - (bufferWarehouseBalances[mat.id] || 0)).toLocaleString()} {mat.unit}
                                 </option>
                               );

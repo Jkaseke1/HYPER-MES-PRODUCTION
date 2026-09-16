@@ -59,6 +59,9 @@ interface IncomingBundle {
 
 type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 
+const formatWarehouseQuantity = (value: number) =>
+  value.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+
 export default function ProductionWarehousePage() {
   const { profile } = useAuth();
   const isProductionReceiver = profile?.role === 'production_receiver';
@@ -522,14 +525,14 @@ export default function ProductionWarehousePage() {
 
       <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
-        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{totalSagePdQty.toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{formatWarehouseQuantity(totalSagePdQty)} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
       </section>
 
       <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
         <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Sage Production 19 last synced {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
-        {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {Number(m.sage_pd_quantity || 0).toLocaleString()} / {m.production_reorder_level.toLocaleString()} {m.unit}</span>)}</div>}
+        {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {formatWarehouseQuantity(Number(m.sage_pd_quantity || 0))} / {formatWarehouseQuantity(m.production_reorder_level)} {m.unit}</span>)}</div>}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
@@ -539,7 +542,7 @@ export default function ProductionWarehousePage() {
             {topFloorMaterials.length ? topFloorMaterials.map((material) => {
               const quantity = Number(material.sage_pd_quantity || 0);
               const width = Math.max(3, Math.round((quantity / largestFloorBalance) * 100));
-              return <div key={material.raw_material_id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 py-3"><div className="min-w-0"><div className="flex items-baseline justify-between gap-3"><p className="truncate text-sm font-semibold text-slate-800">{material.name}</p><span className="font-mono text-xs text-slate-500">{material.code}</span></div><div className="mt-2 h-1.5 overflow-hidden bg-slate-100"><div className="h-full bg-teal-600" style={{ width: `${width}%` }} /></div></div><p className="self-center text-right font-mono text-sm font-bold text-emerald-700">{quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="text-xs font-medium text-slate-500">{material.unit}</span></p></div>;
+              return <div key={material.raw_material_id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 py-3"><div className="min-w-0"><div className="flex items-baseline justify-between gap-3"><p className="truncate text-sm font-semibold text-slate-800">{material.name}</p><span className="font-mono text-xs text-slate-500">{material.code}</span></div><div className="mt-2 h-1.5 overflow-hidden bg-slate-100"><div className="h-full bg-teal-600" style={{ width: `${width}%` }} /></div></div><p className="self-center text-right font-mono text-sm font-bold text-emerald-700">{formatWarehouseQuantity(quantity)} <span className="text-xs font-medium text-slate-500">{material.unit}</span></p></div>;
             }) : <p className="py-8 text-sm text-slate-500">Awaiting Production Warehouse 19 stock data.</p>}
           </div>
         </div>
@@ -597,11 +600,11 @@ export default function ProductionWarehousePage() {
                   </div>
                   <div className="flex items-center gap-6 text-sm mr-4">
                     <div className="text-right">
-                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${m.sage_pd_quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.unit}`}</p>
+                      <p className="font-semibold text-emerald-700">{m.sage_pd_quantity === null ? 'Not synced' : `${formatWarehouseQuantity(m.sage_pd_quantity)} ${m.unit}`}</p>
                       <p className="text-xs text-slate-400">Sage PD {m.sage_pd_synced_at ? format(new Date(m.sage_pd_synced_at), 'dd MMM HH:mm:ss') : ''}</p>
                     </div>
                     <div className="text-right hidden md:block">
-                      <p className="font-semibold text-slate-800">{Math.max(0, m.mes_ledger_quantity).toLocaleString(undefined, { maximumFractionDigits: 1 })} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
+                      <p className="font-semibold text-slate-800">{formatWarehouseQuantity(Math.max(0, m.mes_ledger_quantity))} <span className="text-xs font-normal text-slate-400">{m.unit}</span></p>
                       <p className="text-xs text-slate-400">MES floor ledger</p>
                     </div>
                     {!isProductionReceiver && <div className="hidden lg:block" onClick={(event) => event.stopPropagation()}>
