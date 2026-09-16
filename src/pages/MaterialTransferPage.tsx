@@ -599,7 +599,7 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
-                {['Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'IST', 'Status', 'Sage', 'Actions'].map((header) => (
+                {['IST', 'Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Status', 'Sage', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Lines', 'Total quantity'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
@@ -631,6 +631,7 @@ export default function MaterialTransferPage() {
                         className="cursor-pointer bg-white hover:bg-slate-50"
                         onClick={() => toggleTransferGroup(group.key)}
                       >
+                        <td className="px-3 py-3 text-sm font-bold text-slate-700">{firstTransfer.purpose || '-'}</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5 text-sm text-slate-600">
                             {expanded ? <ChevronDown className="h-4 w-4 text-teal-600" /> : <ChevronRight className="h-4 w-4 text-slate-400" />}
@@ -645,7 +646,6 @@ export default function MaterialTransferPage() {
                         <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{group.transfers.length}</td>
                         <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity.toLocaleString()} kg</td>
                         <td className="px-3 py-3 text-xs font-medium text-slate-700">{requester}</td>
-                        <td className="px-3 py-3 text-sm text-slate-600">{firstTransfer.purpose || '-'}</td>
                         <td className="px-3 py-3">
                           {statuses.length === 1 ? <StatusBadge status={statuses[0] || 'pending'} /> : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
                         </td>
