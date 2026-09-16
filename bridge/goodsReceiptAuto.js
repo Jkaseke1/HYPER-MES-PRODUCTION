@@ -122,6 +122,21 @@ async function handleGoodsReceipt(syncEvent) {
     throw new Error(`GRN ${grn.grn_number || grn.id} is not approved; current status is ${grn.status}`);
   }
 
+  let plantControlUser = 'PlantControl';
+  if (grn.approved_by) {
+    const { data: approver, error: approverError } = await supabase
+      .from('profiles')
+      .select('full_name,email')
+      .eq('id', grn.approved_by)
+      .maybeSingle();
+
+    if (approverError) {
+      throw new Error(`Approver profile query failed: ${approverError.message}`);
+    }
+
+    plantControlUser = (approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
+  }
+
   const manualGrvNumber = (grn.manual_grv_number || '').trim();
   if (!manualGrvNumber) {
     throw new Error(`GRN ${grn.grn_number} has no manual HFGRV reference`);
@@ -185,7 +200,7 @@ async function handleGoodsReceipt(syncEvent) {
     vatTaxTypeId: grn.vat_tax_type_id ?? null,
     vatCode: grn.vat_code || '',
     vatRate: grn.vat_rate ?? null,
-    userName: 'PlantControl',
+    userName: plantControlUser.substring(0, 50),
     lines,
     confirmPost: true,
   };
