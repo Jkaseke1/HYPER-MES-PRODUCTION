@@ -483,36 +483,29 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
             ) : (
               <>
                 <RefreshCw className="w-4 h-4 text-slate-400" />
-                <span className="hidden sm:inline font-mono">{APP_VERSION}</span>
+                <span className="hidden sm:inline">{APP_VERSION}</span>
               </>
             )}
           </button>
 
           {/* System Update Details Popover Card */}
           {updateMenuOpen && (
-            <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:top-auto sm:right-0 mt-2 sm:w-80 bg-white rounded-lg border border-slate-200 shadow-lg z-50 p-4 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                    <RefreshCw className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-slate-800">Software updates</h4>
-                    <p className="text-[10px] text-slate-400 font-mono">Installed Build: {APP_VERSION}</p>
-                  </div>
-                </div>
+            <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:top-auto sm:right-0 mt-2 sm:w-64 overflow-hidden bg-white rounded-md border border-slate-200 shadow-lg z-50">
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <h4 className="text-xs font-semibold text-slate-800">Software</h4>
+                <span className="text-xs tabular-nums text-slate-500">{APP_VERSION}</span>
               </div>
 
               {pendingUpdates.length > 0 ? (
                 <div className="space-y-3">
-                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                  <div className="border-t border-slate-100 px-4 py-3 space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-amber-800 font-extrabold text-xs">
-                        <Sparkles className="w-4 h-4 text-amber-600" />
+                      <div className="flex items-center gap-2 text-slate-700 font-medium text-xs">
+                        <RefreshCw className="w-4 h-4 shrink-0 text-amber-600" />
                         <span>
                           {pendingUpdates.length === 1
-                            ? `New Update Ready (${pendingUpdates[0].version})`
-                            : `${pendingUpdates.length} New System Updates Pending`}
+                            ? 'Update available'
+                            : `${pendingUpdates.length} updates available`}
                         </span>
                       </div>
                     </div>
@@ -521,7 +514,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                       {pendingUpdates.map((up) => (
                         <div key={up.id || up.version} className="pt-2 first:pt-0">
                           <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
-                            <span className="font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded text-[10px]">
+                            <span className="text-xs font-medium text-slate-700">
                               {up.version}
                             </span>
                             <span className="text-[10px] text-slate-400">
@@ -529,7 +522,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                             </span>
                           </div>
                           <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-                            {up.message || 'New system feature enhancement and performance update.'}
+                            {up.message || 'Software update available.'}
                           </p>
                         </div>
                       ))}
@@ -540,24 +533,21 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                       className="w-full mt-2 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-md text-xs transition-colors flex items-center justify-center gap-2"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      {pendingUpdates.length === 1 ? 'Apply Update & Refresh Now' : `Apply All ${pendingUpdates.length} Updates & Refresh`}
+                      {pendingUpdates.length === 1 ? 'Update and reload' : 'Apply all and reload'}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-emerald-700 font-extrabold text-xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>System Up to Date</span>
+                <div>
+                  <div className="flex items-center gap-2 px-4 pb-4 text-xs font-normal text-slate-600">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                    <span>No updates pending</span>
                   </div>
-                  <p className="text-[11px] text-slate-600 leading-snug">
-                    No pending updates. Installed version: {APP_VERSION}.
-                  </p>
                   <button
                     onClick={handleApplyAllUpdates}
-                    className="w-full py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full border-t border-slate-100 px-4 py-3 hover:bg-slate-50 text-slate-700 font-medium text-xs transition-colors flex items-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 focus-visible:-outline-offset-2"
                   >
-                    <RefreshCw className="w-3 h-3 text-slate-500" /> Check for Updates / Refresh
+                    <RefreshCw className="w-4 h-4 text-slate-500" /> Reload application
                   </button>
                 </div>
               )}
