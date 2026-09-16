@@ -462,49 +462,45 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         <div className="relative" ref={updateRef}>
           <button
             onClick={() => setUpdateMenuOpen((prev) => !prev)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-full transition-all border shadow-xs ${
+            aria-expanded={updateMenuOpen}
+            aria-label="Software updates"
+            title={`Installed version ${APP_VERSION}. ${pendingUpdates.length ? 'Update available' : 'View software updates'}`}
+            className={`flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 ${
               pendingUpdates.length > 0
-                ? 'bg-gradient-to-r from-amber-500 via-teal-600 to-emerald-600 text-white border-amber-300 animate-pulse hover:scale-105'
-                : 'bg-teal-50/80 text-teal-800 border-teal-200 hover:bg-teal-100'
+                ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             {pendingUpdates.length > 0 ? (
               <>
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden sm:inline">
                   {pendingUpdates.length === 1
-                    ? `Update Available (${pendingUpdates[0].version})`
-                    : `${pendingUpdates.length} Updates Available`}
-                </span>
-                <span className="ml-1 px-1.5 py-0.5 bg-white text-teal-900 rounded text-[10px] font-black uppercase shadow-xs">
-                  {pendingUpdates.length === 1 ? 'Apply' : 'Apply All'}
+                    ? 'Update ready'
+                    : `${pendingUpdates.length} updates`}
                 </span>
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>MES {APP_VERSION}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <RefreshCw className="w-4 h-4 text-slate-400" />
+                <span className="hidden sm:inline font-mono">{APP_VERSION}</span>
               </>
             )}
           </button>
 
           {/* System Update Details Popover Card */}
           {updateMenuOpen && (
-            <div className="absolute right-0 mt-2 w-84 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 p-4 animate-in fade-in zoom-in-95 space-y-3">
+            <div className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:top-auto sm:right-0 mt-2 sm:w-80 bg-white rounded-lg border border-slate-200 shadow-lg z-50 p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
-                    <Sparkles className="w-4 h-4" />
+                    <RefreshCw className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">PlantControl Version Control</h4>
+                    <h4 className="text-sm font-semibold text-slate-800">Software updates</h4>
                     <p className="text-[10px] text-slate-400 font-mono">Installed Build: {APP_VERSION}</p>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Online
-                </span>
               </div>
 
               {pendingUpdates.length > 0 ? (
@@ -541,9 +537,9 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
                     <button
                       onClick={handleApplyAllUpdates}
-                      className="w-full mt-2 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-black rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 hover:scale-[1.01]"
+                      className="w-full mt-2 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-md text-xs transition-colors flex items-center justify-center gap-2"
                     >
-                      <RefreshCw className="w-4 h-4 animate-spin-slow" />
+                      <RefreshCw className="w-4 h-4" />
                       {pendingUpdates.length === 1 ? 'Apply Update & Refresh Now' : `Apply All ${pendingUpdates.length} Updates & Refresh`}
                     </button>
                   </div>
@@ -555,7 +551,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
                     <span>System Up to Date</span>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-snug">
-                    You are running the latest production build of PlantControl ({APP_VERSION}). System operating at optimal performance.
+                    No pending updates. Installed version: {APP_VERSION}.
                   </p>
                   <button
                     onClick={handleApplyAllUpdates}
