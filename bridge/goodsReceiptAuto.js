@@ -91,6 +91,7 @@ async function handleGoodsReceipt(syncEvent) {
       supplier_invoice_no,
       supplier_delivery_note_no,
       supplier_order_no,
+      manual_grv_number,
       external_reference,
       wb_transaction_no,
       approved_by,
@@ -121,19 +122,9 @@ async function handleGoodsReceipt(syncEvent) {
     throw new Error(`GRN ${grn.grn_number || grn.id} is not approved; current status is ${grn.status}`);
   }
 
-  let plantControlUser = 'PlantControl';
-  if (grn.approved_by) {
-    const { data: approver, error: approverError } = await supabase
-      .from('profiles')
-      .select('full_name,email')
-      .eq('id', grn.approved_by)
-      .maybeSingle();
-
-    if (approverError) {
-      throw new Error(`Approver profile query failed: ${approverError.message}`);
-    }
-
-    plantControlUser = (approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
+  const manualGrvNumber = (grn.manual_grv_number || '').trim();
+  if (!manualGrvNumber) {
+    throw new Error(`GRN ${grn.grn_number} has no manual HFGRV reference`);
   }
 
   const supplierCode = (grn.suppliers?.sage_code || grn.suppliers?.code || '').trim();
@@ -185,14 +176,16 @@ async function handleGoodsReceipt(syncEvent) {
     supplierInvoiceNo: grn.supplier_invoice_no || '',
     supplierDeliveryNoteNo: grn.supplier_delivery_note_no || '',
     supplierOrderNo: grn.supplier_order_no || '',
-    externalReference: grn.external_reference || grn.wb_transaction_no || '',
+    // Keep the MES GRN as the idempotency reference. Sage receives the
+    // supplier/manual HFGRV in its external reference and audit trail.
+    externalReference: manualGrvNumber || grn.external_reference || grn.wb_transaction_no || '',
     warehouse: warehouseCode,
     receivedDate: grn.received_date,
     vatMode: grn.vat_mode || '',
     vatTaxTypeId: grn.vat_tax_type_id ?? null,
     vatCode: grn.vat_code || '',
     vatRate: grn.vat_rate ?? null,
-    userName: plantControlUser.substring(0, 50),
+    userName: 'PlantControl',
     lines,
     confirmPost: true,
   };
