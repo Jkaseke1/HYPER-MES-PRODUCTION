@@ -169,7 +169,7 @@ namespace SDK_Test
             lock (SdkSession.OperationLock)
             {
                 SdkSession.EnsureConnected();
-                new InventoryItem(request.ItemCode.Trim().ToUpperInvariant());
+                CreateInventoryItemReference(request.ItemCode);
                 new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant());
                 new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant());
             }
@@ -212,13 +212,23 @@ namespace SDK_Test
 
             return new WarehouseTransfer
             {
-                Account = new InventoryItem(request.ItemCode.Trim().ToUpperInvariant()),
+                // Use the lightweight reference form. The string constructor eagerly
+                // hydrates the legacy stock-group object; an orphaned group reference
+                // can then block an otherwise valid warehouse transfer.
+                Account = CreateInventoryItemReference(request.ItemCode),
                 FromWarehouse = new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant()),
                 ToWarehouse = new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant()),
                 Quantity = (double)request.Quantity,
                 Reference = reference,
                 Reference2 = request.Reference2 ?? ""
             };
+        }
+
+        private static InventoryItem CreateInventoryItemReference(string itemCode)
+        {
+            var item = new InventoryItem();
+            item.Code = itemCode.Trim().ToUpperInvariant();
+            return item;
         }
 
         private static object TransferSummary(WarehouseTransferRequest request)
