@@ -20,7 +20,8 @@ BEGIN
     RAISE EXCEPTION 'Only Finance or Admin can complete the Sage supplier code';
   END IF;
 
-  IF v_code IS NULL OR v_code !~ '^[A-Z0-9][A-Z0-9._/-]{1,49}$' THEN
+  -- Sage supplier account codes may contain spaces, for example "JB DZIVA".
+  IF v_code IS NULL OR v_code !~ '^[A-Z0-9][A-Z0-9 ._/-]{1,49}$' OR v_code !~ '[A-Z0-9]$' THEN
     RAISE EXCEPTION 'Enter a valid Sage supplier code';
   END IF;
 
