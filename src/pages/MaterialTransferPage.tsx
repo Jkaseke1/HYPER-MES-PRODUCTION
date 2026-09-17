@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -114,6 +114,7 @@ export default function MaterialTransferPage() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [transferError, setTransferError] = useState<string[] | null>(null);
+  const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -418,6 +419,7 @@ export default function MaterialTransferPage() {
   const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
   const canReverseTransfer = ['admin', 'finance'].includes(profile?.role || '');
   const canAddIstLine = ['admin', 'finance'].includes(profile?.role || '');
+  const canRetrySage = ['admin', 'finance', 'accountant', 'production_manager', 'warehouse_manager', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
 
   async function addMaterialLineToIst(transfer: MaterialTransfer) {
     if (!canAddIstLine || transfer.status !== 'in_buffer') return;
@@ -482,6 +484,22 @@ export default function MaterialTransferPage() {
       alert(`Could not reverse transfer: ${error.message}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function retryFailedSageLine(log?: SageTransferSyncLog) {
+    if (!log || log.status !== 'failed') return;
+    setRetryingSageId(log.id);
+    try {
+      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: log.id });
+      if (error) throw error;
+      setSuccessMessage('Only this failed Sage line was queued. Lines already posted were left untouched.');
+      window.setTimeout(() => setSuccessMessage(''), 5000);
+      await fetchData(true);
+    } catch (error: any) {
+      setTransferError([`Could not queue Sage retry: ${error.message}`]);
+    } finally {
+      setRetryingSageId(null);
     }
   }
   const activeSagePosts = transfers.filter((transfer) => {
@@ -691,7 +709,7 @@ export default function MaterialTransferPage() {
                                         <td className="px-3 py-2 text-right font-mono text-slate-600">{(rmWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
                                         <td className="px-3 py-2 text-right font-mono text-emerald-700">{(bufferWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
                                         <td className="px-3 py-2"><StatusBadge status={transfer.status || 'pending'} /></td>
-                                        <td className="px-3 py-2"><SageSyncBadge log={sageSyncLogs[transfer.id]} /></td>
+                                        <td className="px-3 py-2"><div className="flex items-center gap-2"><SageSyncBadge log={sageSyncLogs[transfer.id]} />{canRetrySage && sageSyncLogs[transfer.id]?.status === 'failed' && <button type="button" onClick={(event) => { event.stopPropagation(); retryFailedSageLine(sageSyncLogs[transfer.id]); }} disabled={retryingSageId === sageSyncLogs[transfer.id]?.id} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" title="Retry only this failed Sage line"><RotateCcw className={`h-3 w-3 ${retryingSageId === sageSyncLogs[transfer.id]?.id ? 'animate-spin' : ''}`} />Retry line</button>}</div></td>
                                         <td className="px-3 py-2 text-right">
                                           <button onClick={() => setViewTransfer(transfer)} className="rounded-lg p-1.5 transition-colors hover:bg-slate-100" title="View transfer audit" aria-label="View transfer audit">
                                             <Eye className="h-4 w-4 text-slate-500" />
