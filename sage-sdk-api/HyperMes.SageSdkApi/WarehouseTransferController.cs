@@ -80,8 +80,12 @@ namespace SDK_Test
             }
 
             var reference = request.Reference.Trim();
+            // One HFIST can contain multiple material lines. Keep the shared
+            // Sage reference, but scope the in-flight duplicate guard to the
+            // actual item movement so different lines in the same IST can post.
+            var postingKey = PostingKey(request, reference);
 
-            if (!PostedReferences.TryAdd(reference, true))
+            if (!PostedReferences.TryAdd(postingKey, true))
                 return StatusCode(System.Net.HttpStatusCode.Conflict);
 
             try
@@ -106,7 +110,7 @@ namespace SDK_Test
             catch (Exception ex)
             {
                 bool removed;
-                PostedReferences.TryRemove(reference, out removed);
+                PostedReferences.TryRemove(postingKey, out removed);
 
                 return Content(HttpStatusCode.InternalServerError, new
                 {
@@ -148,6 +152,16 @@ namespace SDK_Test
                 return "Reference is required.";
 
             return null;
+        }
+
+        private static string PostingKey(WarehouseTransferRequest request, string reference)
+        {
+            return string.Join("|",
+                reference.ToUpperInvariant(),
+                request.ItemCode.Trim().ToUpperInvariant(),
+                request.FromWarehouse.Trim().ToUpperInvariant(),
+                request.ToWarehouse.Trim().ToUpperInvariant(),
+                request.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         private static void ValidateAgainstSage(WarehouseTransferRequest request)
