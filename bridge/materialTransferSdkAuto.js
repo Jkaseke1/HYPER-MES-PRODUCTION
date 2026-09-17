@@ -90,6 +90,9 @@ async function handleMaterialTransferToProduction(event) {
       purpose,
       notes,
       status,
+      transfer_batch_key,
+      reversed_by,
+      reversed_at,
       production_approved_by,
       approved_by,
       production_order_id,
@@ -109,6 +112,23 @@ async function handleMaterialTransferToProduction(event) {
 
   if (transfer.status !== 'received') {
     throw new Error(`Material transfer ${transfer.transfer_number || transfer.id} is not received; current status is ${transfer.status}`);
+  }
+  if (transfer.reversed_by || transfer.reversed_at || transfer.status === 'rejected') {
+    throw new Error(`Material transfer ${transfer.transfer_number || transfer.id} was reversed and cannot be posted to Sage`);
+  }
+
+  if (transfer.transfer_batch_key) {
+    const { data: duplicateLines, error: duplicateError } = await supabase
+      .from('material_transfers')
+      .select('id, transfer_number, status')
+      .eq('transfer_batch_key', transfer.transfer_batch_key)
+      .eq('raw_material_id', transfer.raw_material_id)
+      .neq('id', transfer.id)
+      .in('status', ['in_buffer', 'approved', 'in_transit', 'received']);
+    if (duplicateError) throw new Error(`Could not validate duplicate material lines: ${duplicateError.message}`);
+    if (duplicateLines?.length) {
+      throw new Error(`Duplicate material line in IST ${transfer.purpose || transfer.transfer_batch_key}; Sage posting blocked`);
+    }
   }
 
   const sageCode = transfer.raw_materials?.sage_code || transfer.raw_materials?.code;
