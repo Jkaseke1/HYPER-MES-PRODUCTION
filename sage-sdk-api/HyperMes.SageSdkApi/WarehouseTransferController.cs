@@ -226,8 +226,11 @@ namespace SDK_Test
 
         private static InventoryItem CreateInventoryItemReference(string itemCode)
         {
-            var item = new InventoryItem();
-            item.Code = itemCode.Trim().ToUpperInvariant();
+            var normalizedCode = itemCode.Trim().ToUpperInvariant();
+            var item = InventoryItem.GetByCode(normalizedCode);
+            if (item == null)
+                throw new InvalidOperationException("Sage inventory item was not found: " + normalizedCode);
+
             return item;
         }
 
