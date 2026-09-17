@@ -50,6 +50,7 @@ interface PendingTransfer {
 
 interface SageRetryTransfer extends PendingTransfer {
   sync_log_id: string;
+  sync_status: 'failed' | 'pending' | 'processing' | 'retry';
   sync_message?: string | null;
   sync_updated_at: string;
 }
@@ -144,7 +145,7 @@ export default function ProductionWarehousePage() {
       .select('id, reference_id, message, updated_at')
       .eq('event_type', 'material_transfer_to_production')
       .eq('reference_type', 'material_transfer')
-      .eq('status', 'failed')
+      .in('status', ['failed', 'pending', 'processing', 'retry'])
       .order('updated_at', { ascending: false });
     if (failedSyncError) console.error('Failed to load Sage retry queue:', failedSyncError);
     const failedIds = [...new Set((failedSyncRows || []).map((row: any) => row.reference_id).filter(Boolean))];
@@ -160,7 +161,7 @@ export default function ProductionWarehousePage() {
       const byId = new Map((failedTransfersData || []).map((transfer: any) => [transfer.id, transfer]));
       setFailedSageTransfers((failedSyncRows || []).flatMap((row: any) => {
         const transfer = byId.get(row.reference_id);
-        return transfer ? [{ ...transfer, sync_log_id: row.id, sync_message: row.message, sync_updated_at: row.updated_at }] : [];
+        return transfer ? [{ ...transfer, sync_log_id: row.id, sync_status: row.status, sync_message: row.message, sync_updated_at: row.updated_at }] : [];
       }));
     } else {
       setFailedSageTransfers([]);
@@ -547,15 +548,15 @@ export default function ProductionWarehousePage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-rose-200 bg-rose-100 text-rose-700"><AlertTriangle className="h-5 w-5" /></div>
-              <div><h2 className="text-base font-bold text-slate-900">Sage posting exceptions</h2><p className="mt-0.5 text-sm text-slate-600">Received in PlantControl, but these individual lines still need Sage posting.</p></div>
+              <div><h2 className="text-base font-bold text-slate-900">Sage posting status</h2><p className="mt-0.5 text-sm text-slate-600">Each received line is tracked until Sage confirms it is posted.</p></div>
             </div>
-            <span className="border border-rose-200 bg-white px-2 py-1 text-xs font-bold text-rose-700">{failedSageTransfers.length} failed line{failedSageTransfers.length === 1 ? '' : 's'}</span>
+            <span className="border border-rose-200 bg-white px-2 py-1 text-xs font-bold text-rose-700">{failedSageTransfers.length} Sage line{failedSageTransfers.length === 1 ? '' : 's'} in queue</span>
           </div>
           <div className="divide-y divide-slate-100">
             {failedSageTransfers.map((transfer) => (
               <div key={transfer.sync_log_id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-3">
-                <div className="min-w-0"><p className="font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{transfer.raw_materials?.code}</span></p><p className="mt-1 text-xs text-slate-500"><span className="font-bold text-slate-700">{transfer.purpose || 'IST'}</span> · {transfer.transfer_number} · {Number(transfer.quantity).toLocaleString()} {transfer.unit} · {transfer.sync_message || 'Sage posting failed'}</p></div>
-                {canRetrySage && <button type="button" onClick={() => retryFailedSageLine(transfer)} disabled={retryingSageId === transfer.sync_log_id} className="inline-flex items-center gap-2 border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60"><RotateCcw className={`h-4 w-4 ${retryingSageId === transfer.sync_log_id ? 'animate-spin' : ''}`} />{retryingSageId === transfer.sync_log_id ? 'Queueing...' : 'Retry Sage line'}</button>}
+                <div className="min-w-0"><p className="font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{transfer.raw_materials?.code}</span></p><p className="mt-1 text-xs text-slate-500"><span className="font-bold text-slate-700">{transfer.purpose || 'IST'}</span> · {transfer.transfer_number} · {Number(transfer.quantity).toLocaleString()} {transfer.unit}</p><p className={`mt-1 text-xs font-semibold ${transfer.sync_status === 'failed' ? 'text-rose-700' : 'text-blue-700'}`}>{transfer.sync_status === 'failed' ? (transfer.sync_message || 'Sage posting failed') : transfer.sync_status === 'processing' ? 'Posting to Sage now...' : 'Retry queued; waiting for the Sage bridge...'}</p></div>
+                {canRetrySage && transfer.sync_status === 'failed' && <button type="button" onClick={() => retryFailedSageLine(transfer)} disabled={retryingSageId === transfer.sync_log_id} className="inline-flex items-center gap-2 border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60"><RotateCcw className={`h-4 w-4 ${retryingSageId === transfer.sync_log_id ? 'animate-spin' : ''}`} />{retryingSageId === transfer.sync_log_id ? 'Queueing...' : 'Retry Sage line'}</button>}
               </div>
             ))}
           </div>
