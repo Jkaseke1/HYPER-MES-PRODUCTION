@@ -85,9 +85,14 @@ export default function GoodsReceivedPage() {
   const [missingGrvReference, setMissingGrvReference] = useState('');
   const [savingReference, setSavingReference] = useState(false);
   const [referenceFeedback, setReferenceFeedback] = useState('');
+  const [missingSupplierCode, setMissingSupplierCode] = useState('');
+  const [savingSupplierCode, setSavingSupplierCode] = useState(false);
+  const [supplierCodeFeedback, setSupplierCodeFeedback] = useState('');
   useEffect(() => {
     setMissingGrvReference('');
     setReferenceFeedback('');
+    setMissingSupplierCode('');
+    setSupplierCodeFeedback('');
   }, [viewing?.id]);
 
   async function saveMissingGrvReference() {
@@ -108,6 +113,26 @@ export default function GoodsReceivedPage() {
       setReferenceFeedback(error.message || 'Could not save the manual GRV reference.');
     } finally {
       setSavingReference(false);
+    }
+  }
+
+  async function saveMissingSupplierCode() {
+    if (!viewing || savingSupplierCode) return;
+    const grnId = viewing.id;
+    setSavingSupplierCode(true);
+    setSupplierCodeFeedback('');
+    try {
+      const { data, error } = await supabase.rpc('complete_missing_supplier_sage_code', {
+        p_grn_id: grnId,
+        p_supplier_code: missingSupplierCode.trim(),
+      });
+      if (error) throw error;
+      setSupplierCodeFeedback(`Sage supplier code ${data} saved. You can now retry Sage GRV.`);
+      await fetchData();
+    } catch (error: any) {
+      setSupplierCodeFeedback(error.message || 'Could not save the Sage supplier code.');
+    } finally {
+      setSavingSupplierCode(false);
     }
   }
   const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
@@ -1868,6 +1893,27 @@ export default function GoodsReceivedPage() {
                   )}
                   {referenceFeedback && <p role="status" className="mt-2 text-xs text-slate-700">{referenceFeedback}</p>}
                 </div>
+
+                {viewing?.status === 'approved' &&
+                  selectedSync?.status === 'failed' &&
+                  (selectedSync.message || '').toLowerCase().includes('no sage supplier code') &&
+                  ['admin', 'finance'].includes(profile?.role || '') && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-2.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-700">Finance correction</p>
+                    <p className="mt-1 text-xs text-slate-700">The supplier is missing its Sage account code. Enter the code from Sage, then retry posting.</p>
+                    <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); void saveMissingSupplierCode(); }}>
+                      <Label htmlFor="missing-sage-supplier-code">Sage supplier code</Label>
+                      <Input id="missing-sage-supplier-code" value={missingSupplierCode}
+                        onChange={event => setMissingSupplierCode(event.target.value.toUpperCase())}
+                        placeholder="e.g. SUP0001" required maxLength={50} disabled={savingSupplierCode} />
+                      <Button type="submit" disabled={savingSupplierCode} size="sm" className="bg-rose-700 text-white hover:bg-rose-800">
+                        {savingSupplierCode ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                        {savingSupplierCode ? 'Saving...' : 'Save supplier code'}
+                      </Button>
+                    </form>
+                    {supplierCodeFeedback && <p role="status" className="mt-2 text-xs text-slate-700">{supplierCodeFeedback}</p>}
+                  </div>
+                )}
 
                 {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
                   <div className="bg-blue-50/70 rounded-lg border border-blue-200 p-2.5">
