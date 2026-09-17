@@ -82,6 +82,34 @@ export default function GoodsReceivedPage() {
   const [editNotes, setEditNotes] = useState('');
   const [editItems, setEditItems] = useState<any[]>([]);
   const [savingGrnEdit, setSavingGrnEdit] = useState(false);
+  const [missingGrvReference, setMissingGrvReference] = useState('');
+  const [savingReference, setSavingReference] = useState(false);
+  const [referenceFeedback, setReferenceFeedback] = useState('');
+  useEffect(() => {
+    setMissingGrvReference('');
+    setReferenceFeedback('');
+  }, [viewing?.id]);
+
+  async function saveMissingGrvReference() {
+    if (!viewing || savingReference) return;
+    const grnId = viewing.id;
+    setSavingReference(true);
+    setReferenceFeedback('');
+    try {
+      const { data, error } = await supabase.rpc('complete_missing_manual_grv', {
+        p_grn_id: grnId,
+        p_manual_grv: missingGrvReference.trim(),
+      });
+      if (error) throw error;
+      setViewing(current => current?.id === grnId ? { ...current, manual_grv_number: data } : current);
+      setReferenceFeedback('Reference saved. You can now retry Sage GRV.');
+      await fetchData();
+    } catch (error: any) {
+      setReferenceFeedback(error.message || 'Could not save the manual GRV reference.');
+    } finally {
+      setSavingReference(false);
+    }
+  }
   const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
   const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
   const notifiedSyncRef = useRef<Record<string, string>>({});
@@ -1822,6 +1850,23 @@ export default function GoodsReceivedPage() {
                 <div className="border-l-3 border-l-orange-500 bg-white rounded-lg border border-slate-200 p-2.5">
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Manual GRV Number</p>
                   <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{(viewing as any)?.manual_grv_number || '-'}</p>
+                  {viewing?.status === 'approved' && !viewing.manual_grv_number?.trim() &&
+                    selectedSync?.status === 'failed' &&
+                    selectedSync.message?.includes('has no manual HFGRV reference') &&
+                    ['admin', 'finance'].includes(profile?.role || '') && (
+                    <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); void saveMissingGrvReference(); }}>
+                      <Label htmlFor="missing-manual-grv">Manual GRV reference</Label>
+                      <Input id="missing-manual-grv" value={missingGrvReference}
+                        onChange={event => setMissingGrvReference(event.target.value.toUpperCase())}
+                        placeholder="HFGRV10346" required pattern="HFGRV[0-9]+" maxLength={50}
+                        disabled={savingReference} />
+                      <Button type="submit" disabled={savingReference} size="sm">
+                        {savingReference ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                        {savingReference ? 'Saving...' : 'Save manual GRV'}
+                      </Button>
+                    </form>
+                  )}
+                  {referenceFeedback && <p role="status" className="mt-2 text-xs text-slate-700">{referenceFeedback}</p>}
                 </div>
 
                 {(viewing as any)?.supplier_invoice_no || (viewing as any)?.supplier_delivery_note_no || (viewing as any)?.supplier_order_no || (viewing as any)?.external_reference ? (
