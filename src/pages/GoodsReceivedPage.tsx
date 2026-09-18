@@ -88,6 +88,10 @@ export default function GoodsReceivedPage() {
   const [missingSupplierCode, setMissingSupplierCode] = useState('');
   const [savingSupplierCode, setSavingSupplierCode] = useState(false);
   const [supplierCodeFeedback, setSupplierCodeFeedback] = useState('');
+  const [adminSupplierCorrectionOpen, setAdminSupplierCorrectionOpen] = useState(false);
+  const [adminSupplierId, setAdminSupplierId] = useState('');
+  const [adminSupplierReason, setAdminSupplierReason] = useState('');
+  const [savingAdminSupplierCorrection, setSavingAdminSupplierCorrection] = useState(false);
   useEffect(() => {
     setMissingGrvReference('');
     setReferenceFeedback('');
@@ -135,6 +139,34 @@ export default function GoodsReceivedPage() {
       setSavingSupplierCode(false);
     }
   }
+
+  const openAdminSupplierCorrection = () => {
+    if (!viewing || profile?.role !== 'admin') return;
+    setAdminSupplierId(viewing.supplier_id || '');
+    setAdminSupplierReason('');
+    setAdminSupplierCorrectionOpen(true);
+  };
+
+  const saveAdminSupplierCorrection = async () => {
+    if (!viewing || !adminSupplierId || !adminSupplierReason.trim() || savingAdminSupplierCorrection) return;
+    setSavingAdminSupplierCorrection(true);
+    try {
+      const { error } = await supabase.rpc('correct_failed_grn_supplier', {
+        p_grn_id: viewing.id,
+        p_supplier_id: adminSupplierId,
+        p_reason: adminSupplierReason.trim(),
+      });
+      if (error) throw error;
+      setAdminSupplierCorrectionOpen(false);
+      setViewModalOpen(false);
+      toast.success(`${viewing.grn_number} supplier corrected. Review the GRN, then retry Sage.`);
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error.message || 'Could not correct the GRN supplier.');
+    } finally {
+      setSavingAdminSupplierCorrection(false);
+    }
+  };
   const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
   const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
   const notifiedSyncRef = useRef<Record<string, string>>({});
@@ -1746,6 +1778,11 @@ export default function GoodsReceivedPage() {
                     {viewing.status}
                   </Badge>
                 )}
+                {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && (
+                  <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
+                  </Button>
+                )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
                   <Button type="button" size="sm" onClick={openGrnCorrection} className="bg-orange-500 text-white hover:bg-orange-600">
                     Edit GRV
@@ -2086,6 +2123,41 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adminSupplierCorrectionOpen} onOpenChange={setAdminSupplierCorrectionOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Admin edit supplier</DialogTitle>
+            <DialogDescription>
+              Correct the supplier on this failed GRN before retrying Sage. This action is recorded for audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct supplier *</Label>
+              <Select value={adminSupplierId} onValueChange={setAdminSupplierId}>
+                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>{supplierLabel(supplier)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Reason *</Label>
+              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Explain why the supplier is being corrected" rows={3} />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Cancel</Button>
+              <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminSupplierId || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
+                {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
+                Save supplier correction
+              </Button>
             </div>
           </div>
         </DialogContent>
