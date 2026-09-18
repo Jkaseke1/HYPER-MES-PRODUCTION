@@ -158,9 +158,8 @@ export default function GoodsReceivedPage() {
       });
       if (error) throw error;
       setAdminSupplierCorrectionOpen(false);
-      setViewModalOpen(false);
-      toast.success(`${viewing.grn_number} supplier corrected. Review the GRN, then retry Sage.`);
       await fetchData();
+      toast.success(`${viewing.grn_number} supplier corrected. Review this GRN, then retry Sage.`);
     } catch (error: any) {
       toast.error(error.message || 'Could not correct the GRN supplier.');
     } finally {
@@ -2129,18 +2128,37 @@ export default function GoodsReceivedPage() {
       </Dialog>
 
       <Dialog open={adminSupplierCorrectionOpen} onOpenChange={setAdminSupplierCorrectionOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Admin edit supplier</DialogTitle>
-            <DialogDescription>
-              Correct the supplier on this failed GRN before retrying Sage. This action is recorded for audit.
-            </DialogDescription>
+        <DialogContent className="max-w-2xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-5">
+            <div className="flex items-start justify-between gap-4 pr-8">
+              <div>
+                <DialogTitle className="text-xl text-slate-900">Correct supplier on this GRN</DialogTitle>
+                <DialogDescription className="mt-1">
+                  Select the correct Sage supplier, record the reason, then return to the same GRN to retry posting.
+                </DialogDescription>
+              </div>
+              <Badge variant="destructive" className="shrink-0">Sage failed</Badge>
+            </div>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-5 px-6 py-5">
+            <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">GRN</p>
+                <p className="mt-1 font-mono text-sm font-bold text-slate-900">{viewing?.grn_number || 'Unknown'}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Current supplier</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{viewing ? grnSupplierLabel(viewing) : 'Not mapped'}</p>
+              </div>
+              <div className="sm:col-span-2">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Sage message</p>
+                <p className="mt-1 text-sm text-rose-700">{syncByGrnId[viewing?.id || '']?.message || 'Sage could not post this GRN.'}</p>
+              </div>
+            </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct supplier *</Label>
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct Sage supplier *</Label>
               <Select value={adminSupplierId} onValueChange={setAdminSupplierId}>
-                <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                <SelectTrigger className="h-11"><SelectValue placeholder="Choose the supplier from Sage" /></SelectTrigger>
                 <SelectContent>
                   {suppliers.map((supplier) => (
                     <SelectItem key={supplier.id} value={supplier.id}>{supplierLabel(supplier)}</SelectItem>
@@ -2149,14 +2167,14 @@ export default function GoodsReceivedPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Reason *</Label>
-              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Explain why the supplier is being corrected" rows={3} />
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Audit reason *</Label>
+              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Example: selected the supplier shown on the original invoice" rows={3} />
             </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Cancel</Button>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Back to GRN</Button>
               <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminSupplierId || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
                 {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
-                Save supplier correction
+                Save and return to GRN
               </Button>
             </div>
           </div>
