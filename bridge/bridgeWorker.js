@@ -4,6 +4,7 @@
 
 const { supabase, DRY_RUN } = require('./lib/db');
 const { handleGoodsReceipt }  = require('./goodsReceiptAuto');
+const { handleSupplierReturn } = require('./supplierReturnAuto');
 const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
@@ -330,6 +331,14 @@ async function processPendingEvents() {
           .eq('status', 'processing');
       }
 
+      if (event.event_type === 'supplier_return') {
+        await supabase
+          .from('sync_log')
+          .update({ message: 'Posting RTS to Sage', updated_at: new Date().toISOString() })
+          .eq('id', event.id)
+          .eq('status', 'processing');
+      }
+
       if (event.event_type === 'stock_take_sage_snapshot') {
         await supabase
           .from('sync_log')
@@ -341,6 +350,9 @@ async function processPendingEvents() {
       switch (event.event_type) {
         case 'grn_confirmed':
           handlerResult = await handleGoodsReceipt(event);
+          break;
+        case 'supplier_return':
+          handlerResult = await handleSupplierReturn(event);
           break;
         case 'materials_issued':
           handlerResult = await handleGoodsIssue(event);

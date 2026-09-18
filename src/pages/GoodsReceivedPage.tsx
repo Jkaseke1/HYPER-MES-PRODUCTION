@@ -92,6 +92,11 @@ export default function GoodsReceivedPage() {
   const [adminSupplierId, setAdminSupplierId] = useState('');
   const [adminSupplierReason, setAdminSupplierReason] = useState('');
   const [savingAdminSupplierCorrection, setSavingAdminSupplierCorrection] = useState(false);
+  const [supplierReturnOpen, setSupplierReturnOpen] = useState(false);
+  const [supplierReturnReason, setSupplierReturnReason] = useState('');
+  const [supplierReturnItems, setSupplierReturnItems] = useState<any[]>([]);
+  const [savingSupplierReturn, setSavingSupplierReturn] = useState(false);
+  const canManageSupplierReturns = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   useEffect(() => {
     setMissingGrvReference('');
     setReferenceFeedback('');
@@ -164,6 +169,38 @@ export default function GoodsReceivedPage() {
       toast.error(error.message || 'Could not correct the GRN supplier.');
     } finally {
       setSavingAdminSupplierCorrection(false);
+    }
+  };
+
+  const openSupplierReturn = () => {
+    if (!viewing || !canManageSupplierReturns || syncByGrnId[viewing.id]?.status !== 'success') return;
+    setSupplierReturnReason('');
+    setSupplierReturnItems(viewItems.map((item) => ({ ...item, return_qty: Number(item.received_qty || 0) })));
+    setSupplierReturnOpen(true);
+  };
+
+  const createSupplierReturn = async () => {
+    if (!viewing || !supplierReturnReason.trim() || savingSupplierReturn) return;
+    const items = supplierReturnItems
+      .filter((item) => Number(item.return_qty) > 0)
+      .map((item) => ({ raw_material_id: item.raw_material_id, quantity: Number(item.return_qty), unit_cost: Number(item.unit_cost || 0) }));
+    if (!items.length) { toast.error('Select at least one quantity to return.'); return; }
+    setSavingSupplierReturn(true);
+    try {
+      const { data: returnId, error } = await supabase.rpc('create_supplier_return', {
+        p_original_grn_id: viewing.id,
+        p_reason: supplierReturnReason.trim(),
+        p_items: items,
+      });
+      if (error) throw error;
+      const { error: approvalError } = await supabase.rpc('approve_supplier_return', { p_return_id: returnId });
+      if (approvalError) throw approvalError;
+      setSupplierReturnOpen(false);
+      toast.success(`${viewing.grn_number} RTS approved and queued for Sage`);
+    } catch (error: any) {
+      toast.error(error.message || 'Could not create the supplier return.');
+    } finally {
+      setSavingSupplierReturn(false);
     }
   };
   const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
@@ -1782,6 +1819,11 @@ export default function GoodsReceivedPage() {
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
                   </Button>
                 )}
+                {viewing && canManageSupplierReturns && viewing.status === 'approved' && selectedSync?.status === 'success' && (
+                  <Button type="button" size="sm" onClick={openSupplierReturn} className="bg-rose-700 text-white hover:bg-rose-800">
+                    Return to Supplier
+                  </Button>
+                )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
                   <Button type="button" size="sm" onClick={openGrnCorrection} className="bg-orange-500 text-white hover:bg-orange-600">
                     Edit GRV
@@ -2122,6 +2164,40 @@ export default function GoodsReceivedPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={supplierReturnOpen} onOpenChange={setSupplierReturnOpen}>
+        <DialogContent className="max-w-2xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-rose-200 bg-rose-50 px-6 py-5">
+            <DialogTitle className="text-xl text-slate-900">Return to Supplier</DialogTitle>
+            <DialogDescription className="mt-1">Create a Sage RTS linked to {viewing?.grn_number}. The original GRN will not be edited.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 px-6 py-5">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Use this for a posted GRN correction, such as incorrect tax treatment. Finance approval and a Sage RTS posting are required.
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Reason *</Label>
+              <Textarea value={supplierReturnReason} onChange={(event) => setSupplierReturnReason(event.target.value)} placeholder="Example: incorrect tax treatment on the original GRN" rows={3} />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Return quantities</Label>
+              {supplierReturnItems.map((item, index) => (
+                <div key={item.id || index} className="grid grid-cols-[1fr_150px] items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                  <div><p className="text-sm font-semibold text-slate-900">{item.raw_materials?.code} - {item.raw_materials?.name}</p><p className="text-xs text-slate-500">Original received: {Number(item.received_qty || 0).toLocaleString()} kg</p></div>
+                  <Input type="number" min="0" max={Number(item.received_qty || 0)} step="0.01" value={item.return_qty} onChange={(event) => setSupplierReturnItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, return_qty: event.target.value } : line))} />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+              <Button type="button" variant="outline" onClick={() => setSupplierReturnOpen(false)} disabled={savingSupplierReturn}>Cancel</Button>
+              <Button type="button" onClick={createSupplierReturn} disabled={savingSupplierReturn || !supplierReturnReason.trim()} className="bg-rose-700 text-white hover:bg-rose-800">
+                {savingSupplierReturn ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
+                {savingSupplierReturn ? 'Queuing RTS...' : 'Approve and queue RTS'}
+              </Button>
             </div>
           </div>
         </DialogContent>

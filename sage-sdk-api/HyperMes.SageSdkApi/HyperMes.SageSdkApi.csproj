@@ -89,6 +89,8 @@
     <Compile Include="SageRuntime.cs" />
     <Compile Include="SdkSession.cs" />
     <Compile Include="StockController.cs" />
+    <Compile Include="SupplierReturnController.cs" />
+    <Compile Include="SupplierReturnRequest.cs" />
     <Compile Include="Startup.cs" />
     <Compile Include="WarehouseTransferController.cs" />
     <Compile Include="WarehouseTransferRequest.cs" />
