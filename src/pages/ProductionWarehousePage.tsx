@@ -55,6 +55,13 @@ interface SageRetryTransfer extends PendingTransfer {
   sync_updated_at: string;
 }
 
+interface SageTransferStatus extends PendingTransfer {
+  sync_log_id: string;
+  sync_status: 'success' | 'failed' | 'pending' | 'processing' | 'retry';
+  sync_message?: string | null;
+  sync_updated_at: string;
+}
+
 interface IncomingBundle {
   key: string;
   transfers: PendingTransfer[];
@@ -88,6 +95,7 @@ export default function ProductionWarehousePage() {
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [failedSageTransfers, setFailedSageTransfers] = useState<SageRetryTransfer[]>([]);
+  const [recentSageTransfers, setRecentSageTransfers] = useState<SageTransferStatus[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [receivingBundleKey, setReceivingBundleKey] = useState<string | null>(null);
   const [expandedIncomingBundle, setExpandedIncomingBundle] = useState<string | null>(null);
@@ -140,30 +148,33 @@ export default function ProductionWarehousePage() {
     setTransfers((smData as any) || []);
     setPendingAcceptanceTransfers((pendingData as any) || []);
 
-    const { data: failedSyncRows, error: failedSyncError } = await supabase
+    const { data: sageSyncRows, error: failedSyncError } = await supabase
       .from('sync_log')
-      .select('id, reference_id, message, updated_at')
+      .select('id, reference_id, status, message, updated_at')
       .eq('event_type', 'material_transfer_to_production')
       .eq('reference_type', 'material_transfer')
-      .in('status', ['failed', 'pending', 'processing', 'retry'])
+      .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
+      .gte('updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
       .order('updated_at', { ascending: false });
     if (failedSyncError) console.error('Failed to load Sage retry queue:', failedSyncError);
-    const failedIds = [...new Set((failedSyncRows || []).map((row: any) => row.reference_id).filter(Boolean))];
-    if (failedIds.length > 0) {
-      const { data: failedTransfersData, error: failedTransfersError } = await supabase
+    const sageIds = [...new Set((sageSyncRows || []).map((row: any) => row.reference_id).filter(Boolean))];
+    if (sageIds.length > 0) {
+      const { data: sageTransfersData, error: failedTransfersError } = await supabase
         .from('material_transfers')
         .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, reversed_by, reversed_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
-        .in('id', failedIds)
-        .eq('status', 'received')
+        .in('id', sageIds)
         .is('reversed_by', null)
         .is('reversed_at', null);
       if (failedTransfersError) console.error('Failed to load received Sage failures:', failedTransfersError);
-      const byId = new Map((failedTransfersData || []).map((transfer: any) => [transfer.id, transfer]));
-      setFailedSageTransfers((failedSyncRows || []).flatMap((row: any) => {
+      const byId = new Map((sageTransfersData || []).map((transfer: any) => [transfer.id, transfer]));
+      const statuses = (sageSyncRows || []).flatMap((row: any) => {
         const transfer = byId.get(row.reference_id);
         return transfer ? [{ ...transfer, sync_log_id: row.id, sync_status: row.status, sync_message: row.message, sync_updated_at: row.updated_at }] : [];
-      }));
+      });
+      setRecentSageTransfers(statuses as SageTransferStatus[]);
+      setFailedSageTransfers(statuses.filter((row: SageTransferStatus) => row.sync_status === 'failed') as SageRetryTransfer[]);
     } else {
+      setRecentSageTransfers([]);
       setFailedSageTransfers([]);
     }
     setMaterialSettings((settingsData as ProductionMaterialSetting[]) || []);
@@ -429,6 +440,21 @@ export default function ProductionWarehousePage() {
     }
   }
 
+  const sageStageIndex = (status: SageTransferStatus['sync_status']) => {
+    if (status === 'success') return 3;
+    if (status === 'processing') return 2;
+    if (status === 'pending' || status === 'retry') return 1;
+    return 0;
+  };
+
+  const sageStageLabel = (status: SageTransferStatus['sync_status']) => {
+    if (status === 'success') return 'Posted to Sage';
+    if (status === 'processing') return 'Posting to Sage';
+    if (status === 'retry') return 'Retry queued';
+    if (status === 'pending') return 'Queued for Sage';
+    return 'Sage posting failed';
+  };
+
   return (
     <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
       <section className="flex flex-wrap items-center justify-between gap-4 bg-[#101936] px-5 py-5 text-white shadow-sm">
@@ -536,6 +562,47 @@ export default function ProductionWarehousePage() {
                       ))}
                     </div>
                   )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {recentSageTransfers.length > 0 && (
+        <section className="border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Sage posting status</h2>
+              <p className="mt-0.5 text-sm text-slate-600">Each approved material is tracked until Sage confirms the posting.</p>
+            </div>
+            <span className="border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">Last 24 hours</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {recentSageTransfers.slice(0, 20).map((transfer) => {
+              const stage = sageStageIndex(transfer.sync_status);
+              const failed = transfer.sync_status === 'failed';
+              return (
+                <div key={transfer.sync_log_id} className="px-5 py-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{transfer.raw_materials?.code}</span></p>
+                      <p className="mt-1 text-xs text-slate-500"><span className="font-bold text-slate-700">{transfer.purpose || 'IST'}</span> · {transfer.transfer_number} · {Number(transfer.quantity).toLocaleString()} {transfer.unit}</p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${failed ? 'text-rose-700' : transfer.sync_status === 'success' ? 'text-emerald-700' : 'text-blue-700'}`}>
+                      {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : transfer.sync_status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {sageStageLabel(transfer.sync_status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-1.5" aria-label={`Sage status: ${sageStageLabel(transfer.sync_status)}`}>
+                    {['Approved', 'Queued', 'Posting', 'Posted to Sage'].map((label, index) => (
+                      <div key={label} className="min-w-0">
+                        <div className={`h-1.5 ${index <= stage ? failed ? 'bg-rose-400' : 'bg-emerald-500' : 'bg-slate-200'}`} />
+                        <p className={`mt-1 truncate text-[10px] font-semibold ${index <= stage ? failed ? 'text-rose-700' : 'text-slate-700' : 'text-slate-400'}`}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {failed && transfer.sync_message && <p className="mt-2 text-xs font-medium text-rose-700">{transfer.sync_message}</p>}
                 </div>
               );
             })}
