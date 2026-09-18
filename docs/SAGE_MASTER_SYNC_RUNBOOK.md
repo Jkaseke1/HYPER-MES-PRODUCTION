@@ -11,6 +11,7 @@ The bridge can pull Sage inventory items into PlantControl without changing Sage
 - PlantControl stock balances, reorder levels, costs, and transaction history are preserved.
 - Items are never deleted automatically.
 - The feature is disabled unless `SAGE_MASTER_SYNC_ENABLED=true`.
+- The sync scope is also required. With no codes or prefixes configured, it imports nothing.
 
 ## One-time test
 
@@ -18,6 +19,7 @@ From the bridge folder, after confirming the Sage and Supabase credentials:
 
 ```powershell
 $env:SAGE_MASTER_SYNC_ENABLED = 'true'
+$env:SAGE_MASTER_SYNC_CODES = 'PAS00010'
 node syncMasterData.js
 ```
 
@@ -30,7 +32,11 @@ Set these values in the bridge server `.env`:
 ```text
 SAGE_MASTER_SYNC_ENABLED=true
 SAGE_MASTER_SYNC_INTERVAL_MS=86400000
+SAGE_MASTER_SYNC_CODES=PAS00010,COS0001
+SAGE_MASTER_SYNC_PREFIXES=
 ```
+
+Use `SAGE_MASTER_SYNC_CODES` for specific items. Use `SAGE_MASTER_SYNC_PREFIXES` for a controlled family, for example `RM-`. Do not set both unless both groups are intended.
 
 Restart the bridge service. The bridge performs one catalogue refresh at startup and then refreshes once per day. The interval cannot be configured below one hour.
 

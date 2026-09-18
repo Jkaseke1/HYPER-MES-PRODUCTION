@@ -24,6 +24,9 @@ const STOCK_SYNC_INTERVAL_MS = Number.isFinite(configuredStockSyncInterval)
   ? Math.max(configuredStockSyncInterval, 10 * 1000)
   : 60 * 1000;
 const MASTER_SYNC_ENABLED = process.env.SAGE_MASTER_SYNC_ENABLED === 'true';
+const MASTER_SYNC_CODES = (process.env.SAGE_MASTER_SYNC_CODES || '').split(',').map((value) => value.trim()).filter(Boolean);
+const MASTER_SYNC_PREFIXES = (process.env.SAGE_MASTER_SYNC_PREFIXES || '').split(',').map((value) => value.trim()).filter(Boolean);
+const MASTER_SYNC_SCOPE_CONFIGURED = MASTER_SYNC_CODES.length > 0 || MASTER_SYNC_PREFIXES.length > 0;
 const configuredMasterSyncInterval = Number(process.env.SAGE_MASTER_SYNC_INTERVAL_MS);
 const MASTER_SYNC_INTERVAL_MS = Number.isFinite(configuredMasterSyncInterval)
   ? Math.max(configuredMasterSyncInterval, 60 * 60 * 1000)
@@ -492,7 +495,7 @@ async function startWorker() {
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
   console.log(` Sage stock sync: ${STOCK_SYNC_ENABLED ? 'ENABLED' : 'DISABLED'}`);
-  console.log(` Sage master sync: ${MASTER_SYNC_ENABLED ? `ENABLED (${MASTER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h)` : 'DISABLED'}`);
+  console.log(` Sage master sync: ${MASTER_SYNC_ENABLED ? `ENABLED (${MASTER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h; scope=${MASTER_SYNC_SCOPE_CONFIGURED ? 'configured' : 'missing, safe no-op'})` : 'DISABLED'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');

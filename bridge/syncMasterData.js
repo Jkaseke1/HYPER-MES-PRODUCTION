@@ -1,5 +1,17 @@
 const { sql, sageConfig, supabase } = require('./lib/db');
 
+const parseList = (value) => String(value || '')
+  .split(',')
+  .map((item) => item.trim().toUpperCase())
+  .filter(Boolean);
+const SYNC_CODES = parseList(process.env.SAGE_MASTER_SYNC_CODES);
+const SYNC_PREFIXES = parseList(process.env.SAGE_MASTER_SYNC_PREFIXES);
+
+function isInSyncScope(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  return SYNC_CODES.includes(normalized) || SYNC_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 async function syncRawMaterials() {
   console.log('📦 Syncing Sage inventory items into PlantControl...');
   const pool = await sql.connect(sageConfig);
@@ -13,7 +25,12 @@ async function syncRawMaterials() {
     ORDER BY StockLink
   `);
 
-  const items = result.recordset.map((row) => ({
+  if (SYNC_CODES.length === 0 && SYNC_PREFIXES.length === 0) {
+    console.warn('  Sage master sync skipped: configure SAGE_MASTER_SYNC_CODES or SAGE_MASTER_SYNC_PREFIXES; no items will be imported.');
+    return { synced: 0, sourceCount: result.recordset.length, skipped: true };
+  }
+
+  const items = result.recordset.filter((row) => isInSyncScope(row.code)).map((row) => ({
     code: String(row.code || '').trim(),
     sage_code: String(row.code || '').trim(),
     name: String(row.name || row.code || '').trim(),
@@ -37,8 +54,8 @@ async function syncRawMaterials() {
     console.log(`  Synced ${synced}/${items.length} inventory items`);
   }
 
-  console.log(`  ✓ Sage inventory items read: ${items.length}. Existing PlantControl items were updated; missing items were added. No items were deleted.`);
-  return { synced, sourceCount: result.recordset.length };
+  console.log(`  ✓ Sage inventory items in scope: ${items.length}/${result.recordset.length}. Existing PlantControl items were updated; missing items were added. No items were deleted.`);
+  return { synced, sourceCount: result.recordset.length, skipped: false };
 }
 
 async function syncSuppliers() {
