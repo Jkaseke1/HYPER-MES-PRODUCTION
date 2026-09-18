@@ -7,9 +7,11 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const sql = require('mssql');
 const { createClient } = require('@supabase/supabase-js');
 
+const sageServer = process.env.SAGE_SERVER || process.env.HYPER_SAGE_SERVER || 'localhost';
+const sagePortValue = process.env.SAGE_PORT || process.env.HYPER_SAGE_SQL_PORT;
+
 const sageConfig = {
-  server:   'localhost',
-  port:      50119,
+  server:   sageServer,
   database: process.env.SAGE_DATABASE,
   user:     process.env.SAGE_USER,
   password: process.env.SAGE_PASSWORD,
@@ -19,6 +21,12 @@ const sageConfig = {
     enableArithAbort:       true,
   }
 };
+
+// Named SQL instances resolve their own port. For a host-only configuration,
+// an explicit port can still be supplied through SAGE_PORT.
+if (sagePortValue && !sageServer.includes('\\')) {
+  sageConfig.port = Number(sagePortValue);
+}
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
