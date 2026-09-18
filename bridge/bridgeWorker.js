@@ -11,6 +11,7 @@ const { handleMaterialTransferToProduction } = require('./materialTransferSdkAut
 const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto');
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
+const { syncRawMaterials } = require('./syncMasterData');
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const MINIMUM_POLL_INTERVAL_MS = 2000;
@@ -22,6 +23,11 @@ const configuredStockSyncInterval = Number(process.env.SAGE_STOCK_SYNC_INTERVAL_
 const STOCK_SYNC_INTERVAL_MS = Number.isFinite(configuredStockSyncInterval)
   ? Math.max(configuredStockSyncInterval, 10 * 1000)
   : 60 * 1000;
+const MASTER_SYNC_ENABLED = process.env.SAGE_MASTER_SYNC_ENABLED === 'true';
+const configuredMasterSyncInterval = Number(process.env.SAGE_MASTER_SYNC_INTERVAL_MS);
+const MASTER_SYNC_INTERVAL_MS = Number.isFinite(configuredMasterSyncInterval)
+  ? Math.max(configuredMasterSyncInterval, 60 * 60 * 1000)
+  : 24 * 60 * 60 * 1000;
 const ALLOWED_EVENT_TYPES = new Set(
   (process.env.BRIDGE_ALLOWED_EVENT_TYPES || '')
     .split(',')
@@ -189,6 +195,16 @@ async function refreshFinishedGoodsStock(itemCodes, reason, warehouseCodes) {
     if (result.failures.length) console.warn(`  Sage finished-goods sync warnings: ${result.failures.slice(0, 3).join('; ')}`);
   } catch (error) {
     console.error(`  Sage finished-goods sync failed (${reason}): ${error.message}`);
+  }
+}
+
+async function refreshSageMasterData(reason) {
+  if (!MASTER_SYNC_ENABLED) return;
+  try {
+    const result = await syncRawMaterials();
+    console.log(`  Sage master sync (${reason}): ${result.synced} inventory item(s) imported or updated; no PlantControl items deleted`);
+  } catch (error) {
+    console.error(`  Sage master sync failed (${reason}): ${error.message}`);
   }
 }
 
@@ -476,6 +492,7 @@ async function startWorker() {
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
   console.log(` Sage stock sync: ${STOCK_SYNC_ENABLED ? 'ENABLED' : 'DISABLED'}`);
+  console.log(` Sage master sync: ${MASTER_SYNC_ENABLED ? `ENABLED (${MASTER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h)` : 'DISABLED'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');
@@ -494,11 +511,17 @@ async function startWorker() {
   if (STOCK_SYNC_ENABLED && !DRY_RUN) {
     void refreshSageStock(undefined, 'startup reconciliation batch');
   }
+  if (MASTER_SYNC_ENABLED && !DRY_RUN) {
+    void refreshSageMasterData('startup catalogue refresh');
+  }
 
   await processPendingEvents();
   setInterval(processPendingEvents, POLL_INTERVAL_MS);
   if (STOCK_SYNC_ENABLED && !DRY_RUN) {
     setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
+  }
+  if (MASTER_SYNC_ENABLED && !DRY_RUN) {
+    setInterval(() => { refreshSageMasterData('scheduled catalogue refresh'); }, MASTER_SYNC_INTERVAL_MS);
   }
 }
 

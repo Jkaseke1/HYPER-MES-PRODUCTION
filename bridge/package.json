@@ -14,6 +14,7 @@
     "test-dispatch": "node dispatchAuto.js",
     "test-material-transfer-sdk": "node materialTransferSdkAuto.js",
     "sync-suppliers": "node syncSuppliersFromSage.js",
+    "sync-master-data": "node syncMasterData.js",
     "test": "jest",
     "lint": "eslint .",
     "setup": "npm install && node setup.js"

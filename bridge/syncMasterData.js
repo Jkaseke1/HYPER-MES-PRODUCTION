@@ -1,50 +1,44 @@
 const { sql, sageConfig, supabase } = require('./lib/db');
 
 async function syncRawMaterials() {
-  console.log('📦 Syncing raw materials from Sage...');
-  
+  console.log('📦 Syncing Sage inventory items into PlantControl...');
   const pool = await sql.connect(sageConfig);
   const result = await pool.request().query(`
-    SELECT 
-      StockLink AS code,
-      Description_1 AS name,
-      Description_2 AS description
+    SELECT
+      LTRIM(RTRIM(StockLink)) AS code,
+      LTRIM(RTRIM(Description_1)) AS name,
+      LTRIM(RTRIM(Description_2)) AS description
     FROM StkItem
-    WHERE StockLink IS NOT NULL
+    WHERE StockLink IS NOT NULL AND LTRIM(RTRIM(StockLink)) <> ''
     ORDER BY StockLink
   `);
 
-  let inserted = 0;
-  let updated = 0;
+  const items = result.recordset.map((row) => ({
+    code: String(row.code || '').trim(),
+    sage_code: String(row.code || '').trim(),
+    name: String(row.name || row.code || '').trim(),
+    description: String(row.description || '').trim(),
+    unit: 'kg',
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  })).filter((item) => item.code && item.name);
 
-  for (const row of result.recordset) {
-    const { data, error } = await supabase
+  let synced = 0;
+  for (let index = 0; index < items.length; index += 500) {
+    const { error } = await supabase
       .from('raw_materials')
-      .upsert({
-        code: row.code,
-        name: row.name || row.code,
-        description: row.description || '',
-        unit: 'kg',
-        reorder_level: 0,
-        current_stock: 0
-      }, { 
+      .upsert(items.slice(index, index + 500), {
         onConflict: 'code',
-        ignoreDuplicates: false 
-      })
-      .select();
+        ignoreDuplicates: false,
+      });
 
-    if (error) {
-      console.error(`  ❌ Error syncing ${row.code}:`, error.message);
-    } else {
-      if (data && data.length > 0) {
-        inserted++;
-      } else {
-        updated++;
-      }
-    }
+    if (error) throw error;
+    synced += Math.min(500, items.length - index);
+    console.log(`  Synced ${synced}/${items.length} inventory items`);
   }
-  
-  console.log(`  ✓ Synced ${result.recordset.length} raw materials (${inserted} new, ${updated} updated)`);
+
+  console.log(`  ✓ Sage inventory items read: ${items.length}. Existing PlantControl items were updated; missing items were added. No items were deleted.`);
+  return { synced, sourceCount: result.recordset.length };
 }
 
 async function syncSuppliers() {
@@ -101,21 +95,20 @@ async function syncSuppliers() {
   console.log(`  ✓ Synced ${result.recordset.length} suppliers (${inserted} new, ${updated} updated)`);
 }
 
-async function main() {
+async function syncMasterData() {
   console.log('🚀 Starting master data sync from Sage to Supabase...\n');
-  
-  try {
-    await syncRawMaterials();
-    console.log('');
-    await syncSuppliers();
-    console.log('\n✅ Master data sync complete!');
-  } catch (error) {
-    console.error('\n❌ Sync failed:', error.message);
-    console.error(error);
-    process.exit(1);
-  }
-  
-  process.exit(0);
+  const rawMaterials = await syncRawMaterials();
+  return { rawMaterials };
 }
 
-main();
+module.exports = { syncRawMaterials, syncSuppliers, syncMasterData };
+
+if (require.main === module) {
+  syncMasterData()
+    .then(() => console.log('\n✅ Master data sync complete!'))
+    .catch((error) => {
+      console.error('\n❌ Sync failed:', error.message);
+      console.error(error);
+      process.exitCode = 1;
+    });
+}
