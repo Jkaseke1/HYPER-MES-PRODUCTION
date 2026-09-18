@@ -1780,7 +1780,7 @@ export default function GoodsReceivedPage() {
                 )}
                 {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && (
                   <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
                   </Button>
                 )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
