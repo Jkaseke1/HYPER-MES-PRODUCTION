@@ -41,6 +41,7 @@ interface PendingTransfer {
   quantity: number;
   unit: string;
   status: string;
+  transfer_batch_key?: string | null;
   created_at: string;
   purpose?: string;
   notes?: string;
@@ -65,6 +66,7 @@ interface SageTransferStatus extends PendingTransfer {
 interface IncomingBundle {
   key: string;
   transfers: PendingTransfer[];
+  pendingTransfers: PendingTransfer[];
   purpose: string;
   requester: string;
   createdAt: string;
@@ -94,10 +96,13 @@ export default function ProductionWarehousePage() {
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
+  const [incomingTransfers, setIncomingTransfers] = useState<PendingTransfer[]>([]);
   const [failedSageTransfers, setFailedSageTransfers] = useState<SageRetryTransfer[]>([]);
   const [recentSageTransfers, setRecentSageTransfers] = useState<SageTransferStatus[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [receivingBundleKey, setReceivingBundleKey] = useState<string | null>(null);
+  const [selectedIncomingBundleKey, setSelectedIncomingBundleKey] = useState<string | null>(null);
+  const [hasProcessedIncomingIst, setHasProcessedIncomingIst] = useState(false);
   const [expandedIncomingBundle, setExpandedIncomingBundle] = useState<string | null>(null);
   const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
@@ -116,7 +121,7 @@ export default function ProductionWarehousePage() {
       { data: smData, error: smError },
       { data: wbData, error: wbError },
       { data: sagePdData, error: sagePdError },
-      { data: pendingData, error: pendingError },
+      { data: incomingData, error: pendingError },
       { data: settingsData, error: settingsError }
     ] = await Promise.all([
       supabase
@@ -134,19 +139,22 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
-        .eq('status', 'in_buffer')
-        .order('created_at', { ascending: false }),
+        .select('id, transfer_number, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .in('status', ['in_buffer', 'received'])
+        .order('created_at', { ascending: false })
+        .limit(500),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
     if (wbError) console.error('Failed to load production balances:', wbError);
     if (sagePdError) console.error('Failed to load Sage Production balances:', sagePdError);
-    if (pendingError) console.error('Failed to load pending transfers:', pendingError);
+    if (pendingError) console.error('Failed to load incoming production transfers:', pendingError);
     if (settingsError) console.error('Failed to load production stock thresholds:', settingsError);
 
     setTransfers((smData as any) || []);
-    setPendingAcceptanceTransfers((pendingData as any) || []);
+    const nextIncomingTransfers = (incomingData as any) || [];
+    setIncomingTransfers(nextIncomingTransfers);
+    setPendingAcceptanceTransfers(nextIncomingTransfers.filter((transfer: PendingTransfer) => transfer.status === 'in_buffer'));
 
     const { data: sageSyncRows, error: failedSyncError } = await supabase
       .from('sync_log')
@@ -321,21 +329,22 @@ export default function ProductionWarehousePage() {
   const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
   const incomingBundles = useMemo<IncomingBundle[]>(() => {
     const groups = new Map<string, PendingTransfer[]>();
-    pendingAcceptanceTransfers.forEach((transfer) => {
+    incomingTransfers.forEach((transfer) => {
       const dateKey = format(new Date(transfer.created_at), 'yyyy-MM-dd');
       const requesterKey = transfer.requester?.full_name || 'Unknown requester';
-      const key = `${dateKey}|${transfer.purpose || 'Unspecified'}|${requesterKey}`;
+      const key = transfer.transfer_batch_key || `${dateKey}|${transfer.purpose || 'Unspecified'}|${requesterKey}`;
       groups.set(key, [...(groups.get(key) || []), transfer]);
     });
     return [...groups.entries()].map(([key, group]) => ({
       key,
       transfers: group,
+      pendingTransfers: group.filter((transfer) => transfer.status === 'in_buffer'),
       purpose: group[0].purpose || 'Unspecified transfer',
       requester: group[0].requester?.full_name || 'Unknown requester',
       createdAt: group[0].created_at,
       totalQuantity: group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0),
     }));
-  }, [pendingAcceptanceTransfers]);
+  }, [incomingTransfers]);
   const stockHealth = useMemo(() => {
     const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
     const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
@@ -425,14 +434,16 @@ export default function ProductionWarehousePage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('User not authenticated');
       const failures: string[] = [];
-      for (const transfer of bundle.transfers) {
+      for (const transfer of bundle.pendingTransfers) {
         const { error } = await supabase.rpc('approve_material_transfer_to_production', { p_transfer_id: transfer.id, p_approved_by: user.id });
         if (error) failures.push(`${transfer.raw_materials?.name || transfer.transfer_number}: ${error.message}`);
       }
       await fetchTransfers(true);
       setReceiptNotice(failures.length
-        ? { tone: 'error', message: `${bundle.transfers.length - failures.length} of ${bundle.transfers.length} lines received. ${failures.join(' | ')}` }
-        : { tone: 'success', message: `${bundle.transfers.length} materials received into Production Warehouse.` });
+        ? { tone: 'error', message: `${bundle.pendingTransfers.length - failures.length} of ${bundle.pendingTransfers.length} lines received. ${failures.join(' | ')}` }
+        : { tone: 'success', message: `${bundle.pendingTransfers.length} materials received into Production Warehouse.` });
+      setSelectedIncomingBundleKey(null);
+      setHasProcessedIncomingIst(true);
     } catch (err: any) {
       setReceiptNotice({ tone: 'error', message: err?.message || 'The transfer bundle could not be received.' });
     } finally {
@@ -486,8 +497,8 @@ export default function ProductionWarehousePage() {
       )}
 
       {/* Live RM inbox for Production receiving */}
-      {pendingAcceptanceTransfers.length > 0 && (
-        <section className="border border-teal-200 bg-white shadow-sm">
+      {incomingTransfers.length > 0 && (
+      <section className="border border-teal-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
@@ -498,7 +509,7 @@ export default function ProductionWarehousePage() {
                   <h2 className="text-base font-bold text-slate-900">Incoming from Raw Materials</h2>
                   <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
                 </div>
-                <p className="mt-0.5 text-sm text-slate-600">Awaiting confirmation into Production Warehouse 19.</p>
+                <p className="mt-0.5 text-sm text-slate-600">Select one IST, receive it, then select the next. Received ISTs remain visible for audit.</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -522,7 +533,7 @@ export default function ProductionWarehousePage() {
               const isOpen = expandedIncomingBundle === bundle.key;
               const isReceiving = receivingBundleKey === bundle.key;
               return (
-                <div key={bundle.key} className="py-3">
+                <div key={bundle.key} className={`py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="flex min-w-0 items-start gap-3 text-left">
                       <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700">
@@ -530,8 +541,9 @@ export default function ProductionWarehousePage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-slate-900">Raw Materials to Production</p>
+                          <p className="font-semibold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
                           <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
+                          <span className={`border px-2 py-0.5 text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                           <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
@@ -542,12 +554,18 @@ export default function ProductionWarehousePage() {
                     </button>
                     <div className="border-l border-teal-200 pl-4 text-right">
                       <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
-                      <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
+                      <p className="text-xs font-medium text-slate-500">{bundle.pendingTransfers.length ? 'awaiting receipt' : 'received'}</p>
                     </div>
-                    {canApproveMaterialTransfer && (
-                      <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
-                        {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing approval</> : <><CheckCircle2 className="h-4 w-4" /> Approve &amp; receive</>}
-                      </button>
+                    {canApproveMaterialTransfer && bundle.pendingTransfers.length > 0 && (
+                      selectedIncomingBundleKey === bundle.key ? (
+                        <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                          {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing approval</> : <><CheckCircle2 className="h-4 w-4" /> Approve selected IST</>}
+                        </button>
+                      ) : (
+                      <button type="button" disabled={Boolean(selectedIncomingBundleKey)} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-4 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">
+                          <CheckCircle2 className="h-4 w-4" /> {hasProcessedIncomingIst ? 'Next IST' : 'Select IST'}
+                        </button>
+                      )
                     )}
                   </div>
                   {isOpen && (
@@ -555,7 +573,7 @@ export default function ProductionWarehousePage() {
                       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material</span><span>Transfer</span><span>Quantity</span></div>
                       {bundle.transfers.map((pt) => (
                         <div key={pt.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
-                          <div><p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{pt.raw_materials?.code}</span></p><p className="text-xs text-slate-500">Holding Bay · ready for Production Warehouse 19</p></div>
+                          <div><p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{pt.raw_materials?.code}</span></p><p className="text-xs text-slate-500">{pt.status === 'received' ? 'Received into Production Warehouse 19' : 'Holding Bay · ready for Production Warehouse 19'}</p></div>
                           <span className="font-mono text-xs text-slate-500">{pt.transfer_number}</span>
                           <span className="font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
                         </div>
@@ -594,13 +612,11 @@ export default function ProductionWarehousePage() {
                       {sageStageLabel(transfer.sync_status)}
                     </span>
                   </div>
-                  <div className="mt-3 grid grid-cols-4 gap-1.5" aria-label={`Sage status: ${sageStageLabel(transfer.sync_status)}`}>
-                    {['Approved', 'Queued', 'Posting', 'Posted to Sage'].map((label, index) => (
-                      <div key={label} className="min-w-0">
-                        <div className={`h-1.5 ${index <= stage ? failed ? 'bg-rose-400' : 'bg-emerald-500' : 'bg-slate-200'}`} />
-                        <p className={`mt-1 truncate text-[10px] font-semibold ${index <= stage ? failed ? 'text-rose-700' : 'text-slate-700' : 'text-slate-400'}`}>{label}</p>
-                      </div>
-                    ))}
+                  <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(transfer.sync_status)}`}>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : transfer.sync_status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className={failed ? 'text-rose-700' : transfer.sync_status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(transfer.sync_status)}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500">Stage {stage + 1}/4</span>
                   </div>
                   {failed && transfer.sync_message && <p className="mt-2 text-xs font-medium text-rose-700">{transfer.sync_message}</p>}
                 </div>
