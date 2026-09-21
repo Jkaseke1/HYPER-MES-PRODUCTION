@@ -66,6 +66,7 @@ export default function GoodsReceivedPage() {
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -1575,17 +1576,48 @@ export default function GoodsReceivedPage() {
                           <Label className="text-xs font-bold uppercase tracking-wide text-slate-700">Raw Material *</Label>
                           <Select
                             value={item.raw_material_id}
+                            onOpenChange={(open) => { if (open) setMaterialSearch(''); }}
                             onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                           >
                             <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500">
                               <SelectValue placeholder="Select material" />
                             </SelectTrigger>
                             <SelectContent>
-                              {materials.map((material) => (
+                              <div
+                                className="sticky top-0 z-10 border-b border-slate-200 bg-white p-2"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                              >
+                                <div className="relative">
+                                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                                  <input
+                                    value={materialSearch}
+                                    onChange={(event) => setMaterialSearch(event.target.value)}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    placeholder="Search code or material..."
+                                    autoFocus
+                                    className="h-8 w-full rounded border border-slate-200 bg-slate-50 pl-8 pr-2 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-orange-400 focus:bg-white"
+                                  />
+                                </div>
+                              </div>
+                              {materials
+                                .filter((material) => {
+                                  const query = materialSearch.trim().toLowerCase();
+                                  if (!query) return true;
+                                  return material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query);
+                                })
+                                .map((material) => (
                                 <SelectItem key={material.id} value={material.id}>
                                   {material.code} — {material.name}
                                 </SelectItem>
-                              ))}
+                                ))}
+                              {materials.length > 0 && !materials.some((material) => {
+                                const query = materialSearch.trim().toLowerCase();
+                                return !query || material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query);
+                              }) && (
+                                <div className="px-2 py-3 text-center text-xs text-slate-500">No matching materials</div>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
