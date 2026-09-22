@@ -1,24 +1,25 @@
 .production-workspace { color: #18343c; letter-spacing: 0; }
-.production-workspace .warehouse-heading { position: relative; overflow: hidden; padding: 24px; border: 1px solid #192958; background: #101936; color: #fff; box-shadow: 0 12px 28px rgba(16, 25, 54, .14); }
+.production-workspace .warehouse-heading { position: relative; overflow: hidden; padding: 28px 30px; border: 1px solid #192958; border-radius: 16px; background: linear-gradient(125deg, #101936 0%, #121e45 70%, #0d2940 100%); color: #fff; box-shadow: 0 16px 34px rgba(16, 25, 54, .16); }
 .production-workspace .warehouse-heading::after { position: absolute; right: -30px; bottom: -55px; width: 210px; height: 210px; border: 28px solid rgba(0, 190, 164, .13); border-radius: 50%; content: ''; pointer-events: none; }
 .production-workspace .warehouse-heading > * { position: relative; z-index: 1; }
-.production-workspace .warehouse-heading-tag { border: 1px solid rgba(252, 180, 55, .75); padding: 6px 10px; color: #ffd16f; font-size: 12px; font-weight: 700; }
-.production-workspace .warehouse-heading-live { display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(65, 216, 184, .45); padding: 6px 10px; color: #9cead7; font-size: 12px; font-weight: 700; }
-.production-workspace .warehouse-refresh { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.08); color: #fff; transition: background .16s ease; }
+.production-workspace .warehouse-heading-tag { border: 1px solid rgba(252, 180, 55, .75); border-radius: 999px; padding: 6px 11px; color: #ffd16f; font-size: 12px; font-weight: 700; }
+.production-workspace .warehouse-heading-live { display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(65, 216, 184, .45); border-radius: 999px; padding: 6px 11px; color: #9cead7; font-size: 12px; font-weight: 700; }
+.production-workspace .warehouse-refresh { border: 1px solid rgba(255,255,255,.28); border-radius: 8px; background: rgba(255,255,255,.1); color: #fff; transition: background .16s ease, transform .16s ease; }
 .production-workspace .warehouse-refresh:hover { background: rgba(255,255,255,.16); }
-.production-workspace .warehouse-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: stretch; border: 1px solid #dfe7e9; padding: 8px; background: #fff; box-shadow: 0 5px 15px rgba(15, 37, 47, .06); }
+.production-workspace .warehouse-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; align-items: stretch; border: 1px solid #dfe7e9; border-radius: 14px; padding: 9px; background: #fff; box-shadow: 0 8px 20px rgba(15, 37, 47, .07); }
 .production-workspace .warehouse-tab { display: flex; min-height: 64px; align-items: center; gap: 11px; border: 1px solid transparent; border-radius: 7px; padding: 10px 12px; background: #fff; color: #48626c; text-align: left; transition: background .16s ease, color .16s ease, border-color .16s ease; }
 .production-workspace .warehouse-tab:hover { border-color: #cde5df; background: #f4fbf9; }
 .production-workspace .warehouse-tab-icon { display: flex; width: 34px; height: 34px; flex: 0 0 34px; align-items: center; justify-content: center; border-radius: 6px; background: #edf3f4; color: #4d6670; }
 .production-workspace .warehouse-tab strong { display: block; font-size: 14px; font-weight: 700; }
 .production-workspace .warehouse-tab small { display: block; margin-top: 2px; color: #8a9aa0; font-size: 11px; font-weight: 500; }
-.production-workspace .warehouse-tab.is-active { border-color: #008b78; background: #008b78; color: #fff; box-shadow: 0 7px 16px rgba(0, 139, 120, .18); }
+.production-workspace .warehouse-tab.is-active { border-color: #008b78; background: linear-gradient(135deg, #008b78, #009f8a); color: #fff; box-shadow: 0 7px 16px rgba(0, 139, 120, .2); }
 .production-workspace .warehouse-tab.is-active .warehouse-tab-icon { background: rgba(255,255,255,.17); color: #fff; }
 .production-workspace .warehouse-tab.is-active small { color: #d0f4eb; }
 .production-workspace select { min-height: 38px; border: 1px solid #d2dfe2; border-radius: 6px; padding: 8px 30px 8px 12px; background-color: #fff; color: #29454e; font-size: 13px; font-weight: 500; }
 .production-workspace button:focus-visible, .production-workspace select:focus-visible { outline: 2px solid #008978; outline-offset: 3px; }
 .production-workspace > section { box-shadow: none; }
-.production-workspace .warehouse-receiving > div:first-child { background: #f8fafb; border-bottom-color: #e3eaed; padding: 12px 16px; }
+.production-workspace .warehouse-receiving { overflow: hidden; border-radius: 14px; box-shadow: 0 8px 22px rgba(15, 37, 47, .06); }
+.production-workspace .warehouse-receiving > div:first-child { background: #f8fafb; border-bottom-color: #e3eaed; padding: 15px 18px; }
 .production-workspace .warehouse-receiving > div:first-child > div:first-child > div:first-child { width: 32px; height: 32px; border: 0; border-radius: 6px; background: #e6f5f0; }
 .production-workspace .warehouse-receiving > div:nth-child(2) { padding: 0 16px; }
 .production-workspace .warehouse-receiving > div:nth-child(2) > div { border-color: #e7ecee; padding: 10px 0; }
@@ -31,7 +32,7 @@
 .production-workspace .warehouse-ist-row .border-amber-200 { border: 0; background: #f5f0e4; color: #8a6520; border-radius: 4px; }
 .production-workspace .warehouse-ist-row .border-emerald-200 { border: 0; background: #e9f5ee; color: #23774e; border-radius: 4px; }
 .production-workspace .warehouse-ist-row > button:not(:first-child) { border-radius: 6px; font-size: 12px; }
-.production-workspace .warehouse-sage { overflow: hidden; border-color: #cbdcde; background: #edf5f4; }
+.production-workspace .warehouse-sage { overflow: hidden; border-color: #cbdcde; border-radius: 14px; background: #edf5f4; box-shadow: 0 8px 22px rgba(15, 37, 47, .06); }
 .production-workspace .warehouse-sage > div:first-child { border-bottom-color: #263d55; background: #13223d; padding: 15px 18px; }
 .production-workspace .warehouse-sage > div:first-child h2 { color: #fff; }
 .production-workspace .warehouse-sage > div:first-child p { color: #adc6d4; }
