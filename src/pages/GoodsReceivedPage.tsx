@@ -94,6 +94,10 @@ export default function GoodsReceivedPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
+  const canEditFinanceCosts = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
+  const [editingFinanceCosts, setEditingFinanceCosts] = useState(false);
+  const [savingFinanceCosts, setSavingFinanceCosts] = useState(false);
+  const [originalFinanceItems, setOriginalFinanceItems] = useState<any[]>([]);
   const [grnEditOpen, setGrnEditOpen] = useState(false);
   const [editingGrn, setEditingGrn] = useState<GoodsReceivedNote | null>(null);
   const [editSupplierId, setEditSupplierId] = useState('');
@@ -562,6 +566,7 @@ export default function GoodsReceivedPage() {
   };
 
   const handleViewGRN = async (grn: GoodsReceivedNote) => {
+    setEditingFinanceCosts(false);
     setViewing(grn);
     const { data } = await supabase
       .from('grn_items')
@@ -701,6 +706,29 @@ export default function GoodsReceivedPage() {
       toast.error(error?.message || 'Could not submit GRN costing.');
     } finally {
       setSubmittingCosting(false);
+    }
+  };
+
+  const saveFinanceUnitCosts = async () => {
+    if (!viewing || !canEditFinanceCosts || savingFinanceCosts) return;
+    if (!viewItems.length || viewItems.some(item => !Number.isFinite(Number(item.unit_cost)) || Number(item.unit_cost) <= 0)) {
+      toast.error('Enter a positive unit cost for every line.');
+      return;
+    }
+    setSavingFinanceCosts(true);
+    try {
+      const { error } = await supabase.rpc('save_grn_finance_unit_costs', {
+        p_grn_id: viewing.id,
+        p_lines: viewItems.map(item => ({ id: item.id, unit_cost: Number(item.unit_cost) })),
+      });
+      if (error) throw error;
+      setEditingFinanceCosts(false);
+      toast.success('Unit costs saved.');
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Could not save unit costs.');
+    } finally {
+      setSavingFinanceCosts(false);
     }
   };
 
@@ -1934,7 +1962,18 @@ export default function GoodsReceivedPage() {
           </div>
 
           {/* Approval Actions */}
-          {viewing && viewing.status === 'pending_costing' && canCompleteGrnCosting && (
+          {viewing && canEditFinanceCosts && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 bg-teal-50 px-5 py-3">
+              <p className="text-sm font-semibold text-teal-900">Finance unit costs</p>
+              {editingFinanceCosts ? <div className="flex gap-2">
+                <Button type="button" variant="outline" disabled={savingFinanceCosts} onClick={() => { setViewItems(originalFinanceItems); setEditingFinanceCosts(false); }}>Cancel</Button>
+                <Button type="button" disabled={savingFinanceCosts} onClick={saveFinanceUnitCosts} className="bg-teal-700 text-white hover:bg-teal-800">
+                  {savingFinanceCosts && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Unit Costs
+                </Button>
+              </div> : <Button type="button" onClick={() => { setOriginalFinanceItems(viewItems.map(item => ({ ...item }))); setEditingFinanceCosts(true); }} className="bg-teal-700 text-white hover:bg-teal-800">Edit Unit Costs</Button>}
+            </div>
+          )}
+          {viewing && !editingFinanceCosts && viewing.status === 'pending_costing' && canCompleteGrnCosting && (
             <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-orange-200 bg-orange-50 px-5 py-3">
               <div>
                 <p className="text-sm font-bold text-orange-900">Production costing required</p>
@@ -1946,7 +1985,7 @@ export default function GoodsReceivedPage() {
               </Button>
             </div>
           )}
-          {viewing && (viewing.status === 'pending_finance' || viewing.status === 'pending') && (
+          {viewing && !editingFinanceCosts && (viewing.status === 'pending_finance' || viewing.status === 'pending') && (
             <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
               <GRNApprovalButtons
                 grnId={viewing.id}
@@ -2211,11 +2250,12 @@ export default function GoodsReceivedPage() {
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} {materialUnitLabel(item.raw_materials)}</TableCell>
                           <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} {materialUnitLabel(item.raw_materials)}</TableCell>
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">
-                            {viewing.status === 'pending_costing' && canCompleteGrnCosting ? (
+                            {editingFinanceCosts || (viewing?.status === 'pending_costing' && canCompleteGrnCosting) ? (
                               <Input
                                 type="number"
                                 min="0.0001"
                                 step="0.0001"
+                                disabled={savingFinanceCosts}
                                 value={item.unit_cost ?? ''}
                                 onChange={(event) => setViewItems((current) => current.map((line) => line.id === item.id ? { ...line, unit_cost: event.target.value === '' ? '' : Number(event.target.value) } : line))}
                                 className="h-8 w-24 text-right text-xs"
