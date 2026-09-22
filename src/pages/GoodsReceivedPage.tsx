@@ -59,6 +59,16 @@ function formatMoney(value: number | string | null | undefined) {
     : amount.toFixed(4);
 }
 
+function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
+  const code = String(material?.code || '').trim().toUpperCase();
+  const name = String(material?.name || '').trim().toLowerCase();
+  const storedUnit = String(material?.unit || '').trim().toLowerCase();
+
+  if (['unit', 'units', 'each', 'ea', 'piece', 'pieces', 'pcs'].includes(storedUnit)) return 'units';
+  if (name.includes('packaging') || code.startsWith('PA')) return 'units';
+  return storedUnit || 'kg';
+}
+
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canCompleteGrnCosting = ['admin', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
@@ -543,7 +553,7 @@ export default function GoodsReceivedPage() {
     setViewing(grn);
     const { data } = await supabase
       .from('grn_items')
-      .select('*, raw_materials(code, name)')
+      .select('*, raw_materials(code, name, unit)')
       .eq('grn_id', grn.id);
     setViewItems(data || []);
     setViewModalOpen(true);
@@ -894,6 +904,8 @@ export default function GoodsReceivedPage() {
 
   const totalOrderedQty = items.reduce((sum, item) => sum + (Number(item.ordered_qty) || 0), 0);
   const totalReceivedQty = items.reduce((sum, item) => sum + (Number(item.received_qty) || 0), 0);
+  const receiptUnits = Array.from(new Set(items.map((item) => materialUnitLabel(materials.find((material) => material.id === item.raw_material_id)))));
+  const receiptUnitLabel = receiptUnits.length === 1 ? receiptUnits[0] : 'mixed units';
   const totalReceivedValue = items.reduce(
     (sum, item) => sum + (Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0),
     0
@@ -1555,7 +1567,7 @@ export default function GoodsReceivedPage() {
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
-                            <span className="rounded border border-white/15 bg-white/10 px-2 py-0.5 font-mono font-bold text-slate-200">{Number(item.received_qty || 0).toLocaleString()} kg</span>
+                            <span className="rounded border border-white/15 bg-white/10 px-2 py-0.5 font-mono font-bold text-slate-200">{Number(item.received_qty || 0).toLocaleString()} {materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))}</span>
                             <span className="rounded border border-orange-400/25 bg-orange-500/15 px-2 py-0.5 font-mono font-bold text-orange-200">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
                           </div>
                           {items.length > 1 && (
@@ -1622,7 +1634,7 @@ export default function GoodsReceivedPage() {
                           </Select>
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold text-slate-500">Ordered Qty</Label>
+                          <Label className="text-xs font-semibold text-slate-500">Ordered Qty ({materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))})</Label>
                           <Input
                             type="number"
                             value={item.ordered_qty}
@@ -1633,7 +1645,7 @@ export default function GoodsReceivedPage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-bold text-orange-600">Received Qty *</Label>
+                          <Label className="text-xs font-bold text-orange-600">Received Qty * ({materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))})</Label>
                           <Input
                             type="number"
                             value={item.received_qty}
@@ -1698,11 +1710,11 @@ export default function GoodsReceivedPage() {
                 <div className="grid grid-cols-2 gap-2 p-3">
                   <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total Ordered</p>
-                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-[10px] font-medium text-slate-500">{receiptUnitLabel}</span></p>
                   </div>
                   <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Total Received</p>
-                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-orange-800">kg</span></p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-orange-800">{receiptUnitLabel}</span></p>
                   </div>
                   <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Weighbridge Nett</p>
@@ -2145,8 +2157,8 @@ export default function GoodsReceivedPage() {
                               <p className="text-[10px] text-slate-500 font-mono">{item.raw_materials?.code}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} kg</TableCell>
-                          <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} kg</TableCell>
+                          <TableCell className="text-xs text-right text-slate-600 py-2 px-3">{item.ordered_qty.toLocaleString()} {materialUnitLabel(item.raw_materials)}</TableCell>
+                          <TableCell className="text-xs text-right text-slate-800 py-2 px-3 font-semibold">{item.received_qty.toLocaleString()} {materialUnitLabel(item.raw_materials)}</TableCell>
                           <TableCell className="text-xs text-right text-slate-600 py-2 px-3">
                             {viewing.status === 'pending_costing' && canCompleteGrnCosting ? (
                               <Input
@@ -2180,11 +2192,11 @@ export default function GoodsReceivedPage() {
                 <div className="mt-2 bg-slate-900 text-white rounded-xl p-3 flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center gap-4">
                     <span className="text-xs text-slate-300">
-                      Ordered: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} kg</strong>
+                      Ordered: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.ordered_qty || 0), 0).toLocaleString()} {viewItems.length === 1 ? materialUnitLabel(viewItems[0]?.raw_materials) : 'mixed units'}</strong>
                     </span>
                     <div className="w-px h-4 bg-slate-700" />
                     <span className="text-xs text-slate-300">
-                      Received: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} kg</strong>
+                      Received: <strong className="text-white">{viewItems.reduce((s, i) => s + (i.received_qty || 0), 0).toLocaleString()} {viewItems.length === 1 ? materialUnitLabel(viewItems[0]?.raw_materials) : 'mixed units'}</strong>
                     </span>
                   </div>
                   <div className="flex items-center gap-2 bg-emerald-500 px-3 py-1.5 rounded-lg">
@@ -2219,7 +2231,7 @@ export default function GoodsReceivedPage() {
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Return quantities</Label>
               {supplierReturnItems.map((item, index) => (
                 <div key={item.id || index} className="grid grid-cols-[1fr_150px] items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
-                  <div><p className="text-sm font-semibold text-slate-900">{item.raw_materials?.code} - {item.raw_materials?.name}</p><p className="text-xs text-slate-500">Original received: {Number(item.received_qty || 0).toLocaleString()} kg</p></div>
+                  <div><p className="text-sm font-semibold text-slate-900">{item.raw_materials?.code} - {item.raw_materials?.name}</p><p className="text-xs text-slate-500">Original received: {Number(item.received_qty || 0).toLocaleString()} {materialUnitLabel(item.raw_materials)}</p></div>
                   <Input type="number" min="0" max={Number(item.received_qty || 0)} step="0.01" value={item.return_qty} onChange={(event) => setSupplierReturnItems((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, return_qty: event.target.value } : line))} />
                 </div>
               ))}
