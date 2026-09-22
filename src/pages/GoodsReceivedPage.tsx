@@ -82,7 +82,7 @@ function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
 
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
-  const canCompleteGrnCosting = ['admin', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
+  const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
   const canManageGrnCorrections = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -1942,7 +1942,7 @@ export default function GoodsReceivedPage() {
               </div>
               <Button type="button" onClick={submitGrnCosting} disabled={submittingCosting} className="shrink-0 bg-orange-600 text-white hover:bg-orange-700">
                 {submittingCosting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-                {submittingCosting ? 'Submitting...' : 'Save Costing & Send to Finance'}
+                {submittingCosting ? 'Saving...' : profile?.role === 'finance' ? 'Save Unit Costs' : 'Save Costing & Send to Finance'}
               </Button>
             </div>
           )}
