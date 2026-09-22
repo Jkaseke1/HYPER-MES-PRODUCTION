@@ -59,6 +59,15 @@ function formatMoney(value: number | string | null | undefined) {
     : amount.toFixed(4);
 }
 
+function manualGrvDigits(value: string | null | undefined) {
+  return String(value || '').replace(/^HFGRV/i, '').replace(/\D/g, '');
+}
+
+function manualGrvReference(value: string) {
+  const digits = manualGrvDigits(value);
+  return digits ? `HFGRV${digits}` : '';
+}
+
 function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
   const code = String(material?.code || '').trim().toUpperCase();
   const name = String(material?.name || '').trim().toLowerCase();
@@ -1271,15 +1280,20 @@ export default function GoodsReceivedPage() {
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="manual_grv_number" className="text-xs font-bold uppercase tracking-wide text-slate-700">Manual GRV Number *</Label>
-                        <Input
-                          id="manual_grv_number"
-                          value={manualGrvNumber}
-                          onChange={(e) => setManualGrvNumber(e.target.value)}
-                          placeholder="e.g. GRV-10437"
-                          required
-                          className="border-slate-300 bg-white font-mono font-semibold focus:border-orange-500"
-                        />
-                        <p className="text-[10px] text-slate-400">Supplier/manual GRV reference</p>
+                        <div className="flex overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-orange-500">
+                          <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 font-mono font-bold text-slate-500">HFGRV</span>
+                          <Input
+                            id="manual_grv_number"
+                            value={manualGrvDigits(manualGrvNumber)}
+                            onChange={(e) => setManualGrvNumber(manualGrvReference(e.target.value))}
+                            placeholder="10346"
+                            inputMode="numeric"
+                            pattern="[0-9]+"
+                            required
+                            className="border-0 bg-white font-mono font-semibold focus-visible:ring-0"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400">Enter the numeric GRV number only</p>
                       </div>
                     </div>
                   </div>
@@ -2003,10 +2017,13 @@ export default function GoodsReceivedPage() {
                     ['admin', 'finance'].includes(profile?.role || '') && (
                     <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); void saveMissingGrvReference(); }}>
                       <Label htmlFor="missing-manual-grv">Manual GRV reference</Label>
-                      <Input id="missing-manual-grv" value={missingGrvReference}
-                        onChange={event => setMissingGrvReference(event.target.value.toUpperCase())}
-                        placeholder="HFGRV10346" required pattern="HFGRV[0-9]+" maxLength={50}
-                        disabled={savingReference} />
+                      <div className="flex overflow-hidden rounded-md border border-slate-300 bg-white">
+                        <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 font-mono font-bold text-slate-500">HFGRV</span>
+                        <Input id="missing-manual-grv" value={manualGrvDigits(missingGrvReference)}
+                          onChange={event => setMissingGrvReference(manualGrvReference(event.target.value))}
+                          placeholder="10346" inputMode="numeric" pattern="[0-9]+" required maxLength={50}
+                          disabled={savingReference} className="border-0 font-mono focus-visible:ring-0" />
+                      </div>
                       <Button type="submit" disabled={savingReference} size="sm">
                         {savingReference ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                         {savingReference ? 'Saving...' : 'Save manual GRV'}
@@ -2331,7 +2348,10 @@ export default function GoodsReceivedPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Manual GRV Number *</Label>
-                <Input value={editManualGrvNumber} onChange={(e) => setEditManualGrvNumber(e.target.value)} placeholder="e.g. GRV-10437" className="font-mono font-semibold" />
+                <div className="flex overflow-hidden rounded-md border border-slate-300 bg-white">
+                  <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 font-mono font-bold text-slate-500">HFGRV</span>
+                  <Input value={manualGrvDigits(editManualGrvNumber)} onChange={(e) => setEditManualGrvNumber(manualGrvReference(e.target.value))} placeholder="10346" inputMode="numeric" pattern="[0-9]+" className="border-0 font-mono font-semibold focus-visible:ring-0" />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Linked weighbridge</Label>
