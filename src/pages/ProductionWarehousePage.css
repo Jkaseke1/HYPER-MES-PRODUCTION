@@ -1,10 +1,20 @@
 .production-workspace { color: #18343c; letter-spacing: 0; }
-.production-workspace .warehouse-heading { padding: 4px 0 12px; border-bottom: 1px solid #dde6e8; }
-.production-workspace .warehouse-tabs { border-bottom: 1px solid #dce5e7; padding: 0; background: transparent; }
-.production-workspace .warehouse-tabs > button { border-radius: 6px 6px 0 0; border-bottom: 3px solid transparent; padding: 12px 18px; background: transparent; color: #62747b; }
-.production-workspace .warehouse-tabs > button.bg-teal-700 { border-bottom-color: #00b69b; background: #e8f7f3; color: #006f63; }
-.production-workspace .warehouse-tabs > button.bg-teal-700 > span { color: #006f63; }
-.production-workspace .warehouse-tabs > button:hover { background: #edf5f4; }
+.production-workspace .warehouse-heading { position: relative; overflow: hidden; padding: 24px; border: 1px solid #192958; background: #101936; color: #fff; box-shadow: 0 12px 28px rgba(16, 25, 54, .14); }
+.production-workspace .warehouse-heading::after { position: absolute; right: -30px; bottom: -55px; width: 210px; height: 210px; border: 28px solid rgba(0, 190, 164, .13); border-radius: 50%; content: ''; pointer-events: none; }
+.production-workspace .warehouse-heading > * { position: relative; z-index: 1; }
+.production-workspace .warehouse-heading-tag { border: 1px solid rgba(252, 180, 55, .75); padding: 6px 10px; color: #ffd16f; font-size: 12px; font-weight: 700; }
+.production-workspace .warehouse-heading-live { display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(65, 216, 184, .45); padding: 6px 10px; color: #9cead7; font-size: 12px; font-weight: 700; }
+.production-workspace .warehouse-refresh { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.08); color: #fff; transition: background .16s ease; }
+.production-workspace .warehouse-refresh:hover { background: rgba(255,255,255,.16); }
+.production-workspace .warehouse-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: stretch; border: 1px solid #dfe7e9; padding: 8px; background: #fff; box-shadow: 0 5px 15px rgba(15, 37, 47, .06); }
+.production-workspace .warehouse-tab { display: flex; min-height: 64px; align-items: center; gap: 11px; border: 1px solid transparent; border-radius: 7px; padding: 10px 12px; background: #fff; color: #48626c; text-align: left; transition: background .16s ease, color .16s ease, border-color .16s ease; }
+.production-workspace .warehouse-tab:hover { border-color: #cde5df; background: #f4fbf9; }
+.production-workspace .warehouse-tab-icon { display: flex; width: 34px; height: 34px; flex: 0 0 34px; align-items: center; justify-content: center; border-radius: 6px; background: #edf3f4; color: #4d6670; }
+.production-workspace .warehouse-tab strong { display: block; font-size: 14px; font-weight: 700; }
+.production-workspace .warehouse-tab small { display: block; margin-top: 2px; color: #8a9aa0; font-size: 11px; font-weight: 500; }
+.production-workspace .warehouse-tab.is-active { border-color: #008b78; background: #008b78; color: #fff; box-shadow: 0 7px 16px rgba(0, 139, 120, .18); }
+.production-workspace .warehouse-tab.is-active .warehouse-tab-icon { background: rgba(255,255,255,.17); color: #fff; }
+.production-workspace .warehouse-tab.is-active small { color: #d0f4eb; }
 .production-workspace select { min-height: 38px; border: 1px solid #d2dfe2; border-radius: 6px; padding: 8px 30px 8px 12px; background-color: #fff; color: #29454e; font-size: 13px; font-weight: 500; }
 .production-workspace button:focus-visible, .production-workspace select:focus-visible { outline: 2px solid #008978; outline-offset: 3px; }
 .production-workspace > section { box-shadow: none; }
@@ -31,7 +41,9 @@
   .production-workspace .warehouse-ist-row > button:first-child > div:nth-child(2) > div { margin-top: 0; }
 }
 @media (max-width: 640px) {
-  .production-workspace .warehouse-tabs > button { flex: 1; justify-content: center; padding: 10px 6px; font-size: 12px; }
+  .production-workspace .warehouse-heading { padding: 18px; }
+  .production-workspace .warehouse-tabs { grid-template-columns: 1fr; }
+  .production-workspace .warehouse-tab { min-height: 52px; }
   .production-workspace .warehouse-receiving > div:first-child > div:last-child { flex-wrap: wrap; width: 100%; gap: 12px; }
   .production-workspace .warehouse-ist-row { grid-template-columns: minmax(0,1fr); }
   .production-workspace .warehouse-ist-row > div.border-l { text-align: left; padding-left: 40px; }

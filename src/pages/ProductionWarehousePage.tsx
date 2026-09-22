@@ -507,29 +507,33 @@ export default function ProductionWarehousePage() {
       <section className="warehouse-heading flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-teal-700">HYPERFEEDS / PRODUCTION</span>
+            <span className="warehouse-heading-tag">Hyperfeeds Production</span>
+            <span className="warehouse-heading-live"><Radio className="h-3 w-3" /> Live Sage</span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">Production Warehouse</h1>
-          <p className="mt-1 text-xs text-slate-500">Warehouse 19 · {totalMaterials} materials</p>
+          <h1 className="mt-3 text-2xl font-bold">Production Warehouse</h1>
+          <p className="mt-1 text-sm text-slate-300">Warehouse 19 · {totalMaterials} materials available for production</p>
         </div>
         <button
           onClick={() => fetchTransfers()}
-          className="warehouse-refresh flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className="warehouse-refresh flex items-center gap-2 px-4 py-2.5 text-sm font-semibold"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </section>
 
-      <nav className="warehouse-tabs flex flex-wrap items-center gap-1" aria-label="Production warehouse views">
-        <button type="button" onClick={() => setPageView('receiving')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'receiving' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-          <Truck className="h-4 w-4" /> Receiving <span className={`text-xs ${pageView === 'receiving' ? 'text-teal-100' : 'text-slate-400'}`}>{pendingAcceptanceTransfers.length}</span>
+      <nav className="warehouse-tabs" aria-label="Production warehouse views">
+        <button type="button" onClick={() => setPageView('receiving')} className={`warehouse-tab ${pageView === 'receiving' ? 'is-active' : ''}`}>
+          <span className="warehouse-tab-icon"><Truck className="h-4 w-4" /></span>
+          <span><strong>Receiving</strong><small>{pendingAcceptanceTransfers.length} awaiting receipt</small></span>
         </button>
-        <button type="button" onClick={() => setPageView('stock')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'stock' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-          <Package className="h-4 w-4" /> Floor stock
+        <button type="button" onClick={() => setPageView('stock')} className={`warehouse-tab ${pageView === 'stock' ? 'is-active' : ''}`}>
+          <span className="warehouse-tab-icon"><Package className="h-4 w-4" /></span>
+          <span><strong>Floor stock</strong><small>Warehouse 19 balances</small></span>
         </button>
-        <button type="button" onClick={() => setPageView('sage')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'sage' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
-          <Radio className="h-4 w-4" /> Sage activity {failedSageTransfers.length > 0 && <span className={`text-xs ${pageView === 'sage' ? 'text-rose-100' : 'text-rose-600'}`}>{failedSageTransfers.length} issue{failedSageTransfers.length === 1 ? '' : 's'}</span>}
+        <button type="button" onClick={() => setPageView('sage')} className={`warehouse-tab ${pageView === 'sage' ? 'is-active' : ''}`}>
+          <span className="warehouse-tab-icon"><Radio className="h-4 w-4" /></span>
+          <span><strong>Sage activity</strong><small>{failedSageTransfers.length ? `${failedSageTransfers.length} issue${failedSageTransfers.length === 1 ? '' : 's'} need attention` : 'Posting and transfer audit'}</small></span>
         </button>
         <span className="ml-auto hidden px-3 text-xs font-medium text-slate-400 md:inline">Last refresh {format(lastRefresh, 'HH:mm:ss')}</span>
       </nav>
