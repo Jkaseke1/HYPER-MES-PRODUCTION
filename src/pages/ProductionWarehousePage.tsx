@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, ClipboardList, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import './ProductionWarehousePage.css';
 
 interface TransferRow {
   id: string;
@@ -502,26 +503,25 @@ export default function ProductionWarehousePage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5 p-4 lg:p-6">
-      <section className="flex flex-wrap items-center justify-between gap-4 bg-[#101936] px-5 py-5 text-white shadow-sm">
+    <div className="production-workspace mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6">
+      <section className="warehouse-heading flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="border border-amber-400/50 bg-amber-400/10 px-2 py-1 text-xs font-bold text-amber-200">Hyperfeeds Production</span>
-            <span className="inline-flex items-center gap-1 border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-xs font-bold text-emerald-100"><Radio className="h-3 w-3" /> Live Sage</span>
+            <span className="text-xs font-semibold text-teal-700">HYPERFEEDS / PRODUCTION</span>
           </div>
-          <h1 className="mt-3 text-2xl font-bold">Production Warehouse</h1>
-          <p className="mt-1 text-sm text-slate-300">Inbound materials, floor readiness, and live Sage Warehouse 19 availability.</p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-900">Production Warehouse</h1>
+          <p className="mt-1 text-xs text-slate-500">Warehouse 19 · {totalMaterials} materials</p>
         </div>
         <button
           onClick={() => fetchTransfers()}
-          className="flex items-center gap-2 border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+          className="warehouse-refresh flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </section>
 
-      <nav className="flex flex-wrap items-center gap-1 border border-slate-200 bg-white p-1 shadow-sm" aria-label="Production warehouse views">
+      <nav className="warehouse-tabs flex flex-wrap items-center gap-1" aria-label="Production warehouse views">
         <button type="button" onClick={() => setPageView('receiving')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'receiving' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
           <Truck className="h-4 w-4" /> Receiving <span className={`text-xs ${pageView === 'receiving' ? 'text-teal-100' : 'text-slate-400'}`}>{pendingAcceptanceTransfers.length}</span>
         </button>
@@ -545,8 +545,8 @@ export default function ProductionWarehousePage() {
       )}
 
       {/* Live RM inbox for Production receiving */}
-      {pageView === 'receiving' && incomingTransfers.length > 0 && (
-      <section className="border border-teal-200 bg-white shadow-sm">
+      {pageView === 'receiving' && (
+      <section className="warehouse-receiving border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
@@ -554,10 +554,9 @@ export default function ProductionWarehousePage() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900">Incoming from Raw Materials</h2>
+                  <h2 className="text-base font-bold text-slate-900">Incoming transfers</h2>
                   <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
                 </div>
-                <p className="mt-0.5 text-sm text-slate-600">Select one IST, receive it, then select the next. Received ISTs remain visible for audit.</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -590,7 +589,7 @@ export default function ProductionWarehousePage() {
               const isReceiving = receivingBundleKey === bundle.key;
               return (
                 <div key={bundle.key} className={`py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+                  <div className="warehouse-ist-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="flex min-w-0 items-start gap-3 text-left">
                       <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700">
                         {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -604,13 +603,11 @@ export default function ProductionWarehousePage() {
                         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                           <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
                           <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> {bundle.requester}</span>
-                          <span className="inline-flex items-center gap-1"><ClipboardList className="h-3.5 w-3.5" /> {bundle.purpose}</span>
                         </div>
                       </div>
                     </button>
                     <div className="border-l border-teal-200 pl-4 text-right">
                       <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
-                      <p className="text-xs font-medium text-slate-500">{bundle.pendingTransfers.length ? 'awaiting receipt' : 'received'}</p>
                     </div>
                     {canApproveMaterialTransfer && bundle.pendingTransfers.length > 0 && (
                       selectedIncomingBundleKey === bundle.key ? (
@@ -644,18 +641,17 @@ export default function ProductionWarehousePage() {
             <div className="border-t border-teal-100 px-5 py-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
               <p className="mt-2 text-sm font-bold text-slate-800">No ISTs in this view</p>
-              <p className="mt-1 text-xs text-slate-500">Use the status dropdown to view processed transfers.</p>
             </div>
           )}
         </section>
       )}
 
       {pageView === 'sage' && recentSageTransfers.length > 0 && (
-        <section className="border border-slate-200 bg-white shadow-sm">
+        <section className="warehouse-sage border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">Sage posting status</h2>
-              <p className="mt-0.5 text-sm text-slate-600">One row per IST. Expand a row to inspect its material lines.</p>
+              <p className="mt-0.5 text-xs text-slate-500">Last 24 hours · {sageActivityGroups.length} ISTs</p>
             </div>
             <div className="flex items-center gap-3">
               <label htmlFor="sage-activity-filter" className="text-xs font-bold uppercase tracking-wide text-slate-500">Show</label>
@@ -688,8 +684,6 @@ export default function ProductionWarehousePage() {
                   </button>
                   <div className="mt-2 flex items-center gap-2 pl-11 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(group.status)}`}>
                     <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : group.status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <span className={failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(group.status)}</span>
-                    <span className="text-slate-400">·</span>
                     <span className="text-slate-500">Stage {stage + 1}/4</span>
                   </div>
                   {expanded && <div className="mt-3 ml-11 divide-y divide-slate-100 border border-slate-200 bg-slate-50">
