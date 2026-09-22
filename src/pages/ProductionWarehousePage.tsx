@@ -107,6 +107,7 @@ export default function ProductionWarehousePage() {
   const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
+  const [pageView, setPageView] = useState<'receiving' | 'stock' | 'sage'>('receiving');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -486,6 +487,19 @@ export default function ProductionWarehousePage() {
         </button>
       </section>
 
+      <nav className="flex flex-wrap items-center gap-1 border border-slate-200 bg-white p-1 shadow-sm" aria-label="Production warehouse views">
+        <button type="button" onClick={() => setPageView('receiving')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'receiving' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+          <Truck className="h-4 w-4" /> Receiving <span className={`text-xs ${pageView === 'receiving' ? 'text-teal-100' : 'text-slate-400'}`}>{pendingAcceptanceTransfers.length}</span>
+        </button>
+        <button type="button" onClick={() => setPageView('stock')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'stock' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+          <Package className="h-4 w-4" /> Floor stock
+        </button>
+        <button type="button" onClick={() => setPageView('sage')} className={`inline-flex min-h-10 items-center gap-2 px-4 py-2 text-sm font-bold transition-colors ${pageView === 'sage' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>
+          <Radio className="h-4 w-4" /> Sage activity {failedSageTransfers.length > 0 && <span className={`text-xs ${pageView === 'sage' ? 'text-rose-100' : 'text-rose-600'}`}>{failedSageTransfers.length} issue{failedSageTransfers.length === 1 ? '' : 's'}</span>}
+        </button>
+        <span className="ml-auto hidden px-3 text-xs font-medium text-slate-400 md:inline">Last refresh {format(lastRefresh, 'HH:mm:ss')}</span>
+      </nav>
+
       {receiptNotice && (
         <div className={`flex items-start justify-between gap-4 border-l-4 px-4 py-3 text-sm shadow-sm ${receiptNotice.tone === 'success' ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-rose-500 bg-rose-50 text-rose-900'}`}>
           <div className="flex items-start gap-2">
@@ -497,7 +511,7 @@ export default function ProductionWarehousePage() {
       )}
 
       {/* Live RM inbox for Production receiving */}
-      {incomingTransfers.length > 0 && (
+      {pageView === 'receiving' && incomingTransfers.length > 0 && (
       <section className="border border-teal-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
@@ -587,7 +601,7 @@ export default function ProductionWarehousePage() {
         </section>
       )}
 
-      {recentSageTransfers.length > 0 && (
+      {pageView === 'sage' && recentSageTransfers.length > 0 && (
         <section className="border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
             <div>
@@ -626,7 +640,7 @@ export default function ProductionWarehousePage() {
         </section>
       )}
 
-      {failedSageTransfers.length > 0 && (
+      {pageView === 'sage' && failedSageTransfers.length > 0 && (
         <section className="border border-rose-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
@@ -677,6 +691,7 @@ export default function ProductionWarehousePage() {
         </div>
       )}
 
+      {pageView === 'stock' && <>
       <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{formatWarehouseQuantity(totalSagePdQty)} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
@@ -810,6 +825,7 @@ export default function ProductionWarehousePage() {
           <p className="text-xs text-slate-500">{filtered.length} material{filtered.length !== 1 ? 's' : ''} on production floor</p>
         </div>
       </div>
+      </>}
     </div>
   );
 }
