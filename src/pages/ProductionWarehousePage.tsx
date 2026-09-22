@@ -657,22 +657,19 @@ export default function ProductionWarehousePage() {
               <h2 className="text-base font-bold text-slate-900">Sage posting status</h2>
               <p className="mt-0.5 text-xs text-slate-500">Last 24 hours · {sageActivityGroups.length} ISTs</p>
             </div>
-            <div className="flex items-center gap-3">
-              <label htmlFor="sage-activity-filter" className="text-xs font-bold uppercase tracking-wide text-slate-500">Show</label>
-              <select id="sage-activity-filter" value={sageActivityFilter} onChange={(event) => setSageActivityFilter(event.target.value as typeof sageActivityFilter)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-teal-500 focus:outline-none">
-                <option value="all">All ISTs</option>
-                <option value="attention">Needs attention</option>
-                <option value="processed">Processed</option>
-              </select>
+            <div className="sage-filter" role="group" aria-label="Filter Sage posting activity">
+              <button type="button" onClick={() => setSageActivityFilter('all')} className={sageActivityFilter === 'all' ? 'is-selected' : ''}>All <span>{sageActivityGroups.length}</span></button>
+              <button type="button" onClick={() => setSageActivityFilter('attention')} className={sageActivityFilter === 'attention' ? 'is-selected' : ''}>Attention <span>{sageActivityGroups.filter((group) => group.status !== 'success').length}</span></button>
+              <button type="button" onClick={() => setSageActivityFilter('processed')} className={sageActivityFilter === 'processed' ? 'is-selected' : ''}>Posted <span>{sageActivityGroups.filter((group) => group.status === 'success').length}</span></button>
             </div>
           </div>
           <div className="divide-y divide-slate-100">
-            {visibleSageActivityGroups.slice(0, 20).map((group) => {
+            {visibleSageActivityGroups.map((group) => {
               const stage = sageStageIndex(group.status);
               const failed = group.status === 'failed';
               const expanded = expandedSageIst === group.key;
               return (
-                <div key={group.key} className="px-5 py-3">
+                <div key={group.key} className={`sage-ist-row px-5 py-3 ${failed ? 'has-failure' : group.status === 'success' ? 'is-posted' : 'is-pending'}`}>
                   <button type="button" onClick={() => setExpandedSageIst(expanded ? null : group.key)} className="flex w-full flex-wrap items-center justify-between gap-3 text-left">
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-slate-200 bg-slate-50 text-slate-500">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
@@ -688,6 +685,7 @@ export default function ProductionWarehousePage() {
                   </button>
                   <div className="mt-2 flex items-center gap-2 pl-11 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(group.status)}`}>
                     <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : group.status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className={failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(group.status)}</span>
                     <span className="text-slate-500">Stage {stage + 1}/4</span>
                   </div>
                   {expanded && <div className="mt-3 ml-11 divide-y divide-slate-100 border border-slate-200 bg-slate-50">
@@ -696,6 +694,7 @@ export default function ProductionWarehousePage() {
                 </div>
               );
             })}
+            {visibleSageActivityGroups.length === 0 && <div className="px-5 py-12 text-center text-sm text-slate-500">No ISTs match this status.</div>}
           </div>
         </section>
       )}
