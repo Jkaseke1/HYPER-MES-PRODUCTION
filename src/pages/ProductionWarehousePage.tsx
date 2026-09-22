@@ -108,6 +108,9 @@ export default function ProductionWarehousePage() {
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
   const [pageView, setPageView] = useState<'receiving' | 'stock' | 'sage'>('receiving');
+  const [incomingFilter, setIncomingFilter] = useState<'all' | 'awaiting' | 'processed'>('awaiting');
+  const [sageActivityFilter, setSageActivityFilter] = useState<'all' | 'attention' | 'processed'>('all');
+  const [expandedSageIst, setExpandedSageIst] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -346,6 +349,37 @@ export default function ProductionWarehousePage() {
       totalQuantity: group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0),
     }));
   }, [incomingTransfers]);
+  const visibleIncomingBundles = useMemo(() => incomingBundles.filter((bundle) => {
+    if (incomingFilter === 'awaiting') return bundle.pendingTransfers.length > 0;
+    if (incomingFilter === 'processed') return bundle.pendingTransfers.length === 0;
+    return true;
+  }), [incomingBundles, incomingFilter]);
+  const sageActivityGroups = useMemo(() => {
+    const groups = new Map<string, SageTransferStatus[]>();
+    recentSageTransfers.forEach((transfer) => {
+      const key = transfer.purpose || transfer.transfer_number || transfer.id;
+      groups.set(key, [...(groups.get(key) || []), transfer]);
+    });
+    return [...groups.entries()].map(([key, lines]) => {
+      const hasFailed = lines.some((line) => line.sync_status === 'failed');
+      const hasProcessing = lines.some((line) => line.sync_status === 'processing');
+      const hasPending = lines.some((line) => ['pending', 'retry'].includes(line.sync_status));
+      const status: SageTransferStatus['sync_status'] = hasFailed ? 'failed' : hasProcessing ? 'processing' : hasPending ? (lines.some((line) => line.sync_status === 'retry') ? 'retry' : 'pending') : 'success';
+      return {
+        key,
+        lines,
+        status,
+        totalQuantity: lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0),
+        unit: new Set(lines.map((line) => line.unit)).size === 1 ? lines[0].unit : 'mixed units',
+        first: lines[0],
+      };
+    });
+  }, [recentSageTransfers]);
+  const visibleSageActivityGroups = sageActivityGroups.filter((group) => {
+    if (sageActivityFilter === 'processed') return group.status === 'success';
+    if (sageActivityFilter === 'attention') return group.status !== 'success';
+    return true;
+  });
   const stockHealth = useMemo(() => {
     const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
     const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
@@ -527,6 +561,14 @@ export default function ProductionWarehousePage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label htmlFor="incoming-status-filter" className="sr-only">Show incoming ISTs</label>
+                <select id="incoming-status-filter" value={incomingFilter} onChange={(event) => setIncomingFilter(event.target.value as typeof incomingFilter)} className="border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-teal-500 focus:outline-none">
+                  <option value="awaiting">Awaiting receipt</option>
+                  <option value="processed">Processed</option>
+                  <option value="all">All ISTs</option>
+                </select>
+              </div>
               <div className="text-right">
                 <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} kg</p>
                 <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
@@ -543,7 +585,7 @@ export default function ProductionWarehousePage() {
           </div>
 
           <div className="divide-y divide-teal-100 px-5">
-            {incomingBundles.map((bundle) => {
+            {visibleIncomingBundles.map((bundle) => {
               const isOpen = expandedIncomingBundle === bundle.key;
               const isReceiving = receivingBundleKey === bundle.key;
               return (
@@ -598,6 +640,13 @@ export default function ProductionWarehousePage() {
               );
             })}
           </div>
+          {visibleIncomingBundles.length === 0 && (
+            <div className="border-t border-teal-100 px-5 py-10 text-center">
+              <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
+              <p className="mt-2 text-sm font-bold text-slate-800">No ISTs in this view</p>
+              <p className="mt-1 text-xs text-slate-500">Use the status dropdown to view processed transfers.</p>
+            </div>
+          )}
         </section>
       )}
 
@@ -606,33 +655,46 @@ export default function ProductionWarehousePage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">Sage posting status</h2>
-              <p className="mt-0.5 text-sm text-slate-600">Each approved material is tracked until Sage confirms the posting.</p>
+              <p className="mt-0.5 text-sm text-slate-600">One row per IST. Expand a row to inspect its material lines.</p>
             </div>
-            <span className="border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600">Last 24 hours</span>
+            <div className="flex items-center gap-3">
+              <label htmlFor="sage-activity-filter" className="text-xs font-bold uppercase tracking-wide text-slate-500">Show</label>
+              <select id="sage-activity-filter" value={sageActivityFilter} onChange={(event) => setSageActivityFilter(event.target.value as typeof sageActivityFilter)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-teal-500 focus:outline-none">
+                <option value="all">All ISTs</option>
+                <option value="attention">Needs attention</option>
+                <option value="processed">Processed</option>
+              </select>
+            </div>
           </div>
           <div className="divide-y divide-slate-100">
-            {recentSageTransfers.slice(0, 20).map((transfer) => {
-              const stage = sageStageIndex(transfer.sync_status);
-              const failed = transfer.sync_status === 'failed';
+            {visibleSageActivityGroups.slice(0, 20).map((group) => {
+              const stage = sageStageIndex(group.status);
+              const failed = group.status === 'failed';
+              const expanded = expandedSageIst === group.key;
               return (
-                <div key={transfer.sync_log_id} className="px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{transfer.raw_materials?.code}</span></p>
-                      <p className="mt-1 text-xs text-slate-500"><span className="font-bold text-slate-700">{transfer.purpose || 'IST'}</span> · {transfer.transfer_number} · {Number(transfer.quantity).toLocaleString()} {transfer.unit}</p>
+                <div key={group.key} className="px-5 py-3">
+                  <button type="button" onClick={() => setExpandedSageIst(expanded ? null : group.key)} className="flex w-full flex-wrap items-center justify-between gap-3 text-left">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-slate-200 bg-slate-50 text-slate-500">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-bold text-slate-900">{group.key}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{group.lines.length} material{group.lines.length === 1 ? '' : 's'} · {group.totalQuantity.toLocaleString()} {group.unit}</p>
+                      </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${failed ? 'text-rose-700' : transfer.sync_status === 'success' ? 'text-emerald-700' : 'text-blue-700'}`}>
-                      {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : transfer.sync_status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {sageStageLabel(transfer.sync_status)}
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-blue-700'}`}>
+                      {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : group.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {sageStageLabel(group.status)}
                     </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(transfer.sync_status)}`}>
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : transfer.sync_status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <span className={failed ? 'text-rose-700' : transfer.sync_status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(transfer.sync_status)}</span>
+                  </button>
+                  <div className="mt-2 flex items-center gap-2 pl-11 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(group.status)}`}>
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : group.status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className={failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(group.status)}</span>
                     <span className="text-slate-400">·</span>
                     <span className="text-slate-500">Stage {stage + 1}/4</span>
                   </div>
-                  {failed && transfer.sync_message && <p className="mt-2 text-xs font-medium text-rose-700">{transfer.sync_message}</p>}
+                  {expanded && <div className="mt-3 ml-11 divide-y divide-slate-100 border border-slate-200 bg-slate-50">
+                    {group.lines.map((line) => <div key={line.sync_log_id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs"><span className="font-semibold text-slate-800">{line.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono font-normal text-slate-500">{line.raw_materials?.code}</span><span className="ml-2 font-mono font-normal text-slate-400">{line.transfer_number}</span></span><span className="font-mono text-slate-600">{Number(line.quantity).toLocaleString()} {line.unit}</span></div>)}
+                  </div>}
                 </div>
               );
             })}
