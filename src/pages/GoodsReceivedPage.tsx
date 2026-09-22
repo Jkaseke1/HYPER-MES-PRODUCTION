@@ -988,7 +988,7 @@ export default function GoodsReceivedPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-5 max-w-[1600px] mx-auto">
+    <div className="space-y-5 p-4 sm:p-5 max-w-[1600px] mx-auto">
       <StockTakeFrozenBanner />
       
       <StickyOperationsPanel>
