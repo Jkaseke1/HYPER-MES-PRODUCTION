@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cacheData, getCachedData, queueOfflineAction } from '../lib/offlineSync';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../components/ui/command';
 import { Textarea } from '../components/ui/textarea';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
@@ -233,6 +235,7 @@ export default function GoodsReceivedPage() {
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
+  const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
   const [unregisteredSupplierName, setUnregisteredSupplierName] = useState('');
   const [receivedDate, setReceivedDate] = useState(localDateInputValue);
   const [notes, setNotes] = useState('');
@@ -1242,22 +1245,53 @@ export default function GoodsReceivedPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1.2fr)_200px_minmax(240px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
-                        <Select value={supplierId} onValueChange={(value) => {
-                          setSupplierId(value);
-                          if (value !== 'other') setUnregisteredSupplierName('');
-                        }}>
-                          <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500 focus:ring-orange-500/20">
-                            <SelectValue placeholder="Select supplier..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="other">Other - supplier not in system</SelectItem>
-                            {suppliers.map((supplier) => (
-                              <SelectItem key={supplier.id} value={supplier.id}>
-                                {supplierLabel(supplier)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={supplierPickerOpen} onOpenChange={setSupplierPickerOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={supplierPickerOpen}
+                              className="h-10 w-full justify-between border-slate-300 bg-white px-3 text-left font-medium hover:bg-white"
+                            >
+                              <span className={supplierId ? 'text-slate-900' : 'text-slate-500'}>
+                                {supplierId === 'other' ? 'Other - supplier not in system' : supplierId ? supplierLabel(suppliers.find((supplier) => supplier.id === supplierId) as Supplier) : 'Search supplier...'}
+                              </span>
+                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
+                            <Command>
+                              <CommandInput placeholder="Search code or supplier name..." />
+                              <CommandList>
+                                <CommandEmpty>No supplier found.</CommandEmpty>
+                                <CommandItem
+                                  value="other supplier not in system"
+                                  onSelect={() => {
+                                    setSupplierId('other');
+                                    setUnregisteredSupplierName('');
+                                    setSupplierPickerOpen(false);
+                                  }}
+                                >
+                                  Other - supplier not in system
+                                </CommandItem>
+                                {suppliers.map((supplier) => (
+                                  <CommandItem
+                                    key={supplier.id}
+                                    value={supplierLabel(supplier)}
+                                    onSelect={() => {
+                                      setSupplierId(supplier.id);
+                                      setUnregisteredSupplierName('');
+                                      setSupplierPickerOpen(false);
+                                    }}
+                                  >
+                                    {supplierLabel(supplier)}
+                                  </CommandItem>
+                                ))}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                         {supplierId === 'other' && (
                           <Input
                             value={unregisteredSupplierName}
