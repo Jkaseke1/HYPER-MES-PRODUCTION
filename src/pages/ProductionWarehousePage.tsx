@@ -751,20 +751,20 @@ export default function ProductionWarehousePage() {
       )}
 
       {pageView === 'stock' && <>
-      <section className="grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="floor-summary-grid grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{formatWarehouseQuantity(totalSagePdQty)} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
       </section>
 
-      <section className={`flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
+      <section className={`floor-health-banner flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
         <div className="flex items-center gap-3"><AlertTriangle className={`h-5 w-5 ${stockHealth.critical.length ? 'text-rose-600' : stockHealth.low.length ? 'text-amber-600' : 'text-emerald-600'}`} /><div><p className="text-sm font-bold text-slate-900">{stockHealth.critical.length ? 'Production stock requires attention' : stockHealth.low.length ? 'Production stock is below minimum' : 'Production stock position healthy'}</p><p className="text-xs text-slate-600">Sage Production 19 last synced {lastSagePdSync ? format(new Date(lastSagePdSync), 'dd MMM, HH:mm:ss') : 'awaiting first sync'}.</p></div></div>
         {(stockHealth.critical.length || stockHealth.low.length) > 0 && <div className="flex flex-wrap gap-2">{[...stockHealth.critical, ...stockHealth.low].slice(0, 3).map((m) => <span key={m.raw_material_id} className="border border-white bg-white px-2 py-1 text-xs font-semibold text-slate-700">{m.name}: {formatWarehouseQuantity(Number(m.sage_pd_quantity || 0))} / {formatWarehouseQuantity(m.production_reorder_level)} {m.unit}</span>)}</div>}
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <div className="border border-slate-200 bg-white shadow-sm">
+      <section className="floor-overview-grid grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <div className="floor-panel border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor availability</p><h2 className="mt-1 text-base font-bold text-slate-900">Largest Sage Production balances</h2></div><BarChart3 className="h-5 w-5 text-teal-600" /></div>
           <div className="divide-y divide-slate-100 px-5">
             {topFloorMaterials.length ? topFloorMaterials.map((material) => {
@@ -774,7 +774,7 @@ export default function ProductionWarehousePage() {
             }) : <p className="py-8 text-sm text-slate-500">Awaiting Production Warehouse 19 stock data.</p>}
           </div>
         </div>
-        <div className="border border-slate-200 bg-white shadow-sm">
+        <div className="floor-panel border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent activity</p><h2 className="mt-1 text-base font-bold text-slate-900">Latest floor receipts</h2></div><Calendar className="h-5 w-5 text-slate-500" /></div>
           <div className="divide-y divide-slate-100 px-5">
             {recentFloorActivity.length ? recentFloorActivity.map((transfer) => <div key={transfer.id} className="flex items-center justify-between gap-4 py-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{transfer.raw_materials?.name || 'Raw material'}</p><p className="mt-0.5 font-mono text-xs text-slate-500">{transfer.batch_number || 'No batch'} · {format(new Date(transfer.movement_date || transfer.created_at), 'dd MMM, HH:mm')}</p></div><p className="shrink-0 text-right font-mono text-sm font-bold text-slate-800">{Number(transfer.quantity).toLocaleString()}<span className="ml-1 text-xs font-medium text-slate-500">{transfer.unit}</span></p></div>) : <p className="py-8 text-sm text-slate-500">No floor receipts recorded yet.</p>}
@@ -782,7 +782,7 @@ export default function ProductionWarehousePage() {
         </div>
       </section>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div className="floor-inventory-panel bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div className="relative max-w-sm flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
