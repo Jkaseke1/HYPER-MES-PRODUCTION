@@ -41,6 +41,9 @@ const ALLOWED_EVENT_TYPES = new Set(
 const STOCK_SYNC_ENABLED = process.env.SAGE_STOCK_SYNC_ENABLED === 'true';
 const ENFORCE_GRN_ONLY = process.env.BRIDGE_ENFORCE_GRN_ONLY === 'true';
 const ENFORCE_SAGE_IDENTITY = process.env.BRIDGE_ENFORCE_SAGE_IDENTITY === 'true';
+// A targeted stock refresh is read-only in Sage. It is always allowed through
+// the queue so a transfer can validate against a current Sage snapshot.
+const READ_ONLY_EVENT_TYPES = new Set(['sage_stock_refresh']);
 let stockSyncQueue = Promise.resolve();
 let eventProcessingInProgress = false;
 
@@ -105,6 +108,25 @@ async function refreshSageStock(itemCodes, reason) {
     console.error(`  Sage stock sync failed (${reason}): ${error.message}`);
     return { materialCount: 0, synced: 0, failures: [error.message] };
   }
+}
+
+async function refreshRequestedSageStock(event) {
+  const itemCodes = [...new Set((event.details?.itemCodes || [])
+    .map((itemCode) => String(itemCode || '').trim().toUpperCase())
+    .filter(Boolean))];
+
+  if (!itemCodes.length) throw new Error('Stock refresh request does not contain any Sage item codes.');
+  if (itemCodes.length > 20) throw new Error('A Sage stock refresh may contain at most 20 materials.');
+
+  const result = await queueSageStockSync(itemCodes, 'material transfer preflight', { warehouseCodes: ['RM'] });
+  if (result.failures.length) {
+    throw new Error(`Sage stock refresh failed: ${result.failures.slice(0, 3).join('; ')}`);
+  }
+
+  return {
+    message: `Live Sage RM stock refreshed for ${itemCodes.length} material${itemCodes.length === 1 ? '' : 's'}.`,
+    details: { itemCodes, warehouse: 'RM', synced: result.synced },
+  };
 }
 
 async function createStockTakeSageSnapshot(event) {
@@ -234,7 +256,7 @@ async function processPendingEvents() {
     .limit(100);
 
   if (ALLOWED_EVENT_TYPES.size > 0) {
-    pendingQuery = pendingQuery.in('event_type', [...ALLOWED_EVENT_TYPES]);
+    pendingQuery = pendingQuery.in('event_type', [...new Set([...ALLOWED_EVENT_TYPES, ...READ_ONLY_EVENT_TYPES])]);
   }
 
   const { data: pending, error } = await pendingQuery;
@@ -347,6 +369,14 @@ async function processPendingEvents() {
           .eq('status', 'processing');
       }
 
+      if (event.event_type === 'sage_stock_refresh') {
+        await supabase
+          .from('sync_log')
+          .update({ message: 'Reading live Sage RM stock', updated_at: new Date().toISOString() })
+          .eq('id', event.id)
+          .eq('status', 'processing');
+      }
+
       switch (event.event_type) {
         case 'grn_confirmed':
           handlerResult = await handleGoodsReceipt(event);
@@ -374,6 +404,9 @@ async function processPendingEvents() {
           break;
         case 'stock_take_sage_snapshot':
           handlerResult = await createStockTakeSageSnapshot(event);
+          break;
+        case 'sage_stock_refresh':
+          handlerResult = await refreshRequestedSageStock(event);
           break;
         default:
           console.log(`  ⚠️  Unknown event type: ${event.event_type} — skipping`);

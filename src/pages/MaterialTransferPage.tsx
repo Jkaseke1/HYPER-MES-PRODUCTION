@@ -103,6 +103,7 @@ export default function MaterialTransferPage() {
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
+  const [rmWarehouseSyncedAt, setRmWarehouseSyncedAt] = useState<Record<string, string | null>>({});
   const [bufferWarehouseBalances, setBufferWarehouseBalances] = useState<Record<string, number>>({});
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +116,7 @@ export default function MaterialTransferPage() {
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [transferError, setTransferError] = useState<string[] | null>(null);
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
+  const [refreshingTransferStock, setRefreshingTransferStock] = useState(false);
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -247,10 +249,13 @@ export default function MaterialTransferPage() {
     if (ordersRes.data) setProductionOrders(ordersRes.data);
     if (rmBalancesRes.data) {
       const balances: Record<string, number> = {};
+      const syncedAt: Record<string, string | null> = {};
       rmBalancesRes.data.forEach((b: any) => {
         balances[b.raw_material_id] = Number(b.quantity || 0);
+        syncedAt[b.raw_material_id] = b.last_synced_at || null;
       });
       setRmWarehouseBalances(balances);
+      setRmWarehouseSyncedAt(syncedAt);
     }
     if (bufferBalancesRes.data) {
       const balances: Record<string, number> = {};
@@ -264,6 +269,59 @@ export default function MaterialTransferPage() {
     } finally {
       fetchInProgress.current = false;
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function requestFreshSageTransferStock(materialIds: string[]) {
+    const uniqueMaterialIds = [...new Set(materialIds.filter(Boolean))];
+    setRefreshingTransferStock(true);
+    try {
+      const { data: refreshLogId, error: refreshError } = await supabase.rpc('request_material_transfer_sage_refresh', {
+        p_material_ids: uniqueMaterialIds,
+      });
+      if (refreshError) throw refreshError;
+
+      const timeoutAt = Date.now() + 30_000;
+      let refreshCompleted = false;
+      while (Date.now() < timeoutAt) {
+        const { data: refreshLog, error: statusError } = await supabase
+          .from('sync_log')
+          .select('status, message')
+          .eq('id', refreshLogId)
+          .maybeSingle();
+        if (statusError) throw statusError;
+        if (refreshLog?.status === 'success') {
+          refreshCompleted = true;
+          break;
+        }
+        if (refreshLog?.status === 'failed') throw new Error(refreshLog.message || 'Sage stock refresh failed.');
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+      }
+      if (!refreshCompleted) throw new Error('Live Sage stock refresh did not complete within 30 seconds. No transfer was created.');
+
+      const { data: refreshedBalances, error: balanceError } = await supabase
+        .from('sage_stock_balances')
+        .select('raw_material_id, quantity, last_synced_at')
+        .eq('warehouse_id', 18)
+        .in('raw_material_id', uniqueMaterialIds);
+      if (balanceError) throw balanceError;
+      if ((refreshedBalances || []).length !== uniqueMaterialIds.length) {
+        throw new Error('Sage did not return a current RM balance for every selected material.');
+      }
+
+      const currentAt = new Date();
+      const freshBalances = new Map<string, number>();
+      (refreshedBalances || []).forEach((balance: any) => {
+        const syncedAt = balance.last_synced_at ? new Date(balance.last_synced_at) : null;
+        if (!syncedAt || currentAt.getTime() - syncedAt.getTime() > 2 * 60 * 1000) {
+          throw new Error('Sage RM stock did not refresh in time. Please try again.');
+        }
+        freshBalances.set(balance.raw_material_id, Number(balance.quantity || 0));
+      });
+      await fetchData(true);
+      return freshBalances;
+    } finally {
+      setRefreshingTransferStock(false);
     }
   }
 
@@ -314,12 +372,14 @@ export default function MaterialTransferPage() {
         return;
       }
 
+      const freshSageBalances = await requestFreshSageTransferStock(validLines.map((line) => line.raw_material_id));
+
       const transferBatchKey = crypto.randomUUID();
 
       // Sage is the stock authority for RM transfers. The bridge refreshes this
       // balance from the configured Sage company and verifies it again when posting.
       for (const line of validLines) {
-        const sageRmBalance = rmWarehouseBalances[line.raw_material_id] || 0;
+        const sageRmBalance = freshSageBalances.get(line.raw_material_id) || 0;
         const bufferBalance = bufferWarehouseBalances[line.raw_material_id] || 0;
         const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
         const material = rawMaterials.find(m => m.id === line.raw_material_id);
@@ -880,10 +940,11 @@ export default function MaterialTransferPage() {
                   <Package className="w-4 h-4 text-teal-600" />
                   <p className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Materials to Transfer</p>
                 </div>
-                <span className="text-[11px] font-semibold text-slate-500">
-                  {transferLines.length} line{transferLines.length === 1 ? '' : 's'}
-                </span>
-              </div>
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {transferLines.length} line{transferLines.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">A fresh read from Sage RM is required before these transfers can be created.</p>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <div className="min-w-[700px]">
@@ -940,6 +1001,9 @@ export default function MaterialTransferPage() {
                               <p className="mt-1 text-[10px] font-semibold text-slate-500">
                                 After transfer: {(rmBalance - Number(line.quantity || 0)).toLocaleString()} {material?.unit}
                               </p>
+                            )}
+                            {line.raw_material_id && rmWarehouseSyncedAt[line.raw_material_id] && (
+                              <p className="mt-1 text-[10px] text-slate-400">Last Sage snapshot: {format(new Date(rmWarehouseSyncedAt[line.raw_material_id]!), 'dd MMM, HH:mm:ss')}</p>
                             )}
                           </div>
                           <button
