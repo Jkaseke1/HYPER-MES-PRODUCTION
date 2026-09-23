@@ -137,7 +137,8 @@ export default function GRNApprovalButtons({
       onRejected();
     } catch (error) {
       console.error('Rejection error:', error);
-      alert('Failed to reject. Please try again.');
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      alert(`Could not reject this GRN: ${message}`);
     } finally {
       setProcessing(false);
     }
