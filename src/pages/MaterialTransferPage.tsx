@@ -29,6 +29,8 @@ interface MaterialTransfer {
   production_order_id?: string;
   notes: string;
   rejection_reason?: string;
+  reversed_by?: string;
+  reversed_at?: string;
   created_at: string;
   raw_materials?: { name: string; code: string; unit: string };
   warehouses?: { name: string };
@@ -355,6 +357,21 @@ export default function MaterialTransferPage() {
 
       if (!/^HFIST\d+$/i.test(sharedForm.purpose.trim())) {
         setTransferError(['Enter the IST number in the format HFIST followed by digits, for example HFIST11589.']);
+        setSaving(false);
+        return;
+      }
+
+      const istReference = sharedForm.purpose.trim().toUpperCase();
+      const existingIst = transfers.find((transfer) =>
+        transfer.purpose?.trim().toUpperCase() === istReference &&
+        transfer.status !== 'rejected' &&
+        !transfer.reversed_at &&
+        !transfer.reversed_by
+      );
+      if (existingIst) {
+        setTransferError([
+          `IST ${istReference} already exists (${existingIst.transfer_number}). Open the existing IST or add an approved correction line; a second IST with the same reference cannot be raised.`,
+        ]);
         setSaving(false);
         return;
       }
