@@ -1052,7 +1052,11 @@ export default function MaterialTransferPage() {
                 }
                 className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs transition-all shadow-md disabled:opacity-50"
               >
-                {saving ? 'Creating Transfers...' : `Create ${transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Transfer(s)`}
+                {refreshingTransferStock
+                  ? 'Checking live Sage stock...'
+                  : saving
+                    ? 'Creating Transfers...'
+                    : `Create ${transferLines.filter(l => l.raw_material_id && l.quantity > 0).length} Transfer(s)`}
               </button>
             </div>
           </div>
