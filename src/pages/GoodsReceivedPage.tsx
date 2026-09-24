@@ -1261,7 +1261,7 @@ export default function GoodsReceivedPage() {
               <div className="space-y-4">
 
                 {/* GRN Header Panel */}
-                <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="relative z-20 overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
