@@ -879,8 +879,7 @@ export default function GoodsReceivedPage() {
   };
 
   const matchingSuppliers = suppliers
-    .filter((supplier) => supplierLabel(supplier).toLowerCase().includes(supplierSearch.trim().toLowerCase()))
-    .slice(0, 50);
+    .filter((supplier) => supplierLabel(supplier).toLowerCase().includes(supplierSearch.trim().toLowerCase()));
 
   const grnSupplierLabel = (grn: any) =>
     supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
