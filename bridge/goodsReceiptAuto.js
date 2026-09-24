@@ -188,7 +188,10 @@ async function handleGoodsReceipt(syncEvent) {
     reference: grn.grn_number,
     supplierCode,
     supplierName: grn.suppliers?.name || '',
-    supplierInvoiceNo: grn.supplier_invoice_no || '',
+    // Sage Reference 2 is populated from SupplierInvoiceNo. Prefer the
+    // normalized manual HFGRV for Finance search; retain the supplier invoice
+    // on the PlantControl GRN record and do not change the GRN idempotency key.
+    supplierInvoiceNo: grn.manual_grv_number || grn.supplier_invoice_no || '',
     supplierDeliveryNoteNo: grn.supplier_delivery_note_no || '',
     supplierOrderNo: grn.supplier_order_no || '',
     // Keep the MES GRN as the idempotency reference. Sage receives the
