@@ -239,6 +239,7 @@ export default function GoodsReceivedPage() {
   const [supplierId, setSupplierId] = useState('');
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
+  const supplierPickerRef = useRef<HTMLDivElement>(null);
   const [unregisteredSupplierName, setUnregisteredSupplierName] = useState('');
   const [receivedDate, setReceivedDate] = useState(localDateInputValue);
   const [notes, setNotes] = useState('');
@@ -881,6 +882,26 @@ export default function GoodsReceivedPage() {
   const matchingSuppliers = suppliers
     .filter((supplier) => supplierLabel(supplier).toLowerCase().includes(supplierSearch.trim().toLowerCase()));
 
+  useEffect(() => {
+    if (!supplierPickerOpen) return;
+
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      if (!supplierPickerRef.current?.contains(event.target as Node)) {
+        setSupplierPickerOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSupplierPickerOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsidePointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [supplierPickerOpen]);
+
   const grnSupplierLabel = (grn: any) =>
     supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
 
@@ -1277,7 +1298,11 @@ export default function GoodsReceivedPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1.2fr)_200px_minmax(240px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
-                        <div className="relative">
+                        <div
+                          ref={supplierPickerRef}
+                          className="relative"
+                          onMouseLeave={() => setSupplierPickerOpen(false)}
+                        >
                           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                           <Input
                             id="supplier"
