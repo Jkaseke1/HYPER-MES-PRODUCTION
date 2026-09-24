@@ -16,8 +16,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cacheData, getCachedData, queueOfflineAction } from '../lib/offlineSync';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '../components/ui/command';
 import { Textarea } from '../components/ui/textarea';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
@@ -239,6 +237,7 @@ export default function GoodsReceivedPage() {
   
   // Form state
   const [supplierId, setSupplierId] = useState('');
+  const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
   const [unregisteredSupplierName, setUnregisteredSupplierName] = useState('');
   const [receivedDate, setReceivedDate] = useState(localDateInputValue);
@@ -548,6 +547,8 @@ export default function GoodsReceivedPage() {
 
   const resetForm = () => {
     setSupplierId('');
+    setSupplierSearch('');
+    setSupplierPickerOpen(false);
     setUnregisteredSupplierName('');
     setReceivedDate(localDateInputValue());
     setNotes('');
@@ -876,6 +877,10 @@ export default function GoodsReceivedPage() {
     const code = supplier.sage_code || supplier.code;
     return code ? `${code} - ${supplier.name}` : supplier.name;
   };
+
+  const matchingSuppliers = suppliers
+    .filter((supplier) => supplierLabel(supplier).toLowerCase().includes(supplierSearch.trim().toLowerCase()))
+    .slice(0, 50);
 
   const grnSupplierLabel = (grn: any) =>
     supplierLabel(grn?.suppliers) || grn?.unregistered_supplier_name || 'N/A';
@@ -1273,57 +1278,57 @@ export default function GoodsReceivedPage() {
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1.2fr)_200px_minmax(240px,1fr)]">
                       <div className="space-y-1.5">
                         <Label htmlFor="supplier" className="text-xs font-bold text-slate-700 uppercase tracking-wide">Supplier *</Label>
-                        <Popover open={supplierPickerOpen} onOpenChange={setSupplierPickerOpen}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              role="combobox"
-                              aria-expanded={supplierPickerOpen}
-                              className="h-10 w-full justify-between border-slate-300 bg-white px-3 text-left font-medium hover:bg-white"
-                            >
-                              <span className={supplierId ? 'text-slate-900' : 'text-slate-500'}>
-                                {supplierId === 'other' ? 'Other - supplier not in system' : supplierId ? supplierLabel(suppliers.find((supplier) => supplier.id === supplierId) as Supplier) : 'Search supplier...'}
-                              </span>
-                              <ChevronDown className="h-4 w-4 text-slate-400" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="start"
-                            portalled={false}
-                            className="w-[--radix-popover-trigger-width] p-0"
-                          >
-                            <Command>
-                              <CommandInput placeholder="Search code or supplier name..." />
-                              <CommandList>
-                                <CommandEmpty>No supplier found.</CommandEmpty>
-                                <CommandItem
-                                  value="other supplier not in system"
-                                  onSelect={() => {
-                                    setSupplierId('other');
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <Input
+                            id="supplier"
+                            value={supplierSearch}
+                            onFocus={() => setSupplierPickerOpen(true)}
+                            onChange={(event) => {
+                              setSupplierSearch(event.target.value);
+                              setSupplierId('');
+                              setUnregisteredSupplierName('');
+                              setSupplierPickerOpen(true);
+                            }}
+                            placeholder="Search supplier name or code..."
+                            autoComplete="off"
+                            className="h-10 border-slate-300 bg-white pl-9 pr-9 font-medium focus:border-orange-500"
+                          />
+                          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          {supplierPickerOpen && (
+                            <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                                onClick={() => {
+                                  setSupplierId('other');
+                                  setSupplierSearch('Other - supplier not in system');
+                                  setUnregisteredSupplierName('');
+                                  setSupplierPickerOpen(false);
+                                }}
+                              >
+                                Other - supplier not in system
+                              </button>
+                              {matchingSuppliers.length > 0 ? matchingSuppliers.map((supplier) => (
+                                <button
+                                  key={supplier.id}
+                                  type="button"
+                                  className="flex w-full items-center rounded px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-800"
+                                  onClick={() => {
+                                    setSupplierId(supplier.id);
+                                    setSupplierSearch(supplierLabel(supplier));
                                     setUnregisteredSupplierName('');
                                     setSupplierPickerOpen(false);
                                   }}
                                 >
-                                  Other - supplier not in system
-                                </CommandItem>
-                                {suppliers.map((supplier) => (
-                                  <CommandItem
-                                    key={supplier.id}
-                                    value={supplierLabel(supplier)}
-                                    onSelect={() => {
-                                      setSupplierId(supplier.id);
-                                      setUnregisteredSupplierName('');
-                                      setSupplierPickerOpen(false);
-                                    }}
-                                  >
-                                    {supplierLabel(supplier)}
-                                  </CommandItem>
-                                ))}
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                                  {supplierLabel(supplier)}
+                                </button>
+                              )) : (
+                                <p className="px-3 py-3 text-sm text-slate-500">No active supplier matches this search.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         {supplierId === 'other' && (
                           <Input
                             value={unregisteredSupplierName}
@@ -1456,6 +1461,8 @@ export default function GoodsReceivedPage() {
                               const matchedMaterial = materials.find((m) => m.code === ticket.product_code || (m as any).sage_code === ticket.product_code);
                               if (ticket.supplier_id) {
                                 setSupplierId(ticket.supplier_id || 'other');
+                                const ticketSupplier = suppliers.find((supplier) => supplier.id === ticket.supplier_id);
+                                setSupplierSearch(ticketSupplier ? supplierLabel(ticketSupplier) : '');
                                 setUnregisteredSupplierName(ticket.supplier_id ? '' : (ticket.unregistered_supplier_name || ''));
                               }
                               if (ticket.ticket_no && !externalReference) {
