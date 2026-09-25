@@ -40,9 +40,8 @@ namespace SDK_Test
                         DeliveryDate = transactionDate,
                         Description = BuildDescription(request),
                         ExternalOrderNo = Trim(request.ReturnReference, 50),
-                        SupplierInvoiceNo = Trim(request.SupplierInvoiceNo, 50),
-                        MessageLine1 = Trim("MES RTS " + request.OriginalGrnReference, 50),
-                        MessageLine2 = Trim(request.Reason, 50),
+                        MessageLine1 = BuildInvoiceReference(request),
+                        MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
                         MessageLine3 = BuildOrderAndReason(request)
                     };
 
@@ -128,8 +127,7 @@ namespace SDK_Test
                         DeliveryDate = transactionDate,
                         Description = BuildDescription(request),
                         ExternalOrderNo = Trim(request.ReturnReference, 50),
-                        SupplierInvoiceNo = Trim(request.SupplierInvoiceNo, 50),
-                        MessageLine1 = Trim("MES RTS " + request.OriginalGrnReference, 50),
+                        MessageLine1 = BuildInvoiceReference(request),
                         MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
                         MessageLine3 = BuildOrderAndReason(request)
                     };
@@ -243,6 +241,13 @@ namespace SDK_Test
                 ? request.Reason
                 : "PO " + request.SupplierOrderNo + " | " + request.Reason;
             return Trim(reference, 50);
+        }
+
+        private static string BuildInvoiceReference(ReturnToSupplierValidationRequest request)
+        {
+            return string.IsNullOrWhiteSpace(request.SupplierInvoiceNo)
+                ? Trim("MES RTS " + request.OriginalGrnReference, 50)
+                : Trim("Supplier invoice: " + request.SupplierInvoiceNo, 50);
         }
     }
 }
