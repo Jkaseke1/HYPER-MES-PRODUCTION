@@ -74,15 +74,23 @@ export default function ReturnToSupplierModal({ open, onOpenChange, grn, items, 
         throw new Error('Only approved GRNs can be returned to supplier.');
       }
 
-      const { error } = await supabase.rpc('request_grn_return', {
+      const { data: rtsId, error } = await supabase.rpc('request_grn_return', {
         p_grn_id: currentGrn.id,
         p_reason: reason,
         p_lines: lines,
       });
       if (error) throw error;
+      const { data: createdRts, error: createdRtsError } = await supabase
+        .from('return_to_supplier_requests')
+        .select('*, return_to_supplier_items(*)')
+        .eq('id', rtsId)
+        .single();
+      if (createdRtsError) throw createdRtsError;
+      setExisting(createdRts);
+      setReason('');
+      setQuantities({});
       toast.success('RTS created and awaiting Finance approval.');
       onCreated?.();
-      onOpenChange(false);
     } catch (error: any) {
       toast.error(error.message || 'Could not create the RTS.');
     } finally {
@@ -143,6 +151,7 @@ export default function ReturnToSupplierModal({ open, onOpenChange, grn, items, 
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Existing RTS request</p><p className="mt-0.5 font-mono text-base font-bold text-slate-900">{existing.rts_number}</p></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${isPosted ? 'bg-emerald-100 text-emerald-700' : existing.status === 'pending_finance' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{isPosted && <CheckCircle className="mr-1 inline h-3 w-3" />}{statusLabel}</span></div>
               <div className="mt-3 rounded-lg bg-slate-50 p-3"><p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-0.5 text-xs leading-5 text-slate-700">{existing.reason}</p></div>
+              {existing.status === 'pending_finance' && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">Status: Pending Finance approval. This GRN is locked against duplicate RTS requests.</p>}
               {existing.status === 'pending_finance' && canApprove && <Button onClick={approveRequest} disabled={approving} className="mt-4 w-full bg-rose-700 py-5 text-white hover:bg-rose-800">{approving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Approve & queue Sage RTS</Button>}
               {existing.status === 'pending_finance' && !canApprove && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">Waiting for Finance approval before Sage posting.</p>}
               {existing.status === 'approved' || existing.status === 'processing' ? <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Approved. The bridge will post this RTS to Sage.</p> : null}
