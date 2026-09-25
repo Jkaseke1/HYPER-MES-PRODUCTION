@@ -821,8 +821,8 @@ export default function GoodsReceivedPage() {
     const rts = rtsByGrnId[grn.id];
     if (rts?.status === 'posted') {
       return (
-        <Badge className="border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 font-semibold text-emerald-700 hover:bg-emerald-500/20" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
-          <CheckCircle className="mr-1 h-3 w-3" /> RTS completed
+        <Badge className="border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 font-semibold text-rose-700 hover:bg-rose-500/20" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
+          <RotateCcw className="mr-1 h-3 w-3" /> RTS completed
         </Badge>
       );
     }
