@@ -49,11 +49,19 @@ async function handleReturnToSupplier(event) {
     .limit(1)
     .maybeSingle();
 
+  const { data: originalGrn } = await supabase
+    .from('goods_received_notes')
+    .select('supplier_invoice_no, supplier_order_no')
+    .eq('id', rts.original_grn_id)
+    .maybeSingle();
+
   const body = {
     returnReference: rts.rts_number,
     supplierCode: rts.suppliers?.sage_code || rts.suppliers?.code || '',
     originalGrnReference: rts.original_grn_number,
     originalSageGrvNumber: event.details?.originalSageGrvNumber || originalGrnSync?.sage_response?.grvNumber || originalGrnSync?.sage_response?.documentNumber || '',
+    supplierInvoiceNo: originalGrn?.supplier_invoice_no || '',
+    supplierOrderNo: originalGrn?.supplier_order_no || '',
     reason: rts.reason,
     transactionDate: new Date().toISOString(),
     lines: (rts.return_to_supplier_items || []).map((line) => ({

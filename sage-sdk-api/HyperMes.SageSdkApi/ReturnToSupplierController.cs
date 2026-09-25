@@ -38,11 +38,12 @@ namespace SDK_Test
                         OrderDate = transactionDate,
                         DueDate = transactionDate,
                         DeliveryDate = transactionDate,
-                        Description = Trim("MES RTS " + request.OriginalGrnReference, 50),
+                        Description = BuildDescription(request),
                         ExternalOrderNo = Trim(request.ReturnReference, 50),
+                        SupplierInvoiceNo = Trim(request.SupplierInvoiceNo, 50),
                         MessageLine1 = Trim("MES RTS " + request.OriginalGrnReference, 50),
                         MessageLine2 = Trim(request.Reason, 50),
-                        MessageLine3 = Trim(request.OriginalGrnReference, 50)
+                        MessageLine3 = BuildOrderAndReason(request)
                     };
 
                     var detail = returnToSupplier.Detail.Add(item, warehouse.Code, (double)firstLine.Quantity, (double)firstLine.UnitCost);
@@ -125,11 +126,12 @@ namespace SDK_Test
                         OrderDate = transactionDate,
                         DueDate = transactionDate,
                         DeliveryDate = transactionDate,
-                        Description = Trim("MES RTS " + request.OriginalGrnReference, 50),
+                        Description = BuildDescription(request),
                         ExternalOrderNo = Trim(request.ReturnReference, 50),
+                        SupplierInvoiceNo = Trim(request.SupplierInvoiceNo, 50),
                         MessageLine1 = Trim("MES RTS " + request.OriginalGrnReference, 50),
                         MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
-                        MessageLine3 = Trim(request.Reason, 50)
+                        MessageLine3 = BuildOrderAndReason(request)
                     };
 
                     foreach (var line in request.Lines)
@@ -225,6 +227,22 @@ namespace SDK_Test
             if (string.IsNullOrWhiteSpace(value)) return "";
             var trimmed = value.Trim();
             return trimmed.Length <= maxLength ? trimmed : trimmed.Substring(0, maxLength);
+        }
+
+        private static string BuildDescription(ReturnToSupplierValidationRequest request)
+        {
+            var description = "MES RTS " + request.OriginalGrnReference;
+            if (!string.IsNullOrWhiteSpace(request.SupplierOrderNo))
+                description += " PO " + request.SupplierOrderNo;
+            return Trim(description, 50);
+        }
+
+        private static string BuildOrderAndReason(ReturnToSupplierValidationRequest request)
+        {
+            var reference = string.IsNullOrWhiteSpace(request.SupplierOrderNo)
+                ? request.Reason
+                : "PO " + request.SupplierOrderNo + " | " + request.Reason;
+            return Trim(reference, 50);
         }
     }
 }

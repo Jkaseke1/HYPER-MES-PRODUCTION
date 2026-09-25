@@ -9,6 +9,8 @@ namespace SDK_Test
         public int SupplierAccountID { get; set; }
         public string OriginalGrnReference { get; set; }
         public string OriginalSageGrvNumber { get; set; }
+        public string SupplierInvoiceNo { get; set; }
+        public string SupplierOrderNo { get; set; }
         public string Reason { get; set; }
         public DateTime? TransactionDate { get; set; }
         public ReturnToSupplierLineRequest[] Lines { get; set; }
