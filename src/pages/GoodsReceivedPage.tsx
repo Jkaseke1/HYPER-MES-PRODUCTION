@@ -1832,7 +1832,7 @@ export default function GoodsReceivedPage() {
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
                   <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Estimated Value</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Estimated Total Before VAT</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">${totalReceivedValue.toFixed(2)}</p>
                   </div>
 
@@ -2237,7 +2237,7 @@ export default function GoodsReceivedPage() {
                   <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">{viewItems.length} item{viewItems.length !== 1 ? 's' : ''}</span>
                 </div>
 
-                <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-teal-200 bg-teal-50/50 p-3 md:grid-cols-5">
+                <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-teal-200 bg-teal-50/50 p-3 md:grid-cols-6">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">VAT Treatment</p>
                     <p className="mt-1 text-xs font-bold text-slate-900">{viewedVatLabel}</p>
@@ -2251,11 +2251,15 @@ export default function GoodsReceivedPage() {
                     <p className="mt-1 text-xs font-bold text-slate-900">{viewedVatRate.toFixed(2)}%</p>
                   </div>
                   <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Exclusive Total</p>
+                    <p className="mt-1 text-xs font-bold text-slate-900">${formatMoney(viewedNetTotal)}</p>
+                  </div>
+                  <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">VAT Amount</p>
                     <p className="mt-1 text-xs font-bold text-slate-900">${formatMoney(viewedVatAmount)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Invoice Total</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Inclusive Total</p>
                     <p className="mt-1 text-xs font-bold text-slate-900">${formatMoney(viewedInvoiceTotal)}</p>
                   </div>
                 </div>
