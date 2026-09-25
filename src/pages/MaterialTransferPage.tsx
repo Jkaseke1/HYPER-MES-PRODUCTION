@@ -47,6 +47,18 @@ interface SageTransferSyncLog {
   created_at: string;
 }
 
+function withClientTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([Promise.resolve(operation), timeout])
+    .finally(() => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    });
+}
+
 function getSageSyncText(log?: SageTransferSyncLog) {
   if (!log) return 'Not queued';
   if (log.status === 'success') return 'Posted to Sage';
@@ -278,19 +290,28 @@ export default function MaterialTransferPage() {
     const uniqueMaterialIds = [...new Set(materialIds.filter(Boolean))];
     setRefreshingTransferStock(true);
     try {
-      const { data: refreshLogId, error: refreshError } = await supabase.rpc('request_material_transfer_sage_refresh', {
-        p_material_ids: uniqueMaterialIds,
-      });
+      const { data: refreshLogId, error: refreshError } = await withClientTimeout(
+        supabase.rpc('request_material_transfer_sage_refresh', {
+          p_material_ids: uniqueMaterialIds,
+        }),
+        12_000,
+        'Could not start the live Sage stock check within 12 seconds. Check the connection and try again.',
+      );
       if (refreshError) throw refreshError;
+      if (!refreshLogId) throw new Error('PlantControl did not return a Sage stock refresh reference. No transfer was created.');
 
       const timeoutAt = Date.now() + 30_000;
       let refreshCompleted = false;
       while (Date.now() < timeoutAt) {
-        const { data: refreshLog, error: statusError } = await supabase
-          .from('sync_log')
-          .select('status, message')
-          .eq('id', refreshLogId)
-          .maybeSingle();
+        const { data: refreshLog, error: statusError } = await withClientTimeout(
+          supabase
+            .from('sync_log')
+            .select('status, message')
+            .eq('id', refreshLogId)
+            .maybeSingle(),
+          6_000,
+          'Could not read the Sage stock-check status. Check the connection and try again.',
+        );
         if (statusError) throw statusError;
         if (refreshLog?.status === 'success') {
           refreshCompleted = true;
@@ -301,11 +322,15 @@ export default function MaterialTransferPage() {
       }
       if (!refreshCompleted) throw new Error('Live Sage stock refresh did not complete within 30 seconds. No transfer was created.');
 
-      const { data: refreshedBalances, error: balanceError } = await supabase
-        .from('sage_stock_balances')
-        .select('raw_material_id, quantity, last_synced_at')
-        .eq('warehouse_id', 18)
-        .in('raw_material_id', uniqueMaterialIds);
+      const { data: refreshedBalances, error: balanceError } = await withClientTimeout(
+        supabase
+          .from('sage_stock_balances')
+          .select('raw_material_id, quantity, last_synced_at')
+          .eq('warehouse_id', 18)
+          .in('raw_material_id', uniqueMaterialIds),
+        8_000,
+        'Sage refreshed the stock, but PlantControl could not read the new balances. Try again.',
+      );
       if (balanceError) throw balanceError;
       if ((refreshedBalances || []).length !== uniqueMaterialIds.length) {
         throw new Error('Sage did not return a current RM balance for every selected material.');
@@ -320,7 +345,9 @@ export default function MaterialTransferPage() {
         }
         freshBalances.set(balance.raw_material_id, Number(balance.quantity || 0));
       });
-      await fetchData(true);
+      // Refreshing the background register must not keep the transfer button
+      // disabled after the verified balances have already been returned.
+      void fetchData(true);
       return freshBalances;
     } finally {
       setRefreshingTransferStock(false);
