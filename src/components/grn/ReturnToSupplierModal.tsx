@@ -60,8 +60,22 @@ export default function ReturnToSupplierModal({ open, onOpenChange, grn, items, 
     }
     setSaving(true);
     try {
+      // Re-read the current TEST GRN immediately before creating the RTS.
+      // The goods-received page may be backed by cached list data; using the
+      // current database id/status prevents an old cached row from being
+      // passed to the approval RPC.
+      const { data: currentGrn, error: currentGrnError } = await supabase
+        .from('goods_received_notes')
+        .select('id, grn_number, status')
+        .eq('grn_number', grn.grn_number)
+        .single();
+      if (currentGrnError) throw currentGrnError;
+      if (currentGrn.status !== 'approved') {
+        throw new Error('Only approved GRNs can be returned to supplier.');
+      }
+
       const { error } = await supabase.rpc('request_grn_return', {
-        p_grn_id: grn.id,
+        p_grn_id: currentGrn.id,
         p_reason: reason,
         p_lines: lines,
       });
