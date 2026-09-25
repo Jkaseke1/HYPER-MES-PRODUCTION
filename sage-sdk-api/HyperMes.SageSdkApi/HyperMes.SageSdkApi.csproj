@@ -85,6 +85,8 @@
     <Compile Include="ManufacturingProcessRequest.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ReturnToSupplierController.cs" />
+    <Compile Include="ReturnToSupplierRequest.cs" />
     <Compile Include="SdkConnectionController.cs" />
     <Compile Include="SageRuntime.cs" />
     <Compile Include="SdkSession.cs" />

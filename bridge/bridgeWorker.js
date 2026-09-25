@@ -5,6 +5,7 @@
 const { supabase, DRY_RUN } = require('./lib/db');
 const { handleGoodsReceipt }  = require('./goodsReceiptAuto');
 const { handleSupplierReturn } = require('./supplierReturnAuto');
+const { handleReturnToSupplier } = require('./returnToSupplierAuto');
 const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
@@ -238,6 +239,7 @@ function postedStockCodes(eventType, details) {
   if (eventType === 'material_transfer_to_production') return [details?.sdkTransfer?.itemCode].filter(Boolean);
   if (eventType === 'materials_issued') return (details?.sdkMaterialIssue?.lines || []).map((line) => line.itemCode).filter(Boolean);
   if (eventType === 'grn_confirmed') return (details?.sdkGoodsReceipt?.lines || []).map((line) => line.itemCode).filter(Boolean);
+  if (eventType === 'return_to_supplier_requested') return (details?.sdkReturnToSupplier?.lines || []).map((line) => line.itemCode).filter(Boolean);
   return [];
 }
 
@@ -353,7 +355,7 @@ async function processPendingEvents() {
           .eq('status', 'processing');
       }
 
-      if (event.event_type === 'supplier_return') {
+      if (event.event_type === 'supplier_return' || event.event_type === 'return_to_supplier_requested') {
         await supabase
           .from('sync_log')
           .update({ message: 'Posting RTS to Sage', updated_at: new Date().toISOString() })
@@ -383,6 +385,9 @@ async function processPendingEvents() {
           break;
         case 'supplier_return':
           handlerResult = await handleSupplierReturn(event);
+          break;
+        case 'return_to_supplier_requested':
+          handlerResult = await handleReturnToSupplier(event);
           break;
         case 'materials_issued':
           handlerResult = await handleGoodsIssue(event);
