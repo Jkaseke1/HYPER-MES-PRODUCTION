@@ -79,6 +79,15 @@ function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
   return storedUnit || 'kg';
 }
 
+const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; tone: string }> = {
+  pending_finance: { label: 'Awaiting Finance approval', description: 'Request recorded. No Sage transaction has been queued.', tone: 'amber' },
+  approved: { label: 'Approved - waiting for Sage bridge', description: 'Finance approved the return. PlantControl is waiting for the Sage bridge to collect it.', tone: 'blue' },
+  processing: { label: 'Posting to Sage', description: 'The bridge is submitting the return to Sage. Do not create another RTS.', tone: 'blue' },
+  posted: { label: 'Posted to Sage', description: 'Sage confirmed the supplier return. This GRN is locked against another RTS.', tone: 'emerald' },
+  failed: { label: 'Sage posting failed', description: 'Sage rejected the return. Finance must review the recorded error before retrying.', tone: 'rose' },
+  cancelled: { label: 'Cancelled', description: 'This return request was cancelled before Sage posting.', tone: 'slate' },
+};
+
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
@@ -555,6 +564,27 @@ export default function GoodsReceivedPage() {
     setViewRts(rtsData || null);
     setViewModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!viewModalOpen || !viewing?.id) return;
+    let active = true;
+    const refreshRts = async () => {
+      const { data } = await supabase
+        .from('return_to_supplier_requests')
+        .select('id, rts_number, status, reason, sage_rts_number, created_at, approved_at, posted_at')
+        .eq('original_grn_id', viewing.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (active) setViewRts(data || null);
+    };
+    void refreshRts();
+    const intervalId = window.setInterval(refreshRts, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [viewModalOpen, viewing?.id]);
 
   const openGrnCorrection = () => {
     if (!viewing || !canManageGrnCorrections) return;
@@ -1947,17 +1977,11 @@ export default function GoodsReceivedPage() {
                     {viewing.status}
                   </Badge>
                 )}
-                {viewRts && (
-                  <Badge className={`text-xs px-3 py-1 capitalize ${
-                    viewRts.status === 'posted'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : viewRts.status === 'failed'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    RTS: {viewRts.status.replaceAll('_', ' ')}
-                  </Badge>
-                )}
+                {viewRts && (() => {
+                  const detail = RTS_STATUS_DETAILS[viewRts.status] || RTS_STATUS_DETAILS.processing;
+                  const tone = detail.tone === 'emerald' ? 'bg-emerald-100 text-emerald-800' : detail.tone === 'rose' ? 'bg-rose-100 text-rose-800' : detail.tone === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800';
+                  return <Badge className={`text-xs px-3 py-1 ${tone}`}>RTS: {detail.label}</Badge>;
+                })()}
                 {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && (
                   <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
@@ -1976,7 +2000,7 @@ export default function GoodsReceivedPage() {
                     className="border border-amber-300 bg-amber-50 text-amber-800 opacity-100"
                     title="This GRN already has an RTS request and cannot be processed twice"
                   >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> RTS {viewRts.status.replaceAll('_', ' ')}
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> RTS status
                   </Button>
                 )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
@@ -2009,21 +2033,41 @@ export default function GoodsReceivedPage() {
             </div>
           )}
 
-          {viewRts && (
-            <div className="mx-5 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Return to Supplier</p>
-                <p className="text-xs font-semibold text-amber-900">{viewRts.rts_number} · {viewRts.status.replaceAll('_', ' ')}</p>
+          {viewRts && (() => {
+            const detail = RTS_STATUS_DETAILS[viewRts.status] || RTS_STATUS_DETAILS.processing;
+            const theme = detail.tone === 'emerald' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : detail.tone === 'rose' ? 'border-rose-200 bg-rose-50 text-rose-900' : detail.tone === 'blue' ? 'border-blue-200 bg-blue-50 text-blue-900' : 'border-amber-200 bg-amber-50 text-amber-900';
+            const marker = detail.tone === 'emerald' ? 'bg-emerald-600' : detail.tone === 'rose' ? 'bg-rose-600' : detail.tone === 'blue' ? 'bg-blue-600' : 'bg-amber-500';
+            const stages = [
+              { label: 'Requested', complete: Boolean(viewRts.created_at) },
+              { label: 'Finance approved', complete: Boolean(viewRts.approved_at) },
+              { label: 'Queued to Sage', complete: ['approved', 'processing', 'posted'].includes(viewRts.status) },
+              { label: 'Sage posted', complete: viewRts.status === 'posted' },
+            ];
+            return (
+              <div className={`mx-5 mt-2 rounded-lg border px-4 py-3 ${theme}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">Return to Supplier status</p>
+                    <p className="mt-0.5 text-sm font-bold">{detail.label}</p>
+                    <p className="mt-1 text-xs opacity-80">{detail.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-xs font-bold">{viewRts.rts_number}</p>
+                    {viewRts.sage_rts_number && <p className="mt-1 text-xs font-bold">Sage RTS: {viewRts.sage_rts_number}</p>}
+                    {viewRts.posted_at && <p className="mt-1 text-[10px] opacity-70">Posted {format(new Date(viewRts.posted_at), 'PP p')}</p>}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {stages.map((stage) => (
+                    <div key={stage.label} className="flex items-center gap-2 text-[10px] font-semibold">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${stage.complete ? marker : 'bg-slate-300'}`} />
+                      <span>{stage.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-[11px] text-amber-800">
-                {viewRts.status === 'pending_finance'
-                  ? 'Waiting for Finance approval. No Sage reversal has been posted.'
-                  : viewRts.status === 'posted'
-                    ? 'Posted successfully. This GRN cannot be processed again.'
-                    : 'Finance-controlled reversal in progress.'}
-              </p>
-            </div>
-          )}
+            );
+          })()}
           {viewing && !editingFinanceCosts && viewing.status === 'pending_costing' && canCompleteGrnCosting && (
             <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-orange-200 bg-orange-50 px-5 py-3">
               <div>
