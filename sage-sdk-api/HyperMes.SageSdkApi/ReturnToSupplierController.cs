@@ -144,6 +144,9 @@ namespace SDK_Test
                     }
 
                     returnToSupplier.Process();
+                    // Evolution may not populate the in-memory invoice number for an RTS.
+                    // Read the persisted document back through its immutable MES reference.
+                    var persistedReturnNumber = FindExistingReturn(request.ReturnReference);
                     return Ok(new
                     {
                         status = "posted",
@@ -151,7 +154,9 @@ namespace SDK_Test
                         companyDatabase = SageRuntime.CompanyDatabase,
                         posted = true,
                         returnReference = request.ReturnReference,
-                        returnNumber = returnToSupplier.InvoiceNumber,
+                        returnNumber = !string.IsNullOrWhiteSpace(persistedReturnNumber)
+                            ? persistedReturnNumber
+                            : returnToSupplier.InvoiceNumber,
                         originalGrnReference = request.OriginalGrnReference,
                         originalSageGrvNumber = request.OriginalSageGrvNumber,
                         message = "Return to Supplier posted to Sage."

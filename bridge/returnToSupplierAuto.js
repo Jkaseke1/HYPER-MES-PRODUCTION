@@ -30,7 +30,7 @@ function postJson(urlString, body) {
 
 async function handleReturnToSupplier(event) {
   const { data: rts, error } = await supabase.from('return_to_supplier_requests').select(`
-    id, rts_number, original_grn_number, supplier_id, warehouse_id, reason, status,
+    id, rts_number, original_grn_id, original_grn_number, supplier_id, warehouse_id, reason, status,
     suppliers (sage_code, code), warehouses (code),
     return_to_supplier_items (quantity, unit_cost, batch_number, raw_materials (sage_code, code))
   `).eq('id', event.reference_id).single();
