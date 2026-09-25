@@ -79,6 +79,12 @@ function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
   return storedUnit || 'kg';
 }
 
+interface ReturnToSupplierStatus {
+  status: string;
+  rts_number?: string | null;
+  sage_rts_number?: string | null;
+}
+
 const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; tone: string }> = {
   pending_finance: { label: 'Awaiting Finance approval', description: 'Request recorded. No Sage transaction has been queued.', tone: 'amber' },
   approved: { label: 'Approved - waiting for Sage bridge', description: 'Finance approved the return. PlantControl is waiting for the Sage bridge to collect it.', tone: 'blue' },
@@ -206,6 +212,7 @@ export default function GoodsReceivedPage() {
 
   const [tonnageByGrnId, setTonnageByGrnId] = useState<Record<string, number>>({});
   const [syncByGrnId, setSyncByGrnId] = useState<Record<string, SageSyncStatus>>({});
+  const [rtsByGrnId, setRtsByGrnId] = useState<Record<string, ReturnToSupplierStatus>>({});
   const notifiedSyncRef = useRef<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [retryingSagePost, setRetryingSagePost] = useState(false);
@@ -264,6 +271,7 @@ export default function GoodsReceivedPage() {
         setGrns(grnsRes.data as any);
         cacheData('goods_received_notes', grnsRes.data);
         await fetchSageSyncStatuses(grnsRes.data as any[], false);
+        await fetchRtsStatuses(grnsRes.data as any[]);
         const grnIds = grnsRes.data.map((row: any) => row.id);
         const { data: grnItems } = grnIds.length
           ? await supabase.from('grn_items').select('grn_id, received_qty').in('grn_id', grnIds)
@@ -297,6 +305,7 @@ export default function GoodsReceivedPage() {
         if (cachedGrns) {
           setGrns(cachedGrns);
           await fetchSageSyncStatuses(cachedGrns as any[], false);
+          await fetchRtsStatuses(cachedGrns as any[]);
         }
         if (cachedSuppliers) setSuppliers(cachedSuppliers);
         if (cachedMaterials) setMaterials(cachedMaterials);
@@ -312,6 +321,7 @@ export default function GoodsReceivedPage() {
       if (cachedGrns) {
         setGrns(cachedGrns);
         await fetchSageSyncStatuses(cachedGrns as any[], false);
+        await fetchRtsStatuses(cachedGrns as any[]);
       }
       if (cachedSuppliers) setSuppliers(cachedSuppliers);
       if (cachedMaterials) setMaterials(cachedMaterials);
@@ -327,7 +337,7 @@ export default function GoodsReceivedPage() {
 
   useRealtimeRefresh(
     'goods-received-live',
-    ['goods_received_notes', 'grn_items', 'weigh_bridge_tickets', 'sync_log'],
+    ['goods_received_notes', 'grn_items', 'weigh_bridge_tickets', 'sync_log', 'return_to_supplier_requests'],
     () => {
       // Do not replace an operator's active capture or review with live data.
       if (modalOpen || viewModalOpen) return;
@@ -399,6 +409,32 @@ export default function GoodsReceivedPage() {
         toast.error(`${grnNumber} Sage posting failed`);
       }
     });
+  }
+
+  async function fetchRtsStatuses(grnRows: any[]) {
+    const grnIds = (grnRows || []).map((grn) => grn.id).filter(Boolean);
+    if (grnIds.length === 0) {
+      setRtsByGrnId({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('return_to_supplier_requests')
+      .select('original_grn_id, status, rts_number, sage_rts_number')
+      .in('original_grn_id', grnIds);
+
+    if (error) {
+      // RTS records are Finance-controlled. Users without Finance access keep
+      // their normal GRN workflow status and receive no RTS detail.
+      if (error.code !== '42501') console.warn('Failed to load RTS statuses:', error.message);
+      return;
+    }
+
+    const latestByGrn: Record<string, ReturnToSupplierStatus> = {};
+    (data || []).forEach((row: any) => {
+      latestByGrn[row.original_grn_id] = row;
+    });
+    setRtsByGrnId(latestByGrn);
   }
 
   const generateGRNNumber = async () => {
@@ -781,6 +817,27 @@ export default function GoodsReceivedPage() {
     }
   };
 
+  const getGrnWorkflowBadge = (grn: any) => {
+    const rts = rtsByGrnId[grn.id];
+    if (rts?.status === 'posted') {
+      return (
+        <Badge className="border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 font-semibold text-emerald-700 hover:bg-emerald-500/20" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
+          <CheckCircle className="mr-1 h-3 w-3" /> RTS completed
+        </Badge>
+      );
+    }
+
+    if (rts?.status === 'failed') {
+      return <Badge className="border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 font-semibold text-rose-700 hover:bg-rose-500/20">RTS failed</Badge>;
+    }
+
+    if (rts && ['pending_finance', 'approved', 'processing'].includes(rts.status)) {
+      return <Badge className="border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 font-semibold text-amber-700 hover:bg-amber-500/20">RTS in progress</Badge>;
+    }
+
+    return getStatusBadge(grn.status);
+  };
+
   const getSageGrvNumber = (sync?: SageSyncStatus) => {
     if (!sync?.sage_response) return '';
     return sync.sage_response.grvNumber ||
@@ -1119,7 +1176,7 @@ export default function GoodsReceivedPage() {
                   <TableHead className="w-[105px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Weighbridge</TableHead>
                   <TableHead className="w-[108px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
                   <TableHead className="w-[100px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
-                  <TableHead className="w-[130px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Workflow</TableHead>
+                  <TableHead className="w-[145px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN status</TableHead>
                   <TableHead className="w-[190px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
                   <TableHead className="w-[60px] px-3 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
                 </TableRow>
@@ -1156,7 +1213,7 @@ export default function GoodsReceivedPage() {
                       <TableCell className="px-3 py-3 font-mono text-xs text-slate-600">{grnWeighbridgeLabel(grn) || <span className="text-slate-300">—</span>}</TableCell>
                       <TableCell className="px-3 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
                       <TableCell className="px-3 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
-                      <TableCell className="whitespace-nowrap px-3 py-3">{getStatusBadge(grn.status)}</TableCell>
+                      <TableCell className="whitespace-nowrap px-3 py-3">{getGrnWorkflowBadge(grn)}</TableCell>
                       <TableCell className="whitespace-nowrap px-3 py-3">{getSageBadge(grn.id)}</TableCell>
                       <TableCell className="px-3 py-3 text-right">
                         <Button
@@ -1196,7 +1253,7 @@ export default function GoodsReceivedPage() {
                         </Badge>
                       )}
                     </div>
-                    {getStatusBadge(grn.status)}
+                    {getGrnWorkflowBadge(grn)}
                   </div>
                   <div className="flex items-center justify-between rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Sage</span>
