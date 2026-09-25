@@ -1,5 +1,7 @@
 using Pastel.Evolution;
 using System;
+using System.Data;
+using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Web.Http;
@@ -97,6 +99,23 @@ namespace SDK_Test
                 lock (SdkSession.OperationLock)
                 {
                     SdkSession.EnsureConnected();
+                    var existingReturnNumber = FindExistingReturn(request.ReturnReference);
+                    if (!string.IsNullOrWhiteSpace(existingReturnNumber))
+                    {
+                        return Ok(new
+                        {
+                            status = "already-posted",
+                            environment = SageRuntime.EnvironmentName,
+                            companyDatabase = SageRuntime.CompanyDatabase,
+                            posted = true,
+                            returnReference = request.ReturnReference,
+                            returnNumber = existingReturnNumber,
+                            originalGrnReference = request.OriginalGrnReference,
+                            originalSageGrvNumber = request.OriginalSageGrvNumber,
+                            message = "Sage already contains this RTS reference. No duplicate was created."
+                        });
+                    }
+
                     var transactionDate = request.TransactionDate ?? DateTime.Today;
                     var supplier = new Supplier(request.SupplierCode.Trim());
                     var returnToSupplier = new ReturnToSupplier
@@ -155,6 +174,45 @@ namespace SDK_Test
             if (string.IsNullOrWhiteSpace(request.OriginalGrnReference)) return "OriginalGrnReference is required.";
             if (string.IsNullOrWhiteSpace(request.Reason)) return "Reason is required.";
             return null;
+        }
+
+        // ExtOrderNum is stamped with the unique PlantControl RTS reference.
+        // This remains valid after an SDK restart, unlike in-memory duplicate guards.
+        private static string FindExistingReturn(string returnReference)
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand(@"
+                SELECT TOP 1 COALESCE(NULLIF(InvNumber, ''), NULLIF(GrvNumber, ''))
+                FROM dbo.InvNum
+                WHERE ExtOrderNum = @Reference
+                ORDER BY AutoIndex DESC;", connection))
+            {
+                command.Parameters.Add("@Reference", SqlDbType.VarChar, 50).Value = returnReference.Trim();
+                connection.Open();
+                return command.ExecuteScalar() as string;
+            }
+        }
+
+        private static string GetCompanyConnectionString()
+        {
+            var builder = new SqlConnectionStringBuilder
+            {
+                DataSource = GetRequiredSetting("HYPER_SAGE_COMPANY_SERVER"),
+                InitialCatalog = GetRequiredSetting("HYPER_SAGE_COMPANY_DATABASE"),
+                UserID = GetRequiredSetting("HYPER_SAGE_SQL_USERNAME"),
+                Password = GetRequiredSetting("HYPER_SAGE_SQL_PASSWORD"),
+                ConnectTimeout = 30,
+                TrustServerCertificate = true
+            };
+            return builder.ConnectionString;
+        }
+
+        private static string GetRequiredSetting(string name)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Missing Windows environment variable: " + name);
+            return value;
         }
 
         private static string Trim(string value, int maxLength)

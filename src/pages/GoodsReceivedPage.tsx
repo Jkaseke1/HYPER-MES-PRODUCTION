@@ -93,6 +93,7 @@ export default function GoodsReceivedPage() {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
+  const [viewRts, setViewRts] = useState<any | null>(null);
   const canEditFinanceCosts = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   const [editingFinanceCosts, setEditingFinanceCosts] = useState(false);
   const [savingFinanceCosts, setSavingFinanceCosts] = useState(false);
@@ -537,11 +538,21 @@ export default function GoodsReceivedPage() {
   const handleViewGRN = async (grn: GoodsReceivedNote) => {
     setEditingFinanceCosts(false);
     setViewing(grn);
-    const { data } = await supabase
-      .from('grn_items')
-      .select('*, raw_materials(code, name, unit)')
-      .eq('grn_id', grn.id);
-    setViewItems(data || []);
+    const [{ data: itemData }, { data: rtsData }] = await Promise.all([
+      supabase
+        .from('grn_items')
+        .select('*, raw_materials(code, name, unit)')
+        .eq('grn_id', grn.id),
+      supabase
+        .from('return_to_supplier_requests')
+        .select('id, rts_number, status, reason, sage_rts_number, created_at, approved_at, posted_at')
+        .eq('original_grn_id', grn.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    setViewItems(itemData || []);
+    setViewRts(rtsData || null);
     setViewModalOpen(true);
   };
 
@@ -1936,14 +1947,36 @@ export default function GoodsReceivedPage() {
                     {viewing.status}
                   </Badge>
                 )}
+                {viewRts && (
+                  <Badge className={`text-xs px-3 py-1 capitalize ${
+                    viewRts.status === 'posted'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : viewRts.status === 'failed'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    RTS: {viewRts.status.replaceAll('_', ' ')}
+                  </Badge>
+                )}
                 {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && (
                   <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
                   </Button>
                 )}
-                {viewing && canManageReturns && viewing.status === 'approved' && selectedSync?.status === 'success' && (
+                {viewing && canManageReturns && viewing.status === 'approved' && selectedSync?.status === 'success' && !viewRts && (
                   <Button type="button" size="sm" onClick={() => setShowReturnToSupplierModal(true)} className="bg-rose-700 text-white hover:bg-rose-800" title="Create a Finance-controlled return to supplier">
                     <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Return to Supplier
+                  </Button>
+                )}
+                {canManageReturns && viewRts && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    className="border border-amber-300 bg-amber-50 text-amber-800 opacity-100"
+                    title="This GRN already has an RTS request and cannot be processed twice"
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> RTS {viewRts.status.replaceAll('_', ' ')}
                   </Button>
                 )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
@@ -1973,6 +2006,22 @@ export default function GoodsReceivedPage() {
                   {savingFinanceCosts && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Unit Costs
                 </Button>
               </div> : <Button type="button" onClick={() => { setOriginalFinanceItems(viewItems.map(item => ({ ...item }))); setEditingFinanceCosts(true); }} className="bg-teal-700 text-white hover:bg-teal-800">Edit Unit Costs</Button>}
+            </div>
+          )}
+
+          {viewRts && (
+            <div className="mx-5 mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Return to Supplier</p>
+                <p className="text-xs font-semibold text-amber-900">{viewRts.rts_number} · {viewRts.status.replaceAll('_', ' ')}</p>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                {viewRts.status === 'pending_finance'
+                  ? 'Waiting for Finance approval. No Sage reversal has been posted.'
+                  : viewRts.status === 'posted'
+                    ? 'Posted successfully. This GRN cannot be processed again.'
+                    : 'Finance-controlled reversal in progress.'}
+              </p>
             </div>
           )}
           {viewing && !editingFinanceCosts && viewing.status === 'pending_costing' && canCompleteGrnCosting && (
@@ -2316,7 +2365,19 @@ export default function GoodsReceivedPage() {
         grn={viewing}
         items={viewItems}
         sageGrvNumber={selectedGrvNumber}
-        onCreated={() => fetchData(false)}
+        onCreated={async () => {
+          await fetchData(false);
+          if (viewing?.id) {
+            const { data } = await supabase
+              .from('return_to_supplier_requests')
+              .select('id, rts_number, status, reason, sage_rts_number, created_at, approved_at, posted_at')
+              .eq('original_grn_id', viewing.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            setViewRts(data || null);
+          }
+        }}
       />
 
       <Dialog open={adminSupplierCorrectionOpen} onOpenChange={setAdminSupplierCorrectionOpen}>
