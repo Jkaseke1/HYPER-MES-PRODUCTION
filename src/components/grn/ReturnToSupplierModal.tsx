@@ -93,42 +93,59 @@ export default function ReturnToSupplierModal({ open, onOpenChange, grn, items, 
   };
 
   const isPosted = existing?.status === 'posted';
+  const selectedQuantity = Object.values(quantities).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const selectedValue = items.reduce((sum, item) => sum + (Number(quantities[item.id] || 0) * Number(item.unit_cost || 0)), 0);
+  const statusLabel = existing?.status?.replaceAll('_', ' ');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><RotateCcw className="h-5 w-5 text-rose-600" /> Return to Supplier</DialogTitle>
-          <DialogDescription>
-            Create a separate RTS for approved GRN <span className="font-mono font-semibold">{grn?.grn_number}</span>. The original GRN will not be changed.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl overflow-hidden border-0 bg-slate-50 p-0 shadow-2xl">
+        <div className="bg-slate-950 px-6 py-5 text-white">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-rose-200"><RotateCcw className="h-3.5 w-3.5" /> Finance control</div>
+                <DialogTitle className="text-xl font-bold tracking-tight text-white">Return to Supplier</DialogTitle>
+                <DialogDescription className="mt-1 text-sm text-slate-300">Create a controlled reversal for <span className="font-mono font-semibold text-white">{grn?.grn_number}</span>. The original GRN remains unchanged.</DialogDescription>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sage GRV</p>
+                <p className="mt-1 font-mono text-sm font-bold text-emerald-300">{sageGrvNumber || '-'}</p>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <div className="flex gap-2"><AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" /><p>Sage GRV <span className="font-mono font-semibold">{sageGrvNumber || '-'}</span> is already posted. Only returned quantities will be reversed.</p></div>
+        <div className="max-h-[72vh] space-y-5 overflow-y-auto p-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier</p><p className="mt-1 truncate text-sm font-bold text-slate-900">{grn?.suppliers?.name || 'Supplier'}</p></div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Original received</p><p className="mt-1 text-sm font-bold text-slate-900">{items.reduce((sum, item) => sum + Number(item.received_qty || 0), 0).toLocaleString()} <span className="text-xs font-medium text-slate-500">kg</span></p></div>
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Return value</p><p className="mt-1 text-sm font-bold text-rose-800">${selectedValue.toFixed(2)}</p></div>
           </div>
 
+          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><p><span className="font-bold">Two-step control.</span> First create the RTS for review. Sage stock and supplier balances change only after Finance approves it.</p></div>
+
           {existing ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
-              <div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">RTS request</span><span className="font-mono font-bold text-slate-900">{existing.rts_number}</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-slate-500">Status:</span><span className="font-semibold capitalize">{existing.status.replace('_', ' ')}</span>{isPosted && <CheckCircle className="h-4 w-4 text-emerald-600" />}</div>
-              <p className="text-sm text-slate-700">{existing.reason}</p>
-              {existing.status === 'pending_finance' && canApprove && <Button onClick={approveRequest} disabled={approving} className="bg-rose-700 text-white hover:bg-rose-800">{approving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Approve & queue Sage RTS</Button>}
-              {existing.status === 'pending_finance' && !canApprove && <p className="text-xs text-amber-700">Waiting for Finance approval before Sage posting.</p>}
-              {existing.status === 'approved' || existing.status === 'processing' ? <p className="text-xs text-blue-700">Approved. The bridge will post this RTS to Sage.</p> : null}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Existing RTS request</p><p className="mt-1 font-mono text-lg font-bold text-slate-900">{existing.rts_number}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${isPosted ? 'bg-emerald-100 text-emerald-700' : existing.status === 'pending_finance' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{isPosted && <CheckCircle className="mr-1 inline h-3.5 w-3.5" />}{statusLabel}</span></div>
+              <div className="mt-4 rounded-xl bg-slate-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reason</p><p className="mt-1 text-sm leading-6 text-slate-700">{existing.reason}</p></div>
+              {existing.status === 'pending_finance' && canApprove && <Button onClick={approveRequest} disabled={approving} className="mt-4 w-full bg-rose-700 py-5 text-white hover:bg-rose-800">{approving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Approve & queue Sage RTS</Button>}
+              {existing.status === 'pending_finance' && !canApprove && <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">Waiting for Finance approval before Sage posting.</p>}
+              {existing.status === 'approved' || existing.status === 'processing' ? <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">Approved. The bridge will post this RTS to Sage.</p> : null}
             </div>
           ) : (
             <>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-800">Reason for return *</label>
-                <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain why the material is being returned" className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-bold text-slate-900">Reason for return <span className="text-rose-600">*</span></p><p className="mt-0.5 text-xs text-slate-500">This explanation is retained in the Finance audit trail.</p></div><span className="text-xs font-semibold text-slate-400">Required</span></div>
+                <textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="e.g. Damaged bags received during unloading" className="min-h-24 w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-rose-500 focus:bg-white focus:ring-2 focus:ring-rose-100" />
               </div>
-              <div className="rounded-lg border border-slate-200 overflow-hidden">
-                <div className="grid grid-cols-[1fr_130px_130px] gap-3 bg-slate-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500"><span>Material</span><span>Received</span><span>Return qty</span></div>
-                {items.map((item) => <div key={item.id} className="grid grid-cols-[1fr_130px_130px] items-center gap-3 border-t border-slate-100 px-3 py-3 text-sm"><div><p className="font-semibold text-slate-800">{item.raw_materials?.name || item.raw_materials?.code || item.raw_material_id}</p><p className="font-mono text-xs text-slate-500">{item.raw_materials?.code || ''}</p></div><span>{Number(item.received_qty).toLocaleString()} kg</span><input type="number" min="0" max={item.received_qty} step="0.01" value={quantities[item.id] || ''} onChange={(event) => setQuantities((current) => ({ ...current, [item.id]: event.target.value }))} className="rounded-md border border-slate-300 px-2 py-2" placeholder="0" /></div>)}
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4"><div><p className="text-sm font-bold text-slate-900">Material to return</p><p className="mt-0.5 text-xs text-slate-500">Enter only the quantity physically leaving the site.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{items.length} line{items.length === 1 ? '' : 's'}</span></div>
+                <div className="grid grid-cols-[1fr_120px_145px] gap-3 bg-slate-50 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><span>Material</span><span>Available</span><span>Return quantity</span></div>
+                {items.map((item) => <div key={item.id} className="grid grid-cols-[1fr_120px_145px] items-center gap-3 border-t border-slate-100 px-5 py-4"><div><p className="text-sm font-bold text-slate-900">{item.raw_materials?.name || item.raw_materials?.code || item.raw_material_id}</p><p className="mt-0.5 font-mono text-[11px] text-slate-500">{item.raw_materials?.code || ''}{item.batch_number ? ` · Batch ${item.batch_number}` : ''}</p></div><span className="text-sm font-semibold text-slate-600">{Number(item.received_qty).toLocaleString()} <span className="text-xs font-normal text-slate-400">kg</span></span><div className="relative"><input type="number" min="0" max={item.received_qty} step="0.01" value={quantities[item.id] || ''} onChange={(event) => setQuantities((current) => ({ ...current, [item.id]: event.target.value }))} className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 pr-10 text-right font-mono text-sm font-bold text-slate-900 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100" placeholder="0" /><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">kg</span></div></div>)}
+                <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3 text-sm"><span className="font-semibold text-slate-500">Selected for return</span><span className="font-mono font-bold text-rose-700">{selectedQuantity.toLocaleString()} kg</span></div>
               </div>
-              <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={createRequest} disabled={saving} className="bg-rose-700 text-white hover:bg-rose-800">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create RTS for Finance approval</Button></div>
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-1 sm:flex-row sm:items-center sm:justify-end"><Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl px-5">Cancel</Button><Button onClick={createRequest} disabled={saving || selectedQuantity <= 0} className="rounded-xl bg-rose-700 px-6 py-5 font-bold text-white shadow-lg shadow-rose-700/20 hover:bg-rose-800">{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Create RTS for Finance approval</Button></div>
             </>
           )}
         </div>
