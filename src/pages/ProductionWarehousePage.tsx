@@ -160,7 +160,7 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
         .in('status', ['in_buffer', 'received'])
         .order('created_at', { ascending: false })
         .limit(500),
