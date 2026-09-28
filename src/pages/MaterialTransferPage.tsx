@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw, Wheat } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -141,6 +141,7 @@ function SageMaterialPicker({
   onOpenChange: (open: boolean) => void;
   onSelect: (materialId: string) => void;
 }) {
+  const [category, setCategory] = useState<'all' | 'raw' | 'packaging'>('all');
   const selected = materials.find((material) => material.id === selectedMaterialId);
   const rawMaterials = materials
     .filter((material) => !isPackagingMaterial(material))
@@ -149,7 +150,7 @@ function SageMaterialPicker({
     .filter(isPackagingMaterial)
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-  const renderGroup = (heading: string, group: any[]) => (
+  const renderGroup = (heading: string, group: any[], Icon: typeof Package) => (
     <CommandGroup heading={heading}>
       {group.map((material) => {
         const hasSageRmSnapshot = Boolean(rmSyncedAt[material.id]);
@@ -173,7 +174,7 @@ function SageMaterialPicker({
             }}
             className="min-h-12 items-center px-3 py-2.5"
           >
-            <Package className="h-4 w-4 text-teal-700" />
+            <Icon className="h-4 w-4 text-teal-700" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-bold text-slate-900">{material.name}</span>
               <span className="block truncate font-mono text-[10px] text-slate-500">{material.code}</span>
@@ -188,7 +189,13 @@ function SageMaterialPicker({
   );
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setCategory('all');
+        onOpenChange(nextOpen);
+      }}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -212,11 +219,43 @@ function SageMaterialPicker({
       <PopoverContent align="start" className="w-[min(40rem,calc(100vw-2rem))] p-0">
         <Command>
           <CommandInput placeholder="Search by material name or Sage code..." />
-          <CommandList className="max-h-80">
+          <div className="grid grid-cols-3 gap-1 border-b bg-slate-50 p-2">
+            <button
+              type="button"
+              onClick={() => setCategory('all')}
+              aria-pressed={category === 'all'}
+              className={`inline-flex h-8 items-center justify-center gap-1 rounded px-2 text-[11px] font-bold transition-colors ${
+                category === 'all' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategory('raw')}
+              aria-pressed={category === 'raw'}
+              className={`inline-flex h-8 items-center justify-center gap-1 rounded px-2 text-[11px] font-bold transition-colors ${
+                category === 'raw' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Wheat className="h-3.5 w-3.5" /> Raw materials
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategory('packaging')}
+              aria-pressed={category === 'packaging'}
+              className={`inline-flex h-8 items-center justify-center gap-1 rounded px-2 text-[11px] font-bold transition-colors ${
+                category === 'packaging' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Package className="h-3.5 w-3.5" /> Packaging
+            </button>
+          </div>
+          <CommandList className="max-h-[22rem] overscroll-contain" onWheel={(event) => event.stopPropagation()}>
             <CommandEmpty>No matching Sage-linked material.</CommandEmpty>
-            {renderGroup('Raw materials', rawMaterials)}
-            <CommandSeparator />
-            {renderGroup('Packaging', packagingMaterials)}
+            {category !== 'packaging' && renderGroup('Raw materials', rawMaterials, Wheat)}
+            {category === 'all' && <CommandSeparator />}
+            {category !== 'raw' && renderGroup('Packaging', packagingMaterials, Package)}
           </CommandList>
         </Command>
       </PopoverContent>
