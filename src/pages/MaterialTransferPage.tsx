@@ -1018,10 +1018,13 @@ export default function MaterialTransferPage() {
                             <option value="">Select raw material</option>
                             {rawMaterials.map((mat) => {
                               const bal = rmWarehouseBalances[mat.id] ?? 0;
+                              const hasSageRmSnapshot = Boolean(rmWarehouseSyncedAt[mat.id]);
                               const usedOnAnotherLine = transferLines.some((otherLine) => otherLine.id !== line.id && otherLine.raw_material_id === mat.id);
                               return (
-                                <option key={mat.id} value={mat.id} disabled={usedOnAnotherLine}>
-                                  {mat.name} ({mat.code}) — transferable from Sage RM: {Math.max(0, bal - (bufferWarehouseBalances[mat.id] || 0)).toLocaleString()} {mat.unit}
+                                <option key={mat.id} value={mat.id} disabled={usedOnAnotherLine || !hasSageRmSnapshot}>
+                                  {mat.name} ({mat.code}) — {hasSageRmSnapshot
+                                    ? `transferable from Sage RM: ${Math.max(0, bal - (bufferWarehouseBalances[mat.id] || 0)).toLocaleString()} ${mat.unit}`
+                                    : 'Sage RM unavailable'}
                                 </option>
                               );
                             })}
