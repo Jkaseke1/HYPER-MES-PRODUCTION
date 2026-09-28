@@ -601,8 +601,7 @@ export default function ProductionWarehousePage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-sm font-bold text-slate-900">{bundle.key}</p>
-                          <span className="text-sm font-semibold text-slate-600">{bundle.purpose || 'Raw Materials to Production'}</span>
+                          <p className="font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
                           <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
                           <span className={`border px-2 py-0.5 text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
                         </div>
