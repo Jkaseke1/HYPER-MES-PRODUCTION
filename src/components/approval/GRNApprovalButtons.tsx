@@ -147,9 +147,10 @@ export default function GRNApprovalButtons({
   async function handleVatReview() {
     setProcessing(true);
     try {
+      const persistedVatMode = selectedVatMode === 'zero_rated' ? 'no_vat' : selectedVatMode;
       const { error } = await supabase.rpc('record_grn_vat_review', {
         p_grn_id: grnId,
-        p_vat_mode: selectedVatMode,
+        p_vat_mode: persistedVatMode,
         p_no_vat_treatment: selectedVatMode === 'no_vat' ? 'exempt' : selectedVatMode === 'zero_rated' ? 'zero_rated' : null,
       });
       if (error) throw error;

@@ -2147,9 +2147,15 @@ export default function GoodsReceivedPage() {
                 onApproved={() => { setViewModalOpen(false); fetchData(); }}
                 onRejected={() => { setViewModalOpen(false); fetchData(); }}
                 onTaxReviewed={(vatMode) => {
+                  const zeroRated = vatMode === 'zero_rated';
+                  const persistedVatMode = zeroRated ? 'no_vat' : vatMode;
                   setViewing((current) => current ? {
                     ...current,
-                    vat_mode: vatMode,
+                    vat_mode: persistedVatMode,
+                    vat_treatment: persistedVatMode === 'no_vat' ? (zeroRated ? 'zero_rated' : 'exempt') : 'taxable',
+                    vat_tax_type_id: persistedVatMode === 'no_vat' ? (zeroRated ? 6 : 7) : 9,
+                    vat_code: persistedVatMode === 'no_vat' ? (zeroRated ? '02' : '03') : '515',
+                    vat_rate: persistedVatMode === 'no_vat' ? 0 : 15.5,
                     vat_reviewed_at: new Date().toISOString(),
                   } as any : current);
                   fetchData();
