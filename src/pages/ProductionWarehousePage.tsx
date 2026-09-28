@@ -681,7 +681,7 @@ export default function ProductionWarehousePage() {
               </Link>
             )}
           </div>
-          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 lg:grid lg:grid-cols-[42px_minmax(100px,.9fr)_105px_132px_minmax(150px,1fr)_170px_130px_150px] lg:items-center lg:gap-3">
+          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 lg:grid lg:grid-cols-[42px_minmax(100px,.8fr)_115px_180px_minmax(120px,1fr)_170px_130px_150px] lg:items-center lg:gap-3">
             <span />
             <span>IST</span>
             <span>Materials</span>
@@ -709,7 +709,7 @@ export default function ProductionWarehousePage() {
                       : 'border-amber-200 bg-amber-50 text-amber-800';
               return (
                 <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[42px_minmax(100px,.9fr)_105px_132px_minmax(150px,1fr)_170px_130px_150px] lg:items-center">
+                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[42px_minmax(100px,.8fr)_115px_180px_minmax(120px,1fr)_170px_130px_150px] lg:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="incoming-expand-button flex h-8 w-8 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700" aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${bundle.purpose || 'incoming IST'}`}>
                       {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
@@ -717,7 +717,7 @@ export default function ProductionWarehousePage() {
                       <p className="truncate font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
                     </button>
                     <span className="incoming-material-count border border-amber-200 bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
-                    <span title={stage.detail} className={`incoming-status border px-2 py-0.5 text-center text-xs font-semibold ${stageClassName}`}>{stage.label}</span>
+                    <span title={stage.detail} className={`incoming-status min-w-0 whitespace-normal border px-2 py-0.5 text-center text-xs font-semibold leading-4 ${stageClassName}`}>{stage.label}</span>
                     <span className="inline-flex items-center gap-1.5 text-sm text-slate-600"><UserRound className="h-3.5 w-3.5 text-slate-400" />{bundle.requester}</span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
                     <div className="incoming-bundle-quantity text-right">
