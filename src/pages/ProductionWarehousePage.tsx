@@ -64,6 +64,19 @@ interface SageTransferStatus extends PendingTransfer {
   sync_updated_at: string;
 }
 
+interface IncomingStage {
+  label: string;
+  detail: string;
+  tone: 'amber' | 'blue' | 'emerald' | 'rose' | 'slate';
+  canReceive: boolean;
+}
+
+interface IncomingSyncStage {
+  sync_status: SageTransferStatus['sync_status'];
+  sync_message?: string | null;
+  sync_updated_at: string;
+}
+
 interface IncomingBundle {
   key: string;
   transfers: PendingTransfer[];
@@ -119,6 +132,8 @@ export default function ProductionWarehousePage() {
   const [thresholdDraft, setThresholdDraft] = useState<Record<string, string>>({});
   const [lastAlertSignature, setLastAlertSignature] = useState('');
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
+  const [bufferBalances, setBufferBalances] = useState<Record<string, number>>({});
+  const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
 
   async function fetchTransfers(silent = false) {
     if (!silent) setLoading(true);
@@ -127,7 +142,8 @@ export default function ProductionWarehousePage() {
       { data: wbData, error: wbError },
       { data: sagePdData, error: sagePdError },
       { data: incomingData, error: pendingError },
-      { data: settingsData, error: settingsError }
+      { data: settingsData, error: settingsError },
+      { data: bufferData, error: bufferError }
     ] = await Promise.all([
       supabase
         .from('stock_movements')
@@ -149,17 +165,56 @@ export default function ProductionWarehousePage() {
         .order('created_at', { ascending: false })
         .limit(500),
       supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
+      supabase
+        .from('warehouse_stock_balances')
+        .select('raw_material_id, quantity, warehouses!inner(code)')
+        .eq('warehouses.code', 'BUFFER'),
     ]);
     if (smError) console.error('Failed to load production movements:', smError);
     if (wbError) console.error('Failed to load production balances:', wbError);
     if (sagePdError) console.error('Failed to load Sage Production balances:', sagePdError);
     if (pendingError) console.error('Failed to load incoming production transfers:', pendingError);
     if (settingsError) console.error('Failed to load production stock thresholds:', settingsError);
+    if (bufferError) console.error('Failed to load production buffer balances:', bufferError);
 
     setTransfers((smData as any) || []);
     const nextIncomingTransfers = (incomingData as any) || [];
     setIncomingTransfers(nextIncomingTransfers);
     setPendingAcceptanceTransfers(nextIncomingTransfers.filter((transfer: PendingTransfer) => transfer.status === 'in_buffer'));
+
+    const nextBufferBalances: Record<string, number> = {};
+    (bufferData as any || []).forEach((balance: any) => {
+      nextBufferBalances[balance.raw_material_id] = Number(balance.quantity || 0);
+    });
+    setBufferBalances(nextBufferBalances);
+
+    const incomingTransferIds = nextIncomingTransfers.map((transfer: PendingTransfer) => transfer.id);
+    if (incomingTransferIds.length > 0) {
+      const { data: incomingSyncRows, error: incomingSyncError } = await supabase
+        .from('sync_log')
+        .select('id, reference_id, status, message, updated_at')
+        .eq('event_type', 'material_transfer_to_production')
+        .in('reference_id', incomingTransferIds)
+        .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
+        .order('updated_at', { ascending: false });
+      if (incomingSyncError) {
+        console.error('Failed to load incoming transfer stages:', incomingSyncError);
+      } else {
+        const nextIncomingSync: Record<string, IncomingSyncStage> = {};
+        (incomingSyncRows || []).forEach((row: any) => {
+          if (!nextIncomingSync[row.reference_id]) {
+            nextIncomingSync[row.reference_id] = {
+              sync_status: row.status,
+              sync_message: row.message,
+              sync_updated_at: row.updated_at,
+            };
+          }
+        });
+        setIncomingSyncByTransferId(nextIncomingSync);
+      }
+    } else {
+      setIncomingSyncByTransferId({});
+    }
 
     const { data: sageSyncRows, error: failedSyncError } = await supabase
       .from('sync_log')
@@ -355,6 +410,48 @@ export default function ProductionWarehousePage() {
     if (incomingFilter === 'processed') return bundle.pendingTransfers.length === 0;
     return true;
   }), [incomingBundles, incomingFilter]);
+  const requiredBufferByMaterial = useMemo(() => incomingTransfers
+    .filter((transfer) => transfer.status === 'in_buffer')
+    .reduce<Record<string, number>>((totals, transfer) => {
+      totals[transfer.raw_material_id] = (totals[transfer.raw_material_id] || 0) + Number(transfer.quantity || 0);
+      return totals;
+    }, {}), [incomingTransfers]);
+
+  const getIncomingStage = (bundle: IncomingBundle): IncomingStage => {
+    const waitingLines = bundle.pendingTransfers;
+    if (waitingLines.length > 0) {
+      const missingAllocation = waitingLines.find((transfer) =>
+        Number(bufferBalances[transfer.raw_material_id] || 0) < Number(requiredBufferByMaterial[transfer.raw_material_id] || 0));
+      if (missingAllocation) {
+        return {
+          label: 'Buffer allocation missing',
+          detail: `${missingAllocation.raw_materials?.name || 'A material'} has no completed Buffer allocation. Production receipt is blocked until the buffer ledger is repaired.`,
+          tone: 'rose',
+          canReceive: false,
+        };
+      }
+      if (waitingLines.length !== bundle.transfers.length) {
+        return { label: 'Partly received', detail: `${waitingLines.length} line${waitingLines.length === 1 ? '' : 's'} remain in the Buffer awaiting Production receipt.`, tone: 'amber', canReceive: false };
+      }
+      return { label: 'Ready for production receipt', detail: 'All lines are allocated in Buffer and can now be received into Production Warehouse 19.', tone: 'amber', canReceive: true };
+    }
+
+    const syncLines = bundle.transfers.map((transfer) => incomingSyncByTransferId[transfer.id]).filter(Boolean);
+    if (syncLines.some((sync) => sync.sync_status === 'failed')) {
+      const failed = syncLines.find((sync) => sync.sync_status === 'failed');
+      return { label: 'Sage posting failed', detail: failed?.sync_message || 'The RM to PD Sage posting failed and needs review.', tone: 'rose', canReceive: false };
+    }
+    if (syncLines.some((sync) => sync.sync_status === 'processing')) {
+      return { label: 'Posting RM to PD in Sage', detail: 'Production receipt is complete; the bridge is posting the RM to PD warehouse movement in Sage.', tone: 'blue', canReceive: false };
+    }
+    if (syncLines.some((sync) => ['pending', 'retry'].includes(sync.sync_status))) {
+      return { label: 'Sage post queued', detail: 'Production receipt is complete and the RM to PD Sage movement is queued.', tone: 'amber', canReceive: false };
+    }
+    if (syncLines.length === bundle.transfers.length && syncLines.every((sync) => sync.sync_status === 'success')) {
+      return { label: 'Posted RM to PD', detail: 'Production receipt and the Sage RM to PD warehouse transfer are complete.', tone: 'emerald', canReceive: false };
+    }
+    return { label: 'Received: awaiting Sage queue', detail: 'Production receipt is complete; waiting for the Sage posting event to be created.', tone: 'slate', canReceive: false };
+  };
   const sageActivityGroups = useMemo(() => {
     const groups = new Map<string, SageTransferStatus[]>();
     recentSageTransfers.forEach((transfer) => {
@@ -464,6 +561,11 @@ export default function ProductionWarehousePage() {
   }
 
   async function handleReceiveBundle(bundle: IncomingBundle) {
+    const stage = getIncomingStage(bundle);
+    if (!stage.canReceive) {
+      setReceiptNotice({ tone: 'error', message: stage.detail });
+      return;
+    }
     setReceivingBundleKey(bundle.key);
     setReceiptNotice(null);
     try {
@@ -595,6 +697,16 @@ export default function ProductionWarehousePage() {
             {visibleIncomingBundles.map((bundle) => {
               const isOpen = expandedIncomingBundle === bundle.key;
               const isReceiving = receivingBundleKey === bundle.key;
+              const stage = getIncomingStage(bundle);
+              const stageClassName = stage.tone === 'rose'
+                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                : stage.tone === 'blue'
+                  ? 'border-sky-200 bg-sky-50 text-sky-700'
+                  : stage.tone === 'emerald'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : stage.tone === 'slate'
+                      ? 'border-slate-200 bg-slate-50 text-slate-700'
+                      : 'border-amber-200 bg-amber-50 text-amber-800';
               return (
                 <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
                   <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[42px_minmax(100px,.9fr)_105px_132px_minmax(150px,1fr)_170px_130px_150px] lg:items-center">
@@ -605,14 +717,14 @@ export default function ProductionWarehousePage() {
                       <p className="truncate font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
                     </button>
                     <span className="incoming-material-count border border-amber-200 bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
-                    <span className={`incoming-status border px-2 py-0.5 text-center text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
+                    <span title={stage.detail} className={`incoming-status border px-2 py-0.5 text-center text-xs font-semibold ${stageClassName}`}>{stage.label}</span>
                     <span className="inline-flex items-center gap-1.5 text-sm text-slate-600"><UserRound className="h-3.5 w-3.5 text-slate-400" />{bundle.requester}</span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
                     <div className="incoming-bundle-quantity text-right">
                       <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                     </div>
                     <div className="incoming-action flex justify-end">
-                    {canApproveMaterialTransfer && bundle.pendingTransfers.length > 0 && (
+                    {canApproveMaterialTransfer && stage.canReceive && (
                       selectedIncomingBundleKey === bundle.key ? (
                         <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
                           {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing approval</> : <><CheckCircle2 className="h-4 w-4" /> Approve selected IST</>}
@@ -622,6 +734,9 @@ export default function ProductionWarehousePage() {
                           <CheckCircle2 className="h-4 w-4" /> {hasProcessedIncomingIst ? 'Next IST' : 'Select IST'}
                         </button>
                       )
+                    )}
+                    {stage.tone === 'rose' && (
+                      <span title={stage.detail} className="text-right text-xs font-semibold text-rose-700">Blocked</span>
                     )}
                     </div>
                   </div>
