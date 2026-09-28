@@ -19,26 +19,24 @@
 .production-workspace button:focus-visible, .production-workspace select:focus-visible { outline: 2px solid #008978; outline-offset: 3px; }
 .production-workspace > section { box-shadow: none; }
 .production-workspace .warehouse-receiving { overflow: hidden; border-radius: 14px; box-shadow: 0 8px 22px rgba(15, 37, 47, .06); }
-.production-workspace .warehouse-receiving > div:first-child { background: #f8fafb; border-bottom-color: #e3eaed; padding: 15px 18px; }
-.production-workspace .warehouse-receiving > div:first-child > div:first-child > div:first-child { width: 32px; height: 32px; border: 0; border-radius: 6px; background: #e6f5f0; }
-.production-workspace .warehouse-receiving > div:nth-child(2) { padding: 0 16px; }
-.production-workspace .warehouse-receiving > div:nth-child(2) > div { border-color: #e7ecee; padding: 10px 0; }
-.production-workspace .incoming-queue-header { min-height: 78px; background: linear-gradient(90deg, #f8fcfb, #f6fafc) !important; }
-.production-workspace .incoming-queue-header > div:first-child > div:first-child { width: 38px !important; height: 38px !important; border: 1px solid #cce8e0 !important; border-radius: 8px !important; background: #e8f7f2 !important; }
+.production-workspace .incoming-table-tools { min-height: 50px; background: #fbfdfd; }
+.production-workspace .incoming-column-header { color: #70858c; font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .production-workspace .incoming-queue-total { min-width: 116px; padding-left: 16px; border-left: 1px solid #dce9e7; }
 .production-workspace .incoming-queue-total .text-lg { color: #113d45; font-size: 20px; letter-spacing: 0; }
 .production-workspace .incoming-bundle { position: relative; }
 .production-workspace .incoming-bundle::before { position: absolute; top: 16px; bottom: 16px; left: -16px; width: 3px; background: transparent; content: ''; }
 .production-workspace .incoming-bundle:has(.incoming-bundle-summary:hover)::before { background: #0d9d89; }
 .production-workspace .warehouse-ist-row { font-size: 13px; }
-.production-workspace .incoming-bundle-summary { min-height: 62px; padding: 8px 10px; border-radius: 8px; transition: background .16s ease; }
+.production-workspace .incoming-bundle-summary { min-height: 52px; padding: 8px 10px; border-radius: 8px; transition: background .16s ease; }
 .production-workspace .incoming-bundle-summary:hover { background: #f7fbfa; }
 .production-workspace .warehouse-ist-row > button:first-child { align-items: center; }
-.production-workspace .warehouse-ist-row > button:first-child > div:first-child { width: 32px; height: 32px; border: 1px solid #d6e8e4; border-radius: 7px; background: #eff9f6; color: #007e6f; transition: background .16s ease, color .16s ease; }
-.production-workspace .incoming-bundle-summary:hover > button:first-child > div:first-child { background: #0b8c7b; color: #fff; }
+.production-workspace .incoming-expand-button { border-radius: 7px; transition: background .16s ease, color .16s ease; }
+.production-workspace .incoming-bundle-summary:hover .incoming-expand-button { background: #0b8c7b; color: #fff; }
 .production-workspace .warehouse-ist-row p.font-semibold { font-size: 13px; }
 .production-workspace .warehouse-ist-row .text-lg { font-size: 14px; }
-.production-workspace .incoming-bundle-quantity { min-width: 130px; border-left-color: #dce9e7 !important; }
+.production-workspace .incoming-material-count, .production-workspace .incoming-status { white-space: nowrap; border-radius: 4px; }
+.production-workspace .incoming-bundle-quantity { min-width: 0; border-left-color: #dce9e7 !important; }
+.production-workspace .incoming-action button { min-width: 128px; }
 .production-workspace .warehouse-ist-row .border-amber-200 { border: 0; background: #f5f0e4; color: #8a6520; border-radius: 4px; }
 .production-workspace .warehouse-ist-row .border-emerald-200 { border: 0; background: #e9f5ee; color: #23774e; border-radius: 4px; }
 .production-workspace .warehouse-ist-row > button:not(:first-child) { border-radius: 6px; font-size: 12px; }

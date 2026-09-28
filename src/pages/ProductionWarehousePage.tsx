@@ -551,18 +551,11 @@ export default function ProductionWarehousePage() {
       {/* Live RM inbox for Production receiving */}
       {pageView === 'receiving' && (
       <section className="warehouse-receiving border border-slate-200 bg-white">
-          <div className="incoming-queue-header flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
-                <Truck className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900">Incoming transfers</h2>
-                  <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
-                </div>
-                <p className="mt-0.5 text-xs text-slate-500">Review each incoming IST before receiving it into Production Warehouse 19.</p>
-              </div>
+          <div className="incoming-table-tools flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 px-5 py-2.5">
+            <div className="flex items-center gap-2 text-sm">
+              <Truck className="h-4 w-4 text-teal-700" />
+              <span className="font-bold text-slate-800">Incoming ISTs</span>
+              <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -586,6 +579,16 @@ export default function ProductionWarehousePage() {
               </Link>
             )}
           </div>
+          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 lg:grid lg:grid-cols-[42px_minmax(100px,.9fr)_105px_132px_minmax(150px,1fr)_170px_130px_150px] lg:items-center lg:gap-3">
+            <span />
+            <span>IST</span>
+            <span>Materials</span>
+            <span>Status</span>
+            <span>Requested by</span>
+            <span>IST date</span>
+            <span className="text-right">Transfer total</span>
+            <span className="text-right">Action</span>
+          </div>
           </div>
 
           <div className="divide-y divide-teal-100 px-5">
@@ -594,27 +597,21 @@ export default function ProductionWarehousePage() {
               const isReceiving = receivingBundleKey === bundle.key;
               return (
                 <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
-                    <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="flex min-w-0 items-start gap-3 text-left">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700">
-                        {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
-                          <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
-                          <span className={`border px-2 py-0.5 text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> IST date: {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
-                          <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> Requested by: {bundle.requester}</span>
-                        </div>
-                      </div>
+                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[42px_minmax(100px,.9fr)_105px_132px_minmax(150px,1fr)_170px_130px_150px] lg:items-center">
+                    <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="incoming-expand-button flex h-8 w-8 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700" aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${bundle.purpose || 'incoming IST'}`}>
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
-                    <div className="incoming-bundle-quantity border-l border-teal-200 pl-4 text-right">
-                      <p className="text-[10px] font-bold uppercase text-slate-500">Transfer total</p>
-                      <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
+                    <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="min-w-0 text-left">
+                      <p className="truncate font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
+                    </button>
+                    <span className="incoming-material-count border border-amber-200 bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
+                    <span className={`incoming-status border px-2 py-0.5 text-center text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-slate-600"><UserRound className="h-3.5 w-3.5 text-slate-400" />{bundle.requester}</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
+                    <div className="incoming-bundle-quantity text-right">
+                      <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                     </div>
+                    <div className="incoming-action flex justify-end">
                     {canApproveMaterialTransfer && bundle.pendingTransfers.length > 0 && (
                       selectedIncomingBundleKey === bundle.key ? (
                         <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
@@ -626,6 +623,7 @@ export default function ProductionWarehousePage() {
                         </button>
                       )
                     )}
+                    </div>
                   </div>
                   {isOpen && (
                     <div className="incoming-lines mt-3 overflow-hidden border border-slate-200 bg-slate-50">
