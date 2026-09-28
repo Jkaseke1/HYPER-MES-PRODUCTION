@@ -124,7 +124,6 @@ export default function ProductionWarehousePage() {
   const [selectedIncomingBundleKey, setSelectedIncomingBundleKey] = useState<string | null>(null);
   const [hasProcessedIncomingIst, setHasProcessedIncomingIst] = useState(false);
   const [expandedIncomingBundle, setExpandedIncomingBundle] = useState<string | null>(null);
-  const [istDetailsBundleKey, setIstDetailsBundleKey] = useState<string | null>(null);
   const [receiptToConfirm, setReceiptToConfirm] = useState<PendingTransfer | null>(null);
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
@@ -417,10 +416,6 @@ export default function ProductionWarehousePage() {
     if (incomingFilter === 'processed') return bundle.pendingTransfers.length === 0;
     return true;
   }), [incomingBundles, incomingFilter]);
-  const istDetailsBundle = useMemo(
-    () => incomingBundles.find((bundle) => bundle.key === istDetailsBundleKey) || null,
-    [incomingBundles, istDetailsBundleKey],
-  );
   const requiredBufferByMaterial = useMemo(() => incomingTransfers
     .filter((transfer) => transfer.status === 'in_buffer')
     .reduce<Record<string, number>>((totals, transfer) => {
@@ -744,7 +739,7 @@ export default function ProductionWarehousePage() {
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="incoming-expand-button flex h-8 w-8 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700" aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${bundle.purpose || 'incoming IST'}`}>
                       {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
-                    <button type="button" onClick={() => setIstDetailsBundleKey(bundle.key)} className="min-w-0 text-left" title="View complete IST">
+                        <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="min-w-0 text-left" title="Show full IST details">
                       <p className="truncate font-mono text-sm font-bold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
                     </button>
                     <span className="incoming-material-count border border-amber-200 bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
@@ -772,22 +767,28 @@ export default function ProductionWarehousePage() {
                     </div>
                   </div>
                   {isOpen && (
-                    <div className="incoming-lines mt-3 overflow-hidden border border-slate-200 bg-slate-50">
-                      <div className="incoming-lines-heading grid grid-cols-[minmax(0,1fr)_auto_130px_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material and destination</span><span>Transfer ref.</span><span>Sage status</span><span>Quantity</span></div>
-                      {bundle.transfers.map((pt) => {
-                        const lineStage = getLineSageStage(pt);
-                        return (
-                        <div key={pt.id} className="incoming-line grid grid-cols-[minmax(0,1fr)_auto_130px_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="incoming-material-icon"><Package className="h-4 w-4" /></span>
-                            <div className="min-w-0"><p className="truncate font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p><p className="truncate text-xs text-slate-500"><span className="font-mono text-teal-700">{pt.raw_materials?.code}</span><span className="mx-1.5 text-slate-300">|</span>{pt.status === 'received' ? 'Received into Production Warehouse 19' : 'Holding Bay to Production Warehouse 19'}</p></div>
-                          </div>
-                          <span className="font-mono text-xs text-slate-500">{pt.transfer_number}</span>
-                          <span title={lineStage.detail} className={`min-w-0 border px-2 py-1 text-center text-[11px] font-semibold leading-4 ${lineStage.className}`}>{lineStage.label}</span>
-                          <span className="incoming-line-quantity font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
-                        </div>
-                        );
-                      })}
+                    <div className="incoming-lines mt-2 overflow-hidden border border-slate-200 bg-slate-50">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-3 py-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Full IST details</span>
+                        <span className="font-mono text-xs text-slate-500">{bundle.transfers.length} materials</span>
+                      </div>
+                      <div className="grid gap-px bg-slate-200 xl:grid-cols-2">
+                        {bundle.transfers.map((pt) => {
+                          const lineStage = getLineSageStage(pt);
+                          return (
+                            <div key={pt.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-white px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p>
+                                <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">{pt.raw_materials?.code || 'No Sage code'} <span className="mx-1 text-slate-300">|</span> {pt.transfer_number}</p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                <span title={lineStage.detail} className={`inline-flex max-w-[110px] truncate border px-2 py-1 text-[10px] font-semibold ${lineStage.className}`}>{lineStage.label}</span>
+                                <span className="whitespace-nowrap font-mono text-xs font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -871,62 +872,6 @@ export default function ProductionWarehousePage() {
           </div>
         </section>
       )}
-
-      {istDetailsBundle && (() => {
-        const stage = getIncomingStage(istDetailsBundle);
-        const stageClassName = stage.tone === 'rose'
-          ? 'border-rose-200 bg-rose-50 text-rose-700'
-          : stage.tone === 'blue'
-            ? 'border-sky-200 bg-sky-50 text-sky-700'
-            : stage.tone === 'emerald'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : stage.tone === 'slate'
-                ? 'border-slate-200 bg-slate-50 text-slate-700'
-                : 'border-amber-200 bg-amber-50 text-amber-800';
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="ist-detail-title">
-            <section className="flex h-[min(880px,92vh)] w-full max-w-6xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
-              <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 bg-slate-950 px-6 py-5 text-white">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-wide text-teal-300">Internal stock transfer</p>
-                  <h2 id="ist-detail-title" className="mt-1 font-mono text-xl font-bold">{istDetailsBundle.purpose || 'Raw Materials to Production'}</h2>
-                  <p className="mt-1 text-sm text-slate-300">{istDetailsBundle.transfers.length} materials · Requested by {istDetailsBundle.requester} · {format(new Date(istDetailsBundle.createdAt), 'dd MMM yyyy, HH:mm')}</p>
-                </div>
-                <button type="button" onClick={() => setIstDetailsBundleKey(null)} className="flex h-10 w-10 items-center justify-center border border-slate-600 text-slate-200 hover:bg-slate-800" aria-label="Close IST details"><X className="h-5 w-5" /></button>
-              </header>
-
-              <div className="grid gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-3">
-                <div className="bg-white px-6 py-3"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Transfer total</p><p className="mt-1 font-mono text-lg font-bold text-slate-900">{istDetailsBundle.totalQuantity.toLocaleString()} kg</p></div>
-                <div className="bg-white px-6 py-3"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Material lines</p><p className="mt-1 text-lg font-bold text-slate-900">{istDetailsBundle.transfers.length}</p></div>
-                <div className="bg-white px-6 py-3"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">IST status</p><span title={stage.detail} className={`mt-1 inline-flex border px-2 py-1 text-xs font-semibold ${stageClassName}`}>{stage.label}</span></div>
-              </div>
-
-              <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-5">
-                <div className="overflow-hidden border border-slate-200 bg-white">
-                  <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto_135px_auto] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                    <span>Material</span><span>Transfer reference</span><span>Sage status</span><span>Quantity</span>
-                  </div>
-                  {istDetailsBundle.transfers.map((transfer) => {
-                    const lineStage = getLineSageStage(transfer);
-                    return (
-                      <div key={transfer.id} className="grid grid-cols-[minmax(0,1fr)_auto_135px_auto] items-center gap-4 border-b border-slate-100 px-5 py-3 last:border-b-0">
-                        <div className="min-w-0"><p className="truncate font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'}</p><p className="mt-0.5 font-mono text-xs text-teal-700">{transfer.raw_materials?.code || 'No Sage code'}</p></div>
-                        <span className="font-mono text-xs text-slate-500">{transfer.transfer_number}</span>
-                        <span title={lineStage.detail} className={`border px-2 py-1 text-center text-[11px] font-semibold leading-4 ${lineStage.className}`}>{lineStage.label}</span>
-                        <span className="font-mono text-sm font-bold text-slate-900">{Number(transfer.quantity).toLocaleString()} {transfer.unit}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <footer className="flex justify-end border-t border-slate-200 px-6 py-4">
-                <button type="button" onClick={() => setIstDetailsBundleKey(null)} className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Close IST</button>
-              </footer>
-            </section>
-          </div>
-        );
-      })()}
 
       {receiptToConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="receive-transfer-title">
