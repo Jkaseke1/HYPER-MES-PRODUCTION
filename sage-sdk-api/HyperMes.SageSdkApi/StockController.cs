@@ -54,11 +54,31 @@ namespace SDK_Test
         {
             SdkSession.EnsureConnected();
 
-            var item = new InventoryItem(itemCode.Trim().ToUpperInvariant());
+            // Match the lookup used by warehouse-transfer posting. The constructor
+            // can reject valid legacy stock records that GetByCode resolves.
+            var normalizedItemCode = itemCode.Trim().ToUpperInvariant();
+            var item = InventoryItem.GetByCode(normalizedItemCode);
+            if (item == null)
+                throw new InvalidOperationException("Sage inventory item was not found: " + normalizedItemCode);
+
             var sageWarehouse = new Warehouse(warehouse.Trim().ToUpperInvariant());
             var context = item.WarehouseContexts[sageWarehouse];
+            // Evolution has no WhseStk row until an item has been established in
+            // that warehouse. Its on-hand balance is therefore zero, not unknown.
             if (context == null)
-                throw new InvalidOperationException("Sage has no warehouse context for " + item.Code + " in " + sageWarehouse.Code + ".");
+            {
+                return new
+                {
+                    status = "ok",
+                    environment = SageRuntime.EnvironmentName,
+                    itemCode = item.Code,
+                    warehouse = sageWarehouse.Code,
+                    quantity = 0d,
+                    averageUnitCost = 0d,
+                    warehouseContext = "not-created",
+                    readAtUtc = DateTime.UtcNow
+                };
+            }
 
             return new
             {
