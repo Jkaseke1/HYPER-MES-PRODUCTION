@@ -77,6 +77,12 @@ interface IncomingSyncStage {
   sync_updated_at: string;
 }
 
+interface LineSageStage {
+  label: string;
+  detail: string;
+  className: string;
+}
+
 interface IncomingBundle {
   key: string;
   transfers: PendingTransfer[];
@@ -604,6 +610,26 @@ export default function ProductionWarehousePage() {
     return 'Sage posting failed';
   };
 
+  const getLineSageStage = (transfer: PendingTransfer): LineSageStage => {
+    if (transfer.status !== 'received') {
+      return { label: 'Awaiting receipt', detail: 'This line has not yet been received into Production Warehouse.', className: 'border-amber-200 bg-amber-50 text-amber-800' };
+    }
+    const sync = incomingSyncByTransferId[transfer.id];
+    if (!sync) {
+      return { label: 'Awaiting Sage queue', detail: 'Production receipt is complete; waiting for the Sage posting event.', className: 'border-slate-200 bg-slate-50 text-slate-700' };
+    }
+    if (sync.sync_status === 'success') {
+      return { label: 'Posted to Sage', detail: sync.sync_message || 'This RM to PD transfer was posted to Sage.', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' };
+    }
+    if (sync.sync_status === 'failed') {
+      return { label: 'Sage failed', detail: sync.sync_message || 'Sage posting failed for this material.', className: 'border-rose-200 bg-rose-50 text-rose-700' };
+    }
+    if (sync.sync_status === 'processing') {
+      return { label: 'Posting to Sage', detail: sync.sync_message || 'The Sage bridge is posting this material now.', className: 'border-sky-200 bg-sky-50 text-sky-700' };
+    }
+    return { label: sync.sync_status === 'retry' ? 'Retry queued' : 'Queued for Sage', detail: sync.sync_message || 'This material is queued for Sage posting.', className: 'border-amber-200 bg-amber-50 text-amber-800' };
+  };
+
   return (
     <div className="production-workspace mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6">
       <section className="warehouse-heading flex flex-wrap items-center justify-between gap-4">
@@ -742,17 +768,21 @@ export default function ProductionWarehousePage() {
                   </div>
                   {isOpen && (
                     <div className="incoming-lines mt-3 overflow-hidden border border-slate-200 bg-slate-50">
-                      <div className="incoming-lines-heading grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material and destination</span><span>Transfer ref.</span><span>Quantity</span></div>
-                      {bundle.transfers.map((pt) => (
-                        <div key={pt.id} className="incoming-line grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
+                      <div className="incoming-lines-heading grid grid-cols-[minmax(0,1fr)_auto_130px_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material and destination</span><span>Transfer ref.</span><span>Sage status</span><span>Quantity</span></div>
+                      {bundle.transfers.map((pt) => {
+                        const lineStage = getLineSageStage(pt);
+                        return (
+                        <div key={pt.id} className="incoming-line grid grid-cols-[minmax(0,1fr)_auto_130px_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
                           <div className="flex min-w-0 items-center gap-3">
                             <span className="incoming-material-icon"><Package className="h-4 w-4" /></span>
                             <div className="min-w-0"><p className="truncate font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p><p className="truncate text-xs text-slate-500"><span className="font-mono text-teal-700">{pt.raw_materials?.code}</span><span className="mx-1.5 text-slate-300">|</span>{pt.status === 'received' ? 'Received into Production Warehouse 19' : 'Holding Bay to Production Warehouse 19'}</p></div>
                           </div>
                           <span className="font-mono text-xs text-slate-500">{pt.transfer_number}</span>
+                          <span title={lineStage.detail} className={`min-w-0 border px-2 py-1 text-center text-[11px] font-semibold leading-4 ${lineStage.className}`}>{lineStage.label}</span>
                           <span className="incoming-line-quantity font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -807,7 +837,7 @@ export default function ProductionWarehousePage() {
                     <span className="text-slate-500">Stage {stage + 1}/4</span>
                   </div>
                   {expanded && <div className="mt-3 ml-11 divide-y divide-slate-100 border border-slate-200 bg-slate-50">
-                    {group.lines.map((line) => <div key={line.sync_log_id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs"><span className="font-semibold text-slate-800">{line.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono font-normal text-slate-500">{line.raw_materials?.code}</span><span className="ml-2 font-mono font-normal text-slate-400">{line.transfer_number}</span></span><span className="font-mono text-slate-600">{Number(line.quantity).toLocaleString()} {line.unit}</span></div>)}
+                    {group.lines.map((line) => <div key={line.sync_log_id} className="grid grid-cols-[minmax(0,1fr)_130px_auto] items-center gap-3 px-3 py-2 text-xs"><span className="min-w-0 truncate font-semibold text-slate-800">{line.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono font-normal text-slate-500">{line.raw_materials?.code}</span><span className="ml-2 font-mono font-normal text-slate-400">{line.transfer_number}</span></span><span title={line.sync_message || sageStageLabel(line.sync_status)} className={`border px-2 py-1 text-center text-[11px] font-semibold ${line.sync_status === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : line.sync_status === 'failed' ? 'border-rose-200 bg-rose-50 text-rose-700' : line.sync_status === 'processing' ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>{sageStageLabel(line.sync_status)}</span><span className="font-mono text-slate-600">{Number(line.quantity).toLocaleString()} {line.unit}</span></div>)}
                   </div>}
                 </div>
               );
