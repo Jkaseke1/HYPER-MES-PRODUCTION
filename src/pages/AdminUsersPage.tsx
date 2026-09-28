@@ -1120,6 +1120,7 @@ export default function AdminUsersPage() {
                   <option value="raw_material_manager">Raw Materials Manager</option>
                   <option value="logistics">Logistics Officer</option>
                   <option value="finance">Finance / Accountant</option>
+                  <option value="finance_viewer">Finance Viewer (Read Only)</option>
                   <option value="md">Managing Director (MD)</option>
                   <option value="admin">Administrator</option>
                 </select>
@@ -1374,6 +1375,7 @@ export default function AdminUsersPage() {
                 <option value="warehouse_clerk">Warehouse Clerk</option>
                 <option value="logistics">Logistics Officer</option>
                 <option value="finance">Finance / Accountant</option>
+                <option value="finance_viewer">Finance Viewer (Read Only)</option>
                 <option value="supervisor">Supervisor</option>
                 <option value="operator">Operator</option>
                 <option value="weighbridge">Weighbridge Operator</option>

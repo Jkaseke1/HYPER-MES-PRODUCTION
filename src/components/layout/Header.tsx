@@ -391,6 +391,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     logistics: 'Logistics Officer',
     operator: 'Operator',
     finance: 'Finance / Accountant',
+    finance_viewer: 'Finance Viewer (Read Only)',
     accountant: 'Accountant',
   };
 

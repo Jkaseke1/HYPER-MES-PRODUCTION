@@ -135,6 +135,7 @@ export default function LoginPage() {
                       <option value="warehouse_clerk">Warehouse Clerk</option>
                       <option value="logistics">Logistics Officer</option>
                       <option value="finance">Finance / Accountant</option>
+                      <option value="finance_viewer">Finance Viewer (Read Only)</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="operator">Operator</option>
                       <option value="quality_controller">Quality Controller</option>
