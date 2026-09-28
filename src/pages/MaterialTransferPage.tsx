@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect, useRef } from 'react';
-import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw, Wheat } from 'lucide-react';
+import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw, Wheat, Boxes } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
@@ -117,6 +117,14 @@ function isPackagingMaterial(material: any) {
   return material.code?.toUpperCase().startsWith('PA')
     || description.includes('PACKAGING')
     || description.includes('MACRO PACK')
+    || description.includes('MACROPACK')
+    || description.includes('MAXIPACK');
+}
+
+function isMacroPackMaterial(material: any) {
+  const description = `${material.code || ''} ${material.sage_code || ''} ${material.name || ''}`.toUpperCase();
+  return description.includes('MACRO PACK')
+    || description.includes('MACROPACK')
     || description.includes('MAXIPACK');
 }
 
@@ -141,13 +149,16 @@ function SageMaterialPicker({
   onOpenChange: (open: boolean) => void;
   onSelect: (materialId: string) => void;
 }) {
-  const [category, setCategory] = useState<'all' | 'raw' | 'packaging'>('all');
+  const [category, setCategory] = useState<'all' | 'raw' | 'packaging' | 'macro'>('all');
   const selected = materials.find((material) => material.id === selectedMaterialId);
   const rawMaterials = materials
-    .filter((material) => !isPackagingMaterial(material))
+    .filter((material) => !isPackagingMaterial(material) && !isMacroPackMaterial(material))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   const packagingMaterials = materials
-    .filter(isPackagingMaterial)
+    .filter((material) => isPackagingMaterial(material) && !isMacroPackMaterial(material))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const macroPackMaterials = materials
+    .filter(isMacroPackMaterial)
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
   const renderGroup = (heading: string, group: any[], Icon: typeof Package) => (
@@ -219,7 +230,7 @@ function SageMaterialPicker({
       <PopoverContent align="start" className="w-[min(40rem,calc(100vw-2rem))] p-0">
         <Command>
           <CommandInput placeholder="Search by material name or Sage code..." />
-          <div className="grid grid-cols-3 gap-1 border-b bg-slate-50 p-2">
+          <div className="grid grid-cols-4 gap-1 border-b bg-slate-50 p-2">
             <button
               type="button"
               onClick={() => setCategory('all')}
@@ -250,12 +261,24 @@ function SageMaterialPicker({
             >
               <Package className="h-3.5 w-3.5" /> Packaging
             </button>
+            <button
+              type="button"
+              onClick={() => setCategory('macro')}
+              aria-pressed={category === 'macro'}
+              className={`inline-flex h-8 items-center justify-center gap-1 rounded px-2 text-[11px] font-bold transition-colors ${
+                category === 'macro' ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Boxes className="h-3.5 w-3.5" /> Macro packs
+            </button>
           </div>
           <CommandList className="max-h-[22rem] overscroll-contain" onWheel={(event) => event.stopPropagation()}>
             <CommandEmpty>No matching Sage-linked material.</CommandEmpty>
-            {category !== 'packaging' && renderGroup('Raw materials', rawMaterials, Wheat)}
+            {category !== 'packaging' && category !== 'macro' && renderGroup('Raw materials', rawMaterials, Wheat)}
             {category === 'all' && <CommandSeparator />}
-            {category !== 'raw' && renderGroup('Packaging', packagingMaterials, Package)}
+            {category !== 'raw' && category !== 'macro' && renderGroup('Packaging', packagingMaterials, Package)}
+            {category === 'all' && <CommandSeparator />}
+            {category !== 'raw' && category !== 'packaging' && renderGroup('Macro packs', macroPackMaterials, Boxes)}
           </CommandList>
         </Command>
       </PopoverContent>
