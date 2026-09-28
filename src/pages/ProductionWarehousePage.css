@@ -23,15 +23,31 @@
 .production-workspace .warehouse-receiving > div:first-child > div:first-child > div:first-child { width: 32px; height: 32px; border: 0; border-radius: 6px; background: #e6f5f0; }
 .production-workspace .warehouse-receiving > div:nth-child(2) { padding: 0 16px; }
 .production-workspace .warehouse-receiving > div:nth-child(2) > div { border-color: #e7ecee; padding: 10px 0; }
+.production-workspace .incoming-queue-header { min-height: 78px; background: linear-gradient(90deg, #f8fcfb, #f6fafc) !important; }
+.production-workspace .incoming-queue-header > div:first-child > div:first-child { width: 38px !important; height: 38px !important; border: 1px solid #cce8e0 !important; border-radius: 8px !important; background: #e8f7f2 !important; }
+.production-workspace .incoming-queue-total { min-width: 116px; padding-left: 16px; border-left: 1px solid #dce9e7; }
+.production-workspace .incoming-queue-total .text-lg { color: #113d45; font-size: 20px; letter-spacing: 0; }
+.production-workspace .incoming-bundle { position: relative; }
+.production-workspace .incoming-bundle::before { position: absolute; top: 16px; bottom: 16px; left: -16px; width: 3px; background: transparent; content: ''; }
+.production-workspace .incoming-bundle:has(.incoming-bundle-summary:hover)::before { background: #0d9d89; }
 .production-workspace .warehouse-ist-row { font-size: 13px; }
+.production-workspace .incoming-bundle-summary { min-height: 62px; padding: 8px 10px; border-radius: 8px; transition: background .16s ease; }
+.production-workspace .incoming-bundle-summary:hover { background: #f7fbfa; }
 .production-workspace .warehouse-ist-row > button:first-child { align-items: center; }
-.production-workspace .warehouse-ist-row > button:first-child > div:first-child { width: 28px; height: 28px; border: 0; border-radius: 4px; background: #f0f5f5; color: #527078; }
+.production-workspace .warehouse-ist-row > button:first-child > div:first-child { width: 32px; height: 32px; border: 1px solid #d6e8e4; border-radius: 7px; background: #eff9f6; color: #007e6f; transition: background .16s ease, color .16s ease; }
+.production-workspace .incoming-bundle-summary:hover > button:first-child > div:first-child { background: #0b8c7b; color: #fff; }
 .production-workspace .warehouse-ist-row p.font-semibold { font-size: 13px; }
 .production-workspace .warehouse-ist-row .text-lg { font-size: 14px; }
-.production-workspace .warehouse-ist-row > div.border-l { border: 0; }
+.production-workspace .incoming-bundle-quantity { min-width: 130px; border-left-color: #dce9e7 !important; }
 .production-workspace .warehouse-ist-row .border-amber-200 { border: 0; background: #f5f0e4; color: #8a6520; border-radius: 4px; }
 .production-workspace .warehouse-ist-row .border-emerald-200 { border: 0; background: #e9f5ee; color: #23774e; border-radius: 4px; }
 .production-workspace .warehouse-ist-row > button:not(:first-child) { border-radius: 6px; font-size: 12px; }
+.production-workspace .incoming-lines { border-color: #dce8e7; border-radius: 8px; background: #fbfdfd; }
+.production-workspace .incoming-lines-heading { background: #f2f7f6; border-bottom-color: #dce8e7; color: #668087; }
+.production-workspace .incoming-line { min-height: 64px; border-bottom-color: #e6edec; background: #fff; transition: background .16s ease; }
+.production-workspace .incoming-line:hover { background: #f8fcfb; }
+.production-workspace .incoming-material-icon { display: flex; width: 30px; height: 30px; flex: 0 0 30px; align-items: center; justify-content: center; border: 1px solid #d7e9e5; border-radius: 6px; background: #eef9f6; color: #008978; }
+.production-workspace .incoming-line-quantity { min-width: 104px; color: #113d45; text-align: right; }
 .production-workspace .warehouse-sage { overflow: hidden; border-color: #cbdcde; border-radius: 14px; background: #edf5f4; box-shadow: 0 8px 22px rgba(15, 37, 47, .06); }
 .production-workspace .warehouse-sage > div:first-child { border-bottom-color: #263d55; background: #13223d; padding: 15px 18px; }
 .production-workspace .warehouse-sage > div:first-child h2 { color: #fff; }

@@ -551,7 +551,7 @@ export default function ProductionWarehousePage() {
       {/* Live RM inbox for Production receiving */}
       {pageView === 'receiving' && (
       <section className="warehouse-receiving border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
+          <div className="incoming-queue-header flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 bg-teal-50/70 px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-teal-200 bg-teal-100 text-teal-700">
                 <Truck className="h-5 w-5" />
@@ -561,6 +561,7 @@ export default function ProductionWarehousePage() {
                   <h2 className="text-base font-bold text-slate-900">Incoming transfers</h2>
                   <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
                 </div>
+                <p className="mt-0.5 text-xs text-slate-500">Review each incoming IST before receiving it into Production Warehouse 19.</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -572,7 +573,7 @@ export default function ProductionWarehousePage() {
                   <option value="all">All ISTs</option>
                 </select>
               </div>
-              <div className="text-right">
+              <div className="incoming-queue-total text-right">
                 <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} kg</p>
                 <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
               </div>
@@ -592,15 +593,16 @@ export default function ProductionWarehousePage() {
               const isOpen = expandedIncomingBundle === bundle.key;
               const isReceiving = receivingBundleKey === bundle.key;
               return (
-                <div key={bundle.key} className={`py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="warehouse-ist-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+                <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
+                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="flex min-w-0 items-start gap-3 text-left">
                       <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700">
                         {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-slate-900">{bundle.purpose || 'Raw Materials to Production'}</p>
+                          <p className="font-mono text-sm font-bold text-slate-900">{bundle.key}</p>
+                          <span className="text-sm font-semibold text-slate-600">{bundle.purpose || 'Raw Materials to Production'}</span>
                           <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
                           <span className={`border px-2 py-0.5 text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
                         </div>
@@ -610,7 +612,8 @@ export default function ProductionWarehousePage() {
                         </div>
                       </div>
                     </button>
-                    <div className="border-l border-teal-200 pl-4 text-right">
+                    <div className="incoming-bundle-quantity border-l border-teal-200 pl-4 text-right">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">Transfer total</p>
                       <p className="font-mono text-lg font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                     </div>
                     {canApproveMaterialTransfer && bundle.pendingTransfers.length > 0 && (
@@ -626,13 +629,16 @@ export default function ProductionWarehousePage() {
                     )}
                   </div>
                   {isOpen && (
-                    <div className="mt-3 overflow-hidden border border-slate-200 bg-slate-50">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material</span><span>Transfer</span><span>Quantity</span></div>
+                    <div className="incoming-lines mt-3 overflow-hidden border border-slate-200 bg-slate-50">
+                      <div className="incoming-lines-heading grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500"><span>Material and destination</span><span>Transfer ref.</span><span>Quantity</span></div>
                       {bundle.transfers.map((pt) => (
-                        <div key={pt.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
-                          <div><p className="font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{pt.raw_materials?.code}</span></p><p className="text-xs text-slate-500">{pt.status === 'received' ? 'Received into Production Warehouse 19' : 'Holding Bay · ready for Production Warehouse 19'}</p></div>
+                        <div key={pt.id} className="incoming-line grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="incoming-material-icon"><Package className="h-4 w-4" /></span>
+                            <div className="min-w-0"><p className="truncate font-semibold text-slate-900">{pt.raw_materials?.name || 'Raw material'}</p><p className="truncate text-xs text-slate-500"><span className="font-mono text-teal-700">{pt.raw_materials?.code}</span><span className="mx-1.5 text-slate-300">|</span>{pt.status === 'received' ? 'Received into Production Warehouse 19' : 'Holding Bay to Production Warehouse 19'}</p></div>
+                          </div>
                           <span className="font-mono text-xs text-slate-500">{pt.transfer_number}</span>
-                          <span className="font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
+                          <span className="incoming-line-quantity font-mono text-sm font-bold text-slate-900">{Number(pt.quantity).toLocaleString()} {pt.unit}</span>
                         </div>
                       ))}
                     </div>
