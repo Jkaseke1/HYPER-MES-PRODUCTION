@@ -265,6 +265,7 @@ function SageMaterialPicker({
             value={search}
             onValueChange={setSearch}
             placeholder="Search by material name or Sage code..."
+            className="!h-9 !border-0 !bg-transparent !px-0 !py-0 !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0"
           />
           <div className="grid grid-cols-4 gap-1 border-b bg-slate-50 p-2">
             <button
