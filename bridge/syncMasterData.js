@@ -7,6 +7,7 @@ const parseList = (value) => String(value || '')
 const SYNC_CODES = parseList(process.env.SAGE_MASTER_SYNC_CODES);
 const SYNC_PREFIXES = parseList(process.env.SAGE_MASTER_SYNC_PREFIXES);
 const SYNC_PACKAGING = process.env.SAGE_MASTER_SYNC_PACKAGING === 'true';
+const SYNC_MISSING_ONLY = process.env.SAGE_MASTER_SYNC_MISSING_ONLY === 'true';
 
 function isPackagingItem(item) {
   const description = [item.code, item.name, item.description]
@@ -40,7 +41,7 @@ async function syncRawMaterials() {
     return { synced: 0, sourceCount: result.recordset.length, skipped: true };
   }
 
-  const items = result.recordset.filter(isInSyncScope).map((row) => ({
+  const scopedItems = result.recordset.filter(isInSyncScope).map((row) => ({
     code: String(row.code || '').trim(),
     sage_code: String(row.code || '').trim(),
     name: String(row.name || row.code || '').trim(),
@@ -49,6 +50,21 @@ async function syncRawMaterials() {
     is_active: true,
     updated_at: new Date().toISOString(),
   })).filter((item) => item.code && item.name);
+
+  let items = scopedItems;
+  if (SYNC_MISSING_ONLY) {
+    const { data: existingItems, error: existingItemsError } = await supabase
+      .from('raw_materials')
+      .select('code, sage_code')
+      .limit(5000);
+    if (existingItemsError) throw existingItemsError;
+
+    const existingCodes = new Set((existingItems || [])
+      .flatMap((item) => [item.code, item.sage_code])
+      .map((code) => String(code || '').trim().toUpperCase())
+      .filter(Boolean));
+    items = scopedItems.filter((item) => !existingCodes.has(item.code.toUpperCase()));
+  }
 
   let synced = 0;
   for (let index = 0; index < items.length; index += 500) {
@@ -64,8 +80,11 @@ async function syncRawMaterials() {
     console.log(`  Synced ${synced}/${items.length} inventory items`);
   }
 
-  console.log(`  ✓ Sage inventory items in scope: ${items.length}/${result.recordset.length}. Existing PlantControl items were updated; missing items were added. No items were deleted.`);
-  return { synced, sourceCount: result.recordset.length, skipped: false };
+  const scopeLabel = SYNC_MISSING_ONLY
+    ? `${items.length}/${scopedItems.length} missing Sage inventory item(s) imported`
+    : `${items.length}/${result.recordset.length} Sage inventory item(s) imported or updated`;
+  console.log(`  ✓ ${scopeLabel}. No PlantControl items were deleted.`);
+  return { synced, sourceCount: result.recordset.length, scopedCount: scopedItems.length, skipped: false };
 }
 
 async function syncSuppliers() {
