@@ -1032,6 +1032,16 @@ export default function GoodsReceivedPage() {
     { queued: 0, processing: 0, posted: 0, failed: 0 },
   );
 
+  const rtsSummary = Object.values(rtsByGrnId).reduce(
+    (totals, rts) => {
+      if (['pending_finance', 'approved', 'processing'].includes(rts.status)) totals.inProgress += 1;
+      if (rts.status === 'posted') totals.completed += 1;
+      if (rts.status === 'failed') totals.failed += 1;
+      return totals;
+    },
+    { inProgress: 0, completed: 0, failed: 0 },
+  );
+
   const totalOrderedQty = items.reduce((sum, item) => sum + (Number(item.ordered_qty) || 0), 0);
   const totalReceivedQty = items.reduce((sum, item) => sum + (Number(item.received_qty) || 0), 0);
   const receiptUnits = Array.from(new Set(items.map((item) => materialUnitLabel(materials.find((material) => material.id === item.raw_material_id)))));
@@ -1098,11 +1108,12 @@ export default function GoodsReceivedPage() {
             </Button>
           </div>
 
-          <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-6">
             <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Register</p><p className="mt-2 text-3xl font-bold">{stats.total}</p><p className="mt-1 text-xs text-slate-400">Received notes</p></div>
             <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Awaiting Finance</p><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{stats.pending}</p><p className="mt-1 text-xs text-slate-400">Ready for VAT review</p></div>
             <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Sage Posted</p><p className="mt-2 text-3xl font-bold text-emerald-300">{stats.approved}</p><p className="mt-1 text-xs text-slate-400">GRVs confirmed</p></div>
             <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">This Month</p><p className="mt-2 text-3xl font-bold text-cyan-300">{stats.thisMonth}</p><p className="mt-1 text-xs text-slate-400">Current receipts</p></div>
+            <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">RTS Summary</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-amber-300"><Loader2 className={`h-3.5 w-3.5 ${rtsSummary.inProgress > 0 ? 'animate-spin' : ''}`} />In progress {rtsSummary.inProgress}</span><span className="inline-flex items-center gap-1.5 text-rose-300"><RotateCcw className="h-3.5 w-3.5" />Completed {rtsSummary.completed}</span>{rtsSummary.failed > 0 && <span className="inline-flex items-center gap-1.5 text-rose-300"><AlertCircle className="h-3.5 w-3.5" />Failed {rtsSummary.failed}</span>}</div><p className="mt-2 text-xs text-slate-400">Supplier returns in this register</p></div>
             <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Queued {sageActivity.queued}</span><span className="inline-flex items-center gap-1.5 text-cyan-300"><Loader2 className={`h-3.5 w-3.5 ${sageActivity.processing > 0 ? 'animate-spin' : ''}`} />Processing {sageActivity.processing}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Posted {sageActivity.posted}</span>{sageActivity.failed > 0 && <span className="inline-flex items-center gap-1.5 text-rose-300"><AlertCircle className="h-3.5 w-3.5" />Failed {sageActivity.failed}</span>}</div><p className="mt-2 text-xs text-slate-400">Current bridge queue</p></div>
             </div>
         </section>
