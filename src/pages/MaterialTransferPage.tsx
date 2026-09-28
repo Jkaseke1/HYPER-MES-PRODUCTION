@@ -3,6 +3,8 @@ import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowR
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Dialog, DialogContent } from '../components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
 import StatusBadge from '../components/ui/StatusBadge';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
@@ -110,6 +112,118 @@ function SageSyncBadge({ log }: { log?: SageTransferSyncLog }) {
   );
 }
 
+function isPackagingMaterial(material: any) {
+  const description = `${material.code || ''} ${material.sage_code || ''} ${material.name || ''}`.toUpperCase();
+  return material.code?.toUpperCase().startsWith('PA')
+    || description.includes('PACKAGING')
+    || description.includes('MACRO PACK')
+    || description.includes('MAXIPACK');
+}
+
+function SageMaterialPicker({
+  selectedMaterialId,
+  materials,
+  rmBalances,
+  rmSyncedAt,
+  bufferBalances,
+  selectedMaterialIds,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  selectedMaterialId: string;
+  materials: any[];
+  rmBalances: Record<string, number>;
+  rmSyncedAt: Record<string, string | null>;
+  bufferBalances: Record<string, number>;
+  selectedMaterialIds: Set<string>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (materialId: string) => void;
+}) {
+  const selected = materials.find((material) => material.id === selectedMaterialId);
+  const rawMaterials = materials
+    .filter((material) => !isPackagingMaterial(material))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const packagingMaterials = materials
+    .filter(isPackagingMaterial)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  const renderGroup = (heading: string, group: any[]) => (
+    <CommandGroup heading={heading}>
+      {group.map((material) => {
+        const hasSageRmSnapshot = Boolean(rmSyncedAt[material.id]);
+        const alreadySelected = material.id !== selectedMaterialId && selectedMaterialIds.has(material.id);
+        const available = Math.max(0, (rmBalances[material.id] || 0) - (bufferBalances[material.id] || 0));
+        const disabled = !hasSageRmSnapshot || alreadySelected;
+        const availability = !hasSageRmSnapshot
+          ? 'Sage RM unavailable'
+          : alreadySelected
+            ? 'Already selected'
+            : `${available.toLocaleString()} ${material.unit} available`;
+
+        return (
+          <CommandItem
+            key={material.id}
+            value={`${material.name} ${material.code} ${material.sage_code || ''}`}
+            disabled={disabled}
+            onSelect={() => {
+              onSelect(material.id);
+              onOpenChange(false);
+            }}
+            className="min-h-12 items-center px-3 py-2.5"
+          >
+            <Package className="h-4 w-4 text-teal-700" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-bold text-slate-900">{material.name}</span>
+              <span className="block truncate font-mono text-[10px] text-slate-500">{material.code}</span>
+            </span>
+            <span className={`shrink-0 text-[10px] font-bold ${disabled ? 'text-slate-400' : 'text-emerald-700'}`}>
+              {availability}
+            </span>
+          </CommandItem>
+        );
+      })}
+    </CommandGroup>
+  );
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-left outline-none transition-colors hover:border-teal-400 focus:ring-2 focus:ring-teal-500"
+          aria-label="Choose transfer material"
+        >
+          <Package className="h-4 w-4 shrink-0 text-teal-700" />
+          <span className="min-w-0 flex-1">
+            {selected ? (
+              <>
+                <span className="block truncate text-xs font-bold text-slate-900">{selected.name}</span>
+                <span className="block truncate font-mono text-[10px] text-slate-500">{selected.code}</span>
+              </>
+            ) : (
+              <span className="block truncate text-xs font-bold text-slate-500">Search raw material or packaging</span>
+            )}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(40rem,calc(100vw-2rem))] p-0">
+        <Command>
+          <CommandInput placeholder="Search by material name or Sage code..." />
+          <CommandList className="max-h-80">
+            <CommandEmpty>No matching Sage-linked material.</CommandEmpty>
+            {renderGroup('Raw materials', rawMaterials)}
+            <CommandSeparator />
+            {renderGroup('Packaging', packagingMaterials)}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function MaterialTransferPage() {
   const { profile } = useAuth();
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
@@ -131,6 +245,7 @@ export default function MaterialTransferPage() {
   const [transferError, setTransferError] = useState<string[] | null>(null);
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const [refreshingTransferStock, setRefreshingTransferStock] = useState(false);
+  const [openMaterialPickerId, setOpenMaterialPickerId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
 
   // Multi-line transfer state
@@ -1009,26 +1124,21 @@ export default function MaterialTransferPage() {
                       return (
                         <div key={line.id} className="grid grid-cols-[44px_minmax(0,1.45fr)_minmax(180px,0.9fr)_44px] items-start gap-3 px-3 py-3 hover:bg-slate-50/70 transition-colors">
                           <span className="pt-2 text-xs font-extrabold text-slate-400">{index + 1}</span>
-                          <select
-                            aria-label={`Raw material line ${index + 1}`}
-                            value={line.raw_material_id}
-                            onChange={(e) => updateTransferLine(line.id, 'raw_material_id', e.target.value)}
-                            className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-bold focus:ring-2 focus:ring-teal-500 bg-white outline-none"
-                          >
-                            <option value="">Select raw material</option>
-                            {rawMaterials.map((mat) => {
-                              const bal = rmWarehouseBalances[mat.id] ?? 0;
-                              const hasSageRmSnapshot = Boolean(rmWarehouseSyncedAt[mat.id]);
-                              const usedOnAnotherLine = transferLines.some((otherLine) => otherLine.id !== line.id && otherLine.raw_material_id === mat.id);
-                              return (
-                                <option key={mat.id} value={mat.id} disabled={usedOnAnotherLine || !hasSageRmSnapshot}>
-                                  {mat.name} ({mat.code}) — {hasSageRmSnapshot
-                                    ? `transferable from Sage RM: ${Math.max(0, bal - (bufferWarehouseBalances[mat.id] || 0)).toLocaleString()} ${mat.unit}`
-                                    : 'Sage RM unavailable'}
-                                </option>
-                              );
-                            })}
-                          </select>
+                          <SageMaterialPicker
+                            selectedMaterialId={line.raw_material_id}
+                            materials={rawMaterials}
+                            rmBalances={rmWarehouseBalances}
+                            rmSyncedAt={rmWarehouseSyncedAt}
+                            bufferBalances={bufferWarehouseBalances}
+                            selectedMaterialIds={new Set(
+                              transferLines
+                                .filter((otherLine) => otherLine.id !== line.id && Boolean(otherLine.raw_material_id))
+                                .map((otherLine) => otherLine.raw_material_id),
+                            )}
+                            open={openMaterialPickerId === line.id}
+                            onOpenChange={(open) => setOpenMaterialPickerId(open ? line.id : null)}
+                            onSelect={(materialId) => updateTransferLine(line.id, 'raw_material_id', materialId)}
+                          />
                           <div>
                             <input
                               aria-label={`Transfer quantity for line ${index + 1}`}
