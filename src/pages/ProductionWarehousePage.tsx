@@ -109,7 +109,7 @@ export default function ProductionWarehousePage() {
   const [receiptNotice, setReceiptNotice] = useState<ReceiptNotice>(null);
   const [loading, setLoading] = useState(true);
   const [pageView, setPageView] = useState<'receiving' | 'stock' | 'sage'>('receiving');
-  const [incomingFilter, setIncomingFilter] = useState<'all' | 'awaiting' | 'processed'>('awaiting');
+  const [incomingFilter, setIncomingFilter] = useState<'all' | 'awaiting' | 'processed'>('all');
   const [sageActivityFilter, setSageActivityFilter] = useState<'all' | 'attention' | 'processed'>('all');
   const [expandedSageIst, setExpandedSageIst] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -605,8 +605,8 @@ export default function ProductionWarehousePage() {
                           <span className={`border px-2 py-0.5 text-xs font-semibold ${bundle.pendingTransfers.length ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{bundle.pendingTransfers.length ? 'Awaiting receipt' : 'Received'}</span>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                          <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
-                          <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> {bundle.requester}</span>
+                          <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> IST date: {format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
+                          <span className="inline-flex items-center gap-1"><UserRound className="h-3.5 w-3.5" /> Requested by: {bundle.requester}</span>
                         </div>
                       </div>
                     </button>
