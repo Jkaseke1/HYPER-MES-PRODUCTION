@@ -15,6 +15,23 @@ CREATE TABLE IF NOT EXISTS public.grn_rts_weighbridge_releases (
 COMMENT ON TABLE public.grn_rts_weighbridge_releases IS
   'Audit trail for weighbridge tickets released after a full, Sage-posted RTS.';
 
+ALTER TABLE public.grn_rts_weighbridge_releases ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Finance can read RTS weighbridge releases"
+  ON public.grn_rts_weighbridge_releases;
+
+CREATE POLICY "Finance can read RTS weighbridge releases"
+  ON public.grn_rts_weighbridge_releases
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.profiles
+      WHERE id = auth.uid()
+        AND role IN ('admin', 'finance')
+    )
+  );
+
 CREATE OR REPLACE FUNCTION public.release_weighbridge_ticket_for_full_rts(p_rts_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
