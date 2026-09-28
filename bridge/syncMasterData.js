@@ -6,10 +6,20 @@ const parseList = (value) => String(value || '')
   .filter(Boolean);
 const SYNC_CODES = parseList(process.env.SAGE_MASTER_SYNC_CODES);
 const SYNC_PREFIXES = parseList(process.env.SAGE_MASTER_SYNC_PREFIXES);
+const SYNC_PACKAGING = process.env.SAGE_MASTER_SYNC_PACKAGING === 'true';
 
-function isInSyncScope(code) {
-  const normalized = String(code || '').trim().toUpperCase();
-  return SYNC_CODES.includes(normalized) || SYNC_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+function isPackagingItem(item) {
+  const description = [item.code, item.name, item.description]
+    .map((value) => String(value || '').trim().toUpperCase())
+    .join(' ');
+  return description.includes('PACKAGING') || description.includes('MACRO PACK') || description.includes('MAXIPACK');
+}
+
+function isInSyncScope(item) {
+  const normalized = String(item.code || '').trim().toUpperCase();
+  return SYNC_CODES.includes(normalized)
+    || SYNC_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+    || (SYNC_PACKAGING && isPackagingItem(item));
 }
 
 async function syncRawMaterials() {
@@ -17,25 +27,25 @@ async function syncRawMaterials() {
   const pool = await sql.connect(sageConfig);
   const result = await pool.request().query(`
     SELECT
-      LTRIM(RTRIM(StockLink)) AS code,
+      LTRIM(RTRIM(Code)) AS code,
       LTRIM(RTRIM(Description_1)) AS name,
       LTRIM(RTRIM(Description_2)) AS description
     FROM StkItem
-    WHERE StockLink IS NOT NULL AND LTRIM(RTRIM(StockLink)) <> ''
-    ORDER BY StockLink
+    WHERE Code IS NOT NULL AND LTRIM(RTRIM(Code)) <> ''
+    ORDER BY Code
   `);
 
-  if (SYNC_CODES.length === 0 && SYNC_PREFIXES.length === 0) {
-    console.warn('  Sage master sync skipped: configure SAGE_MASTER_SYNC_CODES or SAGE_MASTER_SYNC_PREFIXES; no items will be imported.');
+  if (SYNC_CODES.length === 0 && SYNC_PREFIXES.length === 0 && !SYNC_PACKAGING) {
+    console.warn('  Sage master sync skipped: configure Sage codes, code prefixes, or the packaging sync flag; no items will be imported.');
     return { synced: 0, sourceCount: result.recordset.length, skipped: true };
   }
 
-  const items = result.recordset.filter((row) => isInSyncScope(row.code)).map((row) => ({
+  const items = result.recordset.filter(isInSyncScope).map((row) => ({
     code: String(row.code || '').trim(),
     sage_code: String(row.code || '').trim(),
     name: String(row.name || row.code || '').trim(),
     description: String(row.description || '').trim(),
-    unit: 'kg',
+    unit: isPackagingItem(row) ? 'units' : 'kg',
     is_active: true,
     updated_at: new Date().toISOString(),
   })).filter((item) => item.code && item.name);
