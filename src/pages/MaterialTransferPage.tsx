@@ -250,7 +250,13 @@ function SageMaterialPicker({
           <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(40rem,calc(100vw-2rem))] p-0">
+      <PopoverContent
+        side="top"
+        align="start"
+        sideOffset={8}
+        avoidCollisions={false}
+        className="w-[min(40rem,calc(100vw-2rem))] p-0"
+      >
         <Command
           shouldFilter={false}
           className="[&_[data-slot=command-input-wrapper]]:m-2 [&_[data-slot=command-input-wrapper]]:h-11 [&_[data-slot=command-input-wrapper]]:rounded-md [&_[data-slot=command-input-wrapper]]:!border [&_[data-slot=command-input-wrapper]]:border-slate-300 [&_[data-slot=command-input-wrapper]]:bg-white [&_[data-slot=command-input-wrapper]]:px-3 [&_[data-slot=command-input-wrapper]]:shadow-sm [&_[data-slot=command-input-wrapper]:focus-within]:border-teal-600 [&_[data-slot=command-input-wrapper]:focus-within]:ring-2 [&_[data-slot=command-input-wrapper]:focus-within]:ring-teal-100"
