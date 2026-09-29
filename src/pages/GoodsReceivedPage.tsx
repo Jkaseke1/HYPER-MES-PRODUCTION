@@ -97,7 +97,7 @@ const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; t
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
-  const canManageGrnCorrections = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
+  const canManageGrnCorrections = ['admin', 'finance', 'accountant', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
@@ -640,6 +640,14 @@ export default function GoodsReceivedPage() {
   };
 
   const saveGrnCorrection = async () => {
+    if (!editingGrn || !canManageGrnCorrections) {
+      toast.error('You do not have permission to correct this GRV.');
+      return;
+    }
+    if (!['pending', 'pending_costing', 'pending_finance'].includes(editingGrn.status)) {
+      toast.error('Approved or rejected GRNs are locked. Correct the GRN before final approval.');
+      return;
+    }
     if (!editingGrn || !editManualGrvNumber.trim() || (!editSupplierId || (editSupplierId === 'other' && !editUnregisteredSupplierName.trim()))) {
       toast.error('Manual GRV number and supplier are required.');
       return;
@@ -2552,16 +2560,16 @@ export default function GoodsReceivedPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Manager GRV correction modal */}
+      {/* Pre-approval GRV correction modal */}
       <Dialog open={grnEditOpen} onOpenChange={setGrnEditOpen}>
         <DialogContent className="max-w-[1100px] w-[96vw] max-h-[92vh] overflow-hidden p-0 [&>button.absolute]:hidden">
           <DialogHeader className="shrink-0 bg-slate-900 px-5 py-4 text-white">
             <div className="flex items-center justify-between pr-10">
               <div>
                 <DialogTitle className="text-lg font-extrabold text-white">Correct GRV {editingGrn?.grn_number}</DialogTitle>
-                <DialogDescription className="mt-1 text-xs text-slate-300">Manager correction window before Finance approval. The original initiator remains unchanged.</DialogDescription>
+                <DialogDescription className="mt-1 text-xs text-slate-300">Finance and manager correction window before approval. The original initiator remains unchanged.</DialogDescription>
               </div>
-              <Badge className="border border-orange-300/30 bg-orange-500/15 text-orange-200">Manager only</Badge>
+              <Badge className="border border-orange-300/30 bg-orange-500/15 text-orange-200">Pre-approval only</Badge>
             </div>
             <button onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
               <X className="h-4 w-4" />

@@ -62,7 +62,7 @@ export interface UserWithRoles {
 export type PermissionCode =
   | 'dashboard.view'
   | 'raw_materials.view' | 'raw_materials.create' | 'raw_materials.edit' | 'raw_materials.delete'
-  | 'grn.view' | 'grn.create' | 'grn.approve' | 'grn.delete'
+  | 'grn.view' | 'grn.create' | 'grn.edit' | 'grn.approve' | 'grn.delete'
   | 'quality.view' | 'quality.create' | 'quality.approve'
   | 'formulations.view' | 'formulations.create' | 'formulations.edit' | 'formulations.delete' | 'formulations.approve'
   | 'planning.view' | 'planning.create' | 'planning.edit' | 'planning.approve'
