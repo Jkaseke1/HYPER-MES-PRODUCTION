@@ -21,6 +21,20 @@ interface WeighBridgeData {
   wb_second_mass: string;
   wb_nett_mass: string;
   wb_driver_signed: boolean;
+  wb_inbound_transport_mode: 'supplier_provided' | 'company_hired';
+  wb_inbound_transporter_id: string;
+  wb_inbound_rate_per_tonne: string;
+  wb_inbound_currency_code: string;
+  wb_inbound_invoice_number: string;
+  wb_inbound_waybill_reference: string;
+  wb_inbound_transport_notes: string;
+}
+
+interface Transporter {
+  id: string;
+  transporter_code: string;
+  name: string;
+  default_currency: string;
 }
 
 interface WeighBridgeTicketProps {
@@ -28,6 +42,7 @@ interface WeighBridgeTicketProps {
   onChange: (field: keyof WeighBridgeData, value: any) => void;
   receivedQty?: number;
   hideHeader?: boolean;
+  allowCompanyHiredTransport?: boolean;
 }
 
 const input =
@@ -55,10 +70,11 @@ function SectionHeader({ icon: Icon, children }: { icon: any; children: React.Re
   );
 }
 
-export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHeader }: WeighBridgeTicketProps) {
+export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHeader, allowCompanyHiredTransport = false }: WeighBridgeTicketProps) {
   const [expanded, setExpanded] = useState(!!hideHeader);
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [transporters, setTransporters] = useState<Transporter[]>([]);
 
   useEffect(() => {
     // Fetch raw materials (Sage-linked products)
@@ -76,7 +92,16 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
       .eq('is_active', true)
       .order('name')
       .then(({ data }) => setSuppliers(data || []));
-  }, []);
+
+    if (allowCompanyHiredTransport) {
+      supabase
+        .from('inbound_transporters')
+        .select('id, transporter_code, name, default_currency')
+        .eq('is_active', true)
+        .order('name')
+        .then(({ data }) => setTransporters((data || []) as Transporter[]));
+    }
+  }, [allowCompanyHiredTransport]);
 
   const handleMassChange = (field: 'wb_first_mass' | 'wb_second_mass', value: string) => {
     onChange(field, value);
@@ -179,17 +204,6 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       className={input}
                     />
                   </Field>
-                  <Field title="Haulier">
-                    <select
-                      value={data.wb_haulier_code}
-                      onChange={(e) => onChange('wb_haulier_code', e.target.value)}
-                      className={input}
-                    >
-                      <option value="">Select…</option>
-                      <option value="HYPER">HYPER</option>
-                      <option value="External">External</option>
-                    </select>
-                  </Field>
                   <Field title="Product (Sage) *">
                     <select
                       value={data.wb_product_code}
@@ -265,6 +279,94 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       className={input}
                     />
                   </Field>
+                </div>
+              </div>
+
+              <div>
+                <SectionHeader icon={Truck}>Inbound Transport</SectionHeader>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-700">Who provides this transport?</p>
+                  <div className={`mt-2 grid gap-2 ${allowCompanyHiredTransport ? 'grid-cols-2' : 'grid-cols-1'}`} role="group" aria-label="Inbound transport source">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired') return;
+                        onChange('wb_inbound_transport_mode', 'supplier_provided');
+                        onChange('wb_haulier_code', 'SUPPLIER');
+                        onChange('wb_inbound_transporter_id', '');
+                        onChange('wb_inbound_rate_per_tonne', '');
+                        onChange('wb_inbound_invoice_number', '');
+                        onChange('wb_inbound_waybill_reference', '');
+                        onChange('wb_inbound_transport_notes', '');
+                      }}
+                      disabled={!allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired'}
+                      className={`border px-3 py-2 text-left text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                        data.wb_inbound_transport_mode === 'supplier_provided'
+                          ? 'border-slate-700 bg-slate-800 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      Supplier-provided
+                      <span className={`mt-0.5 block text-[10px] font-normal ${data.wb_inbound_transport_mode === 'supplier_provided' ? 'text-slate-300' : 'text-slate-400'}`}>No company freight claim</span>
+                    </button>
+                    {allowCompanyHiredTransport && <button
+                      type="button"
+                      onClick={() => onChange('wb_inbound_transport_mode', 'company_hired')}
+                      className={`border px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                        data.wb_inbound_transport_mode === 'company_hired'
+                          ? 'border-orange-500 bg-orange-500 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-orange-300'
+                      }`}
+                    >
+                      Company-hired
+                      <span className={`mt-0.5 block text-[10px] font-normal ${data.wb_inbound_transport_mode === 'company_hired' ? 'text-orange-100' : 'text-slate-400'}`}>Creates a GRN-linked claim</span>
+                    </button>}
+                  </div>
+
+                  {!allowCompanyHiredTransport && (
+                    <p className="mt-2 text-[11px] text-slate-500">Company-hired transport and transporter cost accounts are managed by Admin.</p>
+                  )}
+
+                  {allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired' && (
+                    <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-orange-100 pt-3 sm:grid-cols-2">
+                      <Field title="Transporter *">
+                        <select
+                          value={data.wb_inbound_transporter_id}
+                          onChange={(e) => {
+                            const transporter = transporters.find((item) => item.id === e.target.value);
+                            onChange('wb_inbound_transporter_id', e.target.value);
+                            onChange('wb_haulier_code', transporter?.transporter_code || '');
+                            onChange('wb_inbound_currency_code', transporter?.default_currency || 'USD');
+                          }}
+                          className={input}
+                        >
+                          <option value="">Select company transporter…</option>
+                          {transporters.map((transporter) => (
+                            <option key={transporter.id} value={transporter.id}>{transporter.transporter_code} - {transporter.name}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field title="Agreed rate per tonne *">
+                        <div className="flex gap-2">
+                          <input type="number" min="0" step="0.01" value={data.wb_inbound_rate_per_tonne} onChange={(e) => onChange('wb_inbound_rate_per_tonne', e.target.value)} placeholder="0.00" className={input} />
+                          <select value={data.wb_inbound_currency_code} onChange={(e) => onChange('wb_inbound_currency_code', e.target.value)} className="w-20 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900">
+                            <option>USD</option><option>ZIG</option><option>ZAR</option>
+                          </select>
+                        </div>
+                      </Field>
+                      <Field title="Invoice number">
+                        <input value={data.wb_inbound_invoice_number} onChange={(e) => onChange('wb_inbound_invoice_number', e.target.value)} placeholder="Optional at weighbridge" className={input} />
+                      </Field>
+                      <Field title="Waybill reference">
+                        <input value={data.wb_inbound_waybill_reference} onChange={(e) => onChange('wb_inbound_waybill_reference', e.target.value)} placeholder="Optional at weighbridge" className={input} />
+                      </Field>
+                      <div className="sm:col-span-2">
+                        <Field title="Transport notes">
+                          <input value={data.wb_inbound_transport_notes} onChange={(e) => onChange('wb_inbound_transport_notes', e.target.value)} placeholder="Route, agreed terms, or supporting detail" className={input} />
+                        </Field>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

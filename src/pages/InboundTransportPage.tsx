@@ -6,7 +6,10 @@ import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import './InboundTransportPage.css';
 
 type Transporter = { id: string; transporter_code: string; name: string; contact_name: string | null; contact_phone: string | null; default_currency: string; is_active: boolean };
-type Ticket = { id: string; ticket_no: string; vehicle_reg: string | null; haulier_code: string | null; driver_name: string | null; nett_mass: number | null; driver_signed: boolean };
+type Ticket = {
+  id: string; ticket_no: string; vehicle_reg: string | null; haulier_code: string | null; driver_name: string | null; nett_mass: number | null; driver_signed: boolean;
+  inbound_transport_mode: 'supplier_provided' | 'company_hired'; inbound_transporter_id: string | null; inbound_rate_per_tonne: number | null; inbound_currency_code: string | null;
+};
 type Grn = { id: string; grn_number: string; status: string; weigh_bridge_ticket_id: string | null };
 type Claim = {
   id: string; claim_number: string; status: string; net_mass_kg: number; rate_per_tonne: number; calculated_amount: number; currency_code: string;
@@ -44,7 +47,7 @@ export default function InboundTransportPage() {
     const [claimsRes, transportersRes, ticketsRes, grnsRes] = await Promise.all([
       supabase.from('inbound_transport_claims').select('*, inbound_transporters(id, transporter_code, name, contact_name, contact_phone, default_currency, is_active)').order('created_at', { ascending: false }),
       supabase.from('inbound_transporters').select('id, transporter_code, name, contact_name, contact_phone, default_currency, is_active').eq('is_active', true).order('name'),
-      supabase.from('weigh_bridge_tickets').select('id, ticket_no, vehicle_reg, haulier_code, driver_name, nett_mass, driver_signed').eq('driver_signed', true).gt('nett_mass', 0).order('created_at', { ascending: false }),
+      supabase.from('weigh_bridge_tickets').select('id, ticket_no, vehicle_reg, haulier_code, driver_name, nett_mass, driver_signed, inbound_transport_mode, inbound_transporter_id, inbound_rate_per_tonne, inbound_currency_code').eq('driver_signed', true).gt('nett_mass', 0).order('created_at', { ascending: false }),
       supabase.from('goods_received_notes').select('id, grn_number, status, weigh_bridge_ticket_id').not('weigh_bridge_ticket_id', 'is', null).order('created_at', { ascending: false }),
     ]);
     if (claimsRes.error || transportersRes.error || ticketsRes.error || grnsRes.error) {
@@ -64,7 +67,11 @@ export default function InboundTransportPage() {
 
   const grnByTicket = useMemo(() => new Map(grns.map((grn) => [grn.weigh_bridge_ticket_id, grn])), [grns]);
   const claimedTicketIds = useMemo(() => new Set(claims.map((claim) => claim.weigh_bridge_ticket_id)), [claims]);
-  const eligibleTickets = useMemo(() => tickets.filter((ticket) => grnByTicket.has(ticket.id) && !claimedTicketIds.has(ticket.id)), [tickets, grnByTicket, claimedTicketIds]);
+  const eligibleTickets = useMemo(() => tickets.filter((ticket) => (
+    ticket.inbound_transport_mode === 'company_hired'
+    && grnByTicket.has(ticket.id)
+    && !claimedTicketIds.has(ticket.id)
+  )), [tickets, grnByTicket, claimedTicketIds]);
   const findTicketTransporter = (ticket?: Ticket) => {
     const haulierCode = ticket?.haulier_code?.trim().toUpperCase();
     return haulierCode ? transporters.find((transporter) => transporter.transporter_code.trim().toUpperCase() === haulierCode) : undefined;
@@ -78,7 +85,7 @@ export default function InboundTransportPage() {
     const firstTicket = eligibleTickets[0];
     const linkedTransporter = findTicketTransporter(firstTicket);
     const transporter = linkedTransporter || transporters[0];
-    setForm({ ticketId: firstTicket?.id || '', transporterId: transporter?.id || '', rate: '', currency: transporter?.default_currency || 'USD', invoice: '', waybill: '', notes: '' });
+    setForm({ ticketId: firstTicket?.id || '', transporterId: linkedTransporter?.id || firstTicket?.inbound_transporter_id || transporter?.id || '', rate: firstTicket?.inbound_rate_per_tonne == null ? '' : String(firstTicket.inbound_rate_per_tonne), currency: firstTicket?.inbound_currency_code || linkedTransporter?.default_currency || transporter?.default_currency || 'USD', invoice: '', waybill: '', notes: '' });
     setError(null); setShowForm(true);
   };
 
@@ -88,8 +95,9 @@ export default function InboundTransportPage() {
     setForm((current) => ({
       ...current,
       ticketId,
-      transporterId: linkedTransporter?.id || current.transporterId,
-      currency: linkedTransporter?.default_currency || current.currency,
+      transporterId: linkedTransporter?.id || ticket?.inbound_transporter_id || current.transporterId,
+      rate: ticket?.inbound_rate_per_tonne == null ? current.rate : String(ticket.inbound_rate_per_tonne),
+      currency: ticket?.inbound_currency_code || linkedTransporter?.default_currency || current.currency,
     }));
   };
 

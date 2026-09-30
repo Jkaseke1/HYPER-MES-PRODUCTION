@@ -1,6 +1,7 @@
 export type MesRole = string | null | undefined;
 
 const fullAccessRoles = new Set(['admin', 'md']);
+const adminOnlyPaths = ['/inbound-transport'];
 
 const rolePaths: Record<string, string[]> = {
   weighbridge: ['/weigh-bridge', '/goods-received', '/material-transfer', '/warehouse'],
@@ -12,10 +13,10 @@ const rolePaths: Record<string, string[]> = {
   production_manager: ['/weigh-bridge', '/goods-received', '/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
   supervisor: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
   operator: ['/formulations', '/production-planning', '/production-orders', '/production-control', '/production-warehouse', '/macropack', '/finished-goods', '/shift-reports', '/daily-production-report', '/production-efficiency', '/production-report', '/reports/process-loss', '/reports/macropack-reconciliation'],
-  logistics: ['/dispatch', '/dispatch-planning', '/fleet', '/inbound-transport'],
-  finance: ['/weigh-bridge', '/inbound-transport', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
-  finance_viewer: ['/weigh-bridge', '/inbound-transport', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
-  accountant: ['/inbound-transport', '/goods-received', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
+  logistics: ['/dispatch', '/dispatch-planning', '/fleet'],
+  finance: ['/weigh-bridge', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
+  finance_viewer: ['/weigh-bridge', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
+  accountant: ['/goods-received', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
 };
 
 const roleLandingPaths: Record<string, string> = {
@@ -31,8 +32,11 @@ export function defaultPathForRole(role: MesRole): string {
 }
 
 export function canAccessPath(role: MesRole, path: string): boolean {
-  if (isFullAccessRole(role)) return true;
   const cleanPath = path.split('?')[0];
+  if (adminOnlyPaths.some((adminPath) => cleanPath === adminPath || cleanPath.startsWith(`${adminPath}/`))) {
+    return role === 'admin';
+  }
+  if (isFullAccessRole(role)) return true;
   const allowedPaths = rolePaths[role ?? ''];
 
   // Unknown legacy roles retain the dashboard until their role is assigned.

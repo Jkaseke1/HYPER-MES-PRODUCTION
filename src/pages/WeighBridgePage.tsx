@@ -39,12 +39,19 @@ interface WBTicket {
   created_by_user?: { full_name?: string | null; email?: string | null } | null;
   grn_number?: string;
   grn_status?: string;
+  inbound_transport_mode?: 'supplier_provided' | 'company_hired';
+  inbound_transporter_id?: string | null;
+  inbound_rate_per_tonne?: number | null;
+  inbound_currency_code?: string | null;
+  inbound_invoice_number?: string | null;
+  inbound_waybill_reference?: string | null;
+  inbound_transport_notes?: string | null;
 }
 
 const emptyWBForm = {
   wb_transaction_no: '',
   wb_vehicle_reg: '',
-  wb_haulier_code: 'HYPER',
+  wb_haulier_code: 'SUPPLIER',
   wb_product_code: '',
   wb_product_name: '',
   wb_supplier_id: '',
@@ -60,6 +67,13 @@ const emptyWBForm = {
   wb_second_mass: '',
   wb_nett_mass: '',
   wb_driver_signed: false,
+  wb_inbound_transport_mode: 'supplier_provided',
+  wb_inbound_transporter_id: '',
+  wb_inbound_rate_per_tonne: '',
+  wb_inbound_currency_code: 'USD',
+  wb_inbound_invoice_number: '',
+  wb_inbound_waybill_reference: '',
+  wb_inbound_transport_notes: '',
 };
 
 const STATUS_STYLES: Record<string, { label: string; bg: string; color: string; border: string }> = {
@@ -166,7 +180,7 @@ export default function WeighBridgePage() {
     return {
       wb_transaction_no: ticket.ticket_no || '',
       wb_vehicle_reg: ticket.vehicle_reg || '',
-      wb_haulier_code: ticket.haulier_code || 'HYPER',
+      wb_haulier_code: ticket.haulier_code || 'SUPPLIER',
       wb_product_code: ticket.product_code || '',
       wb_product_name: ticket.product_name || '',
       wb_supplier_id: ticket.supplier_id || '',
@@ -182,6 +196,13 @@ export default function WeighBridgePage() {
       wb_second_mass: ticket.second_mass == null ? '' : String(ticket.second_mass),
       wb_nett_mass: ticket.nett_mass == null ? '' : String(ticket.nett_mass),
       wb_driver_signed: Boolean(ticket.driver_signed),
+      wb_inbound_transport_mode: ticket.inbound_transport_mode || 'supplier_provided',
+      wb_inbound_transporter_id: ticket.inbound_transporter_id || '',
+      wb_inbound_rate_per_tonne: ticket.inbound_rate_per_tonne == null ? '' : String(ticket.inbound_rate_per_tonne),
+      wb_inbound_currency_code: ticket.inbound_currency_code || 'USD',
+      wb_inbound_invoice_number: ticket.inbound_invoice_number || '',
+      wb_inbound_waybill_reference: ticket.inbound_waybill_reference || '',
+      wb_inbound_transport_notes: ticket.inbound_transport_notes || '',
     };
   }
 
@@ -235,6 +256,10 @@ export default function WeighBridgePage() {
       alert('Select a supplier, or record the supplier name for Finance.');
       return;
     }
+    if (form.wb_inbound_transport_mode === 'company_hired' && (!form.wb_inbound_transporter_id || !form.wb_inbound_rate_per_tonne || Number(form.wb_inbound_rate_per_tonne) <= 0)) {
+      alert('Company-hired transport requires a transporter and a positive agreed rate per tonne.');
+      return;
+    }
     if (editing && !editingTicketId) {
       alert('This ticket could not be identified for editing. Close the form and open the ticket again.');
       return;
@@ -260,6 +285,13 @@ export default function WeighBridgePage() {
         nett_mass: form.wb_nett_mass ? parseFloat(form.wb_nett_mass) : null,
         comment: form.wb_comment,
         driver_signed: form.wb_driver_signed,
+        inbound_transport_mode: form.wb_inbound_transport_mode,
+        inbound_transporter_id: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_transporter_id : null,
+        inbound_rate_per_tonne: form.wb_inbound_transport_mode === 'company_hired' ? parseFloat(form.wb_inbound_rate_per_tonne) : null,
+        inbound_currency_code: form.wb_inbound_currency_code || 'USD',
+        inbound_invoice_number: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_invoice_number.trim() || null : null,
+        inbound_waybill_reference: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_waybill_reference.trim() || null : null,
+        inbound_transport_notes: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_transport_notes.trim() : '',
       };
       const query = editing
         ? supabase.from('weigh_bridge_tickets').update(payload).eq('id', editingTicketId || '')
@@ -536,6 +568,7 @@ export default function WeighBridgePage() {
                 data={form as any}
                 onChange={handleFormChange}
                 hideHeader
+                allowCompanyHiredTransport={profile?.role === 'admin'}
               />
             </div>
             {/* Sticky Footer */}
@@ -615,8 +648,12 @@ export default function WeighBridgePage() {
                       <span className="font-bold text-slate-900 font-mono">{viewTicket.vehicle_reg || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Haulier</span>
-                      <span className="font-bold text-slate-900">{viewTicket.haulier_code || 'HYPER'}</span>
+                      <span className="text-slate-500">Transport source</span>
+                      <span className="font-bold text-slate-900">{viewTicket.inbound_transport_mode === 'company_hired' ? 'Company-hired' : 'Supplier-provided'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Transporter</span>
+                      <span className="font-bold text-slate-900">{viewTicket.haulier_code || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-500">Trailer No</span>
@@ -653,6 +690,14 @@ export default function WeighBridgePage() {
                   </div>
                 </div>
               </div>
+
+              {viewTicket.inbound_transport_mode === 'company_hired' && (
+                <div className="bg-orange-50 p-3 rounded-2xl border border-orange-200 text-xs text-orange-950">
+                  <span className="font-bold uppercase tracking-wider text-[10px] text-orange-700 block mb-1">Company-hired transport</span>
+                  <p className="font-semibold">{Number(viewTicket.inbound_rate_per_tonne || 0).toLocaleString()} {viewTicket.inbound_currency_code || 'USD'} per tonne</p>
+                  <p className="mt-1 text-orange-800">A draft transport claim will be created automatically when this signed ticket is linked to a GRN.</p>
+                </div>
+              )}
 
               {/* Product Info */}
               <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-1 text-xs">
