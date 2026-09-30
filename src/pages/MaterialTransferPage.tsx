@@ -398,6 +398,9 @@ export default function MaterialTransferPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
+  const [returnTransfer, setReturnTransfer] = useState<MaterialTransfer | null>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnDialogError, setReturnDialogError] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -934,20 +937,28 @@ export default function MaterialTransferPage() {
     }
   }
 
-  async function returnCompletedTransferToRm(transfer: MaterialTransfer) {
+  function openReturnToRmDialog(transfer: MaterialTransfer) {
+    setReturnTransfer(transfer);
+    setReturnReason('');
+    setReturnDialogError(null);
+  }
+
+  function closeReturnToRmDialog() {
+    if (saving || refreshingReturnStock) return;
+    setReturnTransfer(null);
+    setReturnReason('');
+    setReturnDialogError(null);
+  }
+
+  async function returnCompletedTransferToRm(transfer: MaterialTransfer, reason: string) {
     if (!canReturnCompletedTransfer || transfer.status !== 'received') return;
-    const reason = window.prompt(
-      `Reason for returning ${transfer.raw_materials?.name || 'this material'} (${Number(transfer.quantity).toLocaleString()} ${transfer.unit || 'kg'}) from PD to RM?`,
-      'Return unused material to RM warehouse',
-    );
-    if (reason === null) return;
     if (!reason.trim()) {
-      setTransferError(['Enter a reason before returning a completed transfer to RM.']);
+      setReturnDialogError('Enter a reason before returning this material.');
       return;
     }
 
     setSaving(true);
-    setTransferError(null);
+    setReturnDialogError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('Your session has expired. Sign in again.');
@@ -965,11 +976,13 @@ export default function MaterialTransferPage() {
       if (error) throw error;
 
       setViewTransfer(null);
+      setReturnTransfer(null);
+      setReturnReason('');
       setSuccessMessage(`${transfer.raw_materials?.name || 'Material'} is queued for Sage return from PD to RM. PlantControl will update only after Sage confirms it.`);
       window.setTimeout(() => setSuccessMessage(''), 6000);
       await fetchData();
     } catch (error: any) {
-      setTransferError([`Could not queue return to RM: ${error.message}`]);
+      setReturnDialogError(error.message || 'Could not queue the return to RM.');
     } finally {
       setSaving(false);
     }
@@ -1503,6 +1516,63 @@ export default function MaterialTransferPage() {
         </div>
       )}
 
+      <Dialog open={returnTransfer !== null} onOpenChange={(open) => { if (!open) closeReturnToRmDialog(); }}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white p-0 shadow-2xl">
+          {returnTransfer && (
+            <form onSubmit={(event) => { event.preventDefault(); void returnCompletedTransferToRm(returnTransfer, returnReason); }}>
+              <div className="border-b border-slate-200 bg-slate-900 px-5 py-4 text-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white">
+                    <RotateCcw className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-extrabold">Return to RM</h2>
+                    <p className="mt-0.5 text-xs text-slate-300">Sage-confirmed warehouse return</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5 px-5 py-5">
+                <div className="grid grid-cols-[1fr_auto] gap-4 border-y border-slate-100 py-3 text-sm">
+                  <div>
+                    <p className="font-bold text-slate-900">{returnTransfer.raw_materials?.name || 'Material'}</p>
+                    <p className="mt-0.5 font-mono text-xs font-semibold text-slate-500">{returnTransfer.raw_materials?.code || ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-lg font-extrabold text-slate-900">{Math.abs(returnTransfer.quantity || 0).toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-slate-500">{returnTransfer.unit || 'kg'} · PD to RM</p>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="return-to-rm-reason" className="mb-2 block text-xs font-bold text-slate-700">Return reason</label>
+                  <textarea
+                    id="return-to-rm-reason"
+                    value={returnReason}
+                    onChange={(event) => { setReturnReason(event.target.value); setReturnDialogError(null); }}
+                    placeholder="Why is this material being returned?"
+                    rows={3}
+                    autoFocus
+                    className="w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                  />
+                  {returnDialogError && <p className="mt-2 text-xs font-semibold text-rose-700">{returnDialogError}</p>}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3.5">
+                <button type="button" onClick={closeReturnToRmDialog} disabled={saving || refreshingReturnStock} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:opacity-60">
+                  Cancel
+                </button>
+                <button type="submit" disabled={saving || refreshingReturnStock || !returnReason.trim()} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60">
+                  {saving || refreshingReturnStock ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                  Confirm return
+                </button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* View Transfer Details & Approval Modal */}
       <Dialog open={viewTransfer !== null} onOpenChange={() => setViewTransfer(null)}>
         <DialogContent className="w-[94vw] max-w-5xl p-0 max-h-[85vh] flex flex-col overflow-hidden bg-white rounded-2xl shadow-2xl border border-slate-200">
@@ -1517,7 +1587,7 @@ export default function MaterialTransferPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <StatusBadge status={viewTransfer?.status || 'pending'} />
+              <MaterialTransferStatusBadge status={viewTransfer?.status || 'pending'} />
               {viewTransfer && canReverseTransfer && viewTransfer.status === 'in_buffer' && (
                 <button
                   onClick={() => reverseTransfer(viewTransfer)}
@@ -1531,7 +1601,7 @@ export default function MaterialTransferPage() {
               )}
               {viewTransfer && canReturnCompletedTransfer && viewTransfer.status === 'received' && sageSyncLogs[viewTransfer.id]?.status === 'success' && (!reversalsByTransferId[viewTransfer.id] || reversalsByTransferId[viewTransfer.id].status === 'failed') && (
                 <button
-                  onClick={() => returnCompletedTransferToRm(viewTransfer)}
+                  onClick={() => openReturnToRmDialog(viewTransfer)}
                   disabled={saving || refreshingReturnStock}
                   className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-50"
                   title="Post a new Sage-confirmed return from Production to RM for this completed transfer"
@@ -1540,21 +1610,7 @@ export default function MaterialTransferPage() {
                   {reversalsByTransferId[viewTransfer.id]?.status === 'failed' ? 'Retry return to RM' : 'Return to RM'}
                 </button>
               )}
-              {viewTransfer && reversalsByTransferId[viewTransfer.id] && (
-                <span className={`inline-flex items-center rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${
-                  reversalsByTransferId[viewTransfer.id].status === 'posted'
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : reversalsByTransferId[viewTransfer.id].status === 'failed'
-                      ? 'border-rose-200 bg-rose-50 text-rose-700'
-                      : 'border-amber-200 bg-amber-50 text-amber-800'
-                }`} title={reversalsByTransferId[viewTransfer.id].failure_message || reversalsByTransferId[viewTransfer.id].sage_reference}>
-                  {reversalsByTransferId[viewTransfer.id].status === 'posted'
-                    ? 'Returned to RM'
-                    : reversalsByTransferId[viewTransfer.id].status === 'failed'
-                      ? 'Return needs attention'
-                      : 'Return queued for Sage'}
-                </span>
-              )}
+              {viewTransfer && <ReturnToRmBadge reversal={reversalsByTransferId[viewTransfer.id]} />}
               {viewTransfer && canAddIstLine && viewTransfer.status === 'in_buffer' && (
                 <button
                   type="button"
@@ -1596,7 +1652,7 @@ export default function MaterialTransferPage() {
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Current Status</p>
                     <div className="mt-1.5">
-                      <StatusBadge status={viewTransfer.status || 'pending'} />
+                      <MaterialTransferStatusBadge status={viewTransfer.status || 'pending'} />
                     </div>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
