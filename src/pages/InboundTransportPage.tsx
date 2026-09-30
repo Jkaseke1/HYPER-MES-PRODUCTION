@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle2, CircleDollarSign, ClipboardCheck, Landmark, L
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import TransporterAccounts, { type RateInput, type TransporterRateCard } from '../components/inbound-transport/TransporterAccounts';
 import './InboundTransportPage.css';
 
 type Transporter = { id: string; transporter_code: string; name: string; contact_name: string | null; contact_phone: string | null; default_currency: string; is_active: boolean };
@@ -31,6 +32,7 @@ export default function InboundTransportPage() {
   const [transporters, setTransporters] = useState<Transporter[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [grns, setGrns] = useState<Grn[]>([]);
+  const [rateCards, setRateCards] = useState<TransporterRateCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,31 +41,33 @@ export default function InboundTransportPage() {
   const [form, setForm] = useState({ ticketId: '', transporterId: '', rate: '', currency: 'USD', invoice: '', waybill: '', notes: '' });
   const [transporterForm, setTransporterForm] = useState({ code: '', name: '', contactName: '', contactPhone: '', currency: 'USD' });
 
-  const canPrepare = ['admin', 'md', 'logistics', 'raw_material_manager', 'warehouse_manager'].includes(profile?.role || '');
-  const canReview = ['admin', 'md', 'finance', 'accountant'].includes(profile?.role || '');
+  const canPrepare = profile?.role === 'admin';
+  const canReview = profile?.role === 'admin';
 
   const fetchData = async () => {
     setLoading(true);
-    const [claimsRes, transportersRes, ticketsRes, grnsRes] = await Promise.all([
+    const [claimsRes, transportersRes, ticketsRes, grnsRes, rateCardsRes] = await Promise.all([
       supabase.from('inbound_transport_claims').select('*, inbound_transporters(id, transporter_code, name, contact_name, contact_phone, default_currency, is_active)').order('created_at', { ascending: false }),
       supabase.from('inbound_transporters').select('id, transporter_code, name, contact_name, contact_phone, default_currency, is_active').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('id, ticket_no, vehicle_reg, haulier_code, driver_name, nett_mass, driver_signed, inbound_transport_mode, inbound_transporter_id, inbound_rate_per_tonne, inbound_currency_code').eq('driver_signed', true).gt('nett_mass', 0).order('created_at', { ascending: false }),
       supabase.from('goods_received_notes').select('id, grn_number, status, weigh_bridge_ticket_id').not('weigh_bridge_ticket_id', 'is', null).order('created_at', { ascending: false }),
+      supabase.from('inbound_transporter_rate_cards').select('id, transporter_id, route_from, route_to, vehicle_type, material_group, currency_code, rate_per_tonne, effective_from, effective_to, is_active, notes').order('effective_from', { ascending: false }),
     ]);
-    if (claimsRes.error || transportersRes.error || ticketsRes.error || grnsRes.error) {
-      setError(claimsRes.error?.message || transportersRes.error?.message || ticketsRes.error?.message || grnsRes.error?.message || 'Unable to load transport data.');
+    if (claimsRes.error || transportersRes.error || ticketsRes.error || grnsRes.error || rateCardsRes.error) {
+      setError(claimsRes.error?.message || transportersRes.error?.message || ticketsRes.error?.message || grnsRes.error?.message || rateCardsRes.error?.message || 'Unable to load transport data.');
     } else {
       setClaims((claimsRes.data || []) as Claim[]);
       setTransporters((transportersRes.data || []) as Transporter[]);
       setTickets((ticketsRes.data || []) as Ticket[]);
       setGrns((grnsRes.data || []) as Grn[]);
+      setRateCards((rateCardsRes.data || []) as TransporterRateCard[]);
       setError(null);
     }
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, []);
-  useRealtimeRefresh('inbound-transport-live', ['inbound_transport_claims', 'inbound_transporters', 'weigh_bridge_tickets', 'goods_received_notes'], fetchData);
+  useRealtimeRefresh('inbound-transport-live', ['inbound_transport_claims', 'inbound_transporters', 'inbound_transporter_rate_cards', 'weigh_bridge_tickets', 'goods_received_notes'], fetchData);
 
   const grnByTicket = useMemo(() => new Map(grns.map((grn) => [grn.weigh_bridge_ticket_id, grn])), [grns]);
   const claimedTicketIds = useMemo(() => new Set(claims.map((claim) => claim.weigh_bridge_ticket_id)), [claims]);
@@ -150,6 +154,26 @@ export default function InboundTransportPage() {
     setSaving(false);
   };
 
+  const addRateCard = async (transporterId: string, input: RateInput) => {
+    setSaving(true); setError(null);
+    const { error: rateError } = await supabase.from('inbound_transporter_rate_cards').insert({
+      transporter_id: transporterId,
+      route_from: input.routeFrom.trim(),
+      route_to: input.routeTo.trim(),
+      vehicle_type: input.vehicleType.trim() || null,
+      material_group: input.materialGroup.trim() || null,
+      currency_code: input.currency,
+      rate_per_tonne: Number(input.rate),
+      effective_from: input.effectiveFrom,
+      effective_to: input.effectiveTo || null,
+      notes: input.notes.trim(),
+      created_by: profile?.id,
+    });
+    if (rateError) setError(rateError.message); else await fetchData();
+    setSaving(false);
+    return !rateError;
+  };
+
   return <div className="transport-control space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h1 className="text-xl font-semibold text-slate-900">Inbound Transport Costs</h1><p className="mt-0.5 text-sm text-slate-500">Weighbridge-linked freight claims with Finance approval control.</p></div>
@@ -174,6 +198,8 @@ export default function InboundTransportPage() {
     <div className="overflow-hidden border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Claim</th><th className="px-3 py-3">Evidence</th><th className="px-3 py-3">Transporter</th><th className="px-3 py-3 text-right">Net mass</th><th className="px-3 py-3 text-right">Rate / t</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody>
       {loading ? <tr><td colSpan={8} className="py-16 text-center text-slate-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr> : claims.length === 0 ? <tr><td colSpan={8} className="py-14 text-center text-slate-400">No inbound transport claims yet.</td></tr> : claims.map((claim) => { const ticket = tickets.find((item) => item.id === claim.weigh_bridge_ticket_id); const grn = grns.find((item) => item.id === claim.grn_id); return <tr key={claim.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-3 font-mono text-xs font-semibold text-slate-800">{claim.claim_number}<span className="mt-1 block font-sans font-normal text-slate-500">{claim.invoice_number || claim.waybill_reference || 'No document'}</span></td><td className="px-3 py-3"><span className="block font-medium text-slate-800">{ticket?.ticket_no || 'Weighbridge ticket'}</span><span className="mt-1 block text-xs text-slate-500">{grn?.grn_number || 'Linked GRN'} · {ticket?.vehicle_reg || 'Vehicle not set'}</span></td><td className="px-3 py-3"><span className="font-medium text-slate-800">{claim.inbound_transporters?.name}</span><span className="ml-1 font-mono text-xs text-slate-400">{claim.inbound_transporters?.transporter_code}</span></td><td className="px-3 py-3 text-right font-mono text-slate-700">{Number(claim.net_mass_kg).toLocaleString()} kg</td><td className="px-3 py-3 text-right font-mono text-slate-700">{money(Number(claim.rate_per_tonne), claim.currency_code)}</td><td className="px-3 py-3 text-right font-semibold text-slate-900">{money(Number(claim.calculated_amount), claim.currency_code)}</td><td className="px-3 py-3"><span className={`inline-flex border px-2 py-1 text-xs font-semibold capitalize ${statusStyle[claim.status] || statusStyle.draft}`}>{claim.status}</span>{claim.review_note && <span className="mt-1 block max-w-44 truncate text-xs text-rose-700" title={claim.review_note}>{claim.review_note}</span>}</td><td className="px-3 py-3"><div className="flex justify-end gap-1.5">{canPrepare && ['draft', 'rejected'].includes(claim.status) && <button onClick={() => submitClaim(claim)} className="inline-flex items-center gap-1 border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100"><Send className="h-3.5 w-3.5" /> Submit</button>}{canReview && claim.status === 'submitted' && <><button onClick={() => reviewClaim(claim, true)} className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"><CheckCircle2 className="h-3.5 w-3.5" /> Approve</button><button onClick={() => reviewClaim(claim, false)} className="inline-flex items-center gap-1 border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100">Return</button></>}{canReview && claim.status === 'approved' && <button onClick={() => markPaid(claim)} className="inline-flex items-center gap-1 border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-100"><CircleDollarSign className="h-3.5 w-3.5" /> Paid</button>}</div></td></tr>; })}
     </tbody></table></div></div>
+
+    <TransporterAccounts transporters={transporters} claims={claims} rateCards={rateCards} saving={saving} onAddRate={addRateCard} />
 
     {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"><div className="w-full max-w-2xl border border-slate-200 bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 bg-slate-900 px-5 py-4 text-white"><div><h2 className="font-semibold">New transport claim</h2><p className="mt-0.5 text-xs text-slate-300">Value is calculated from signed net mass and rate per tonne.</p></div><button onClick={() => setShowForm(false)} className="p-1 text-slate-300 hover:text-white" title="Close"><X className="h-5 w-5" /></button></div><div className="grid gap-4 p-5 sm:grid-cols-2"><label className="text-sm font-medium text-slate-700">Evidence ticket<select value={form.ticketId} onChange={(e) => selectTicket(e.target.value)} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Select ticket and GRN</option>{eligibleTickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.ticket_no} · {grnByTicket.get(ticket.id)?.grn_number} · {Number(ticket.nett_mass).toLocaleString()} kg</option>)}</select></label><label className="text-sm font-medium text-slate-700">Transporter<select value={form.transporterId} onChange={(e) => { const transporter = transporters.find((item) => item.id === e.target.value); setForm({ ...form, transporterId: e.target.value, currency: transporter?.default_currency || form.currency }); }} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Select transporter</option>{transporters.map((transporter) => <option key={transporter.id} value={transporter.id}>{transporter.transporter_code} · {transporter.name}</option>)}</select></label>{selectedTicket && <div className="transport-evidence-summary sm:col-span-2"><div><span>Signed ticket</span><strong>{selectedTicket.ticket_no}</strong><small>{selectedTicket.vehicle_reg || 'Vehicle not recorded'} · {Number(selectedTicket.nett_mass).toLocaleString()} kg</small></div><div><span>GRN</span><strong>{grnByTicket.get(selectedTicket.id)?.grn_number}</strong><small>{ticketTransporter ? `Matched to ${ticketTransporter.name}` : `Haulier code: ${selectedTicket.haulier_code || 'not recorded'}`}</small></div></div>}<label className="text-sm font-medium text-slate-700">Rate per tonne<input type="number" min="0" step="0.01" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="0.00" /></label><label className="text-sm font-medium text-slate-700">Currency<select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option>USD</option><option>ZIG</option><option>ZAR</option></select></label><div className="border border-teal-200 bg-teal-50 p-3 sm:col-span-2"><div className="flex items-center justify-between"><span className="text-sm font-medium text-teal-900">Calculated transport cost</span><span className="font-mono text-lg font-semibold text-teal-900">{money(calculated, form.currency)}</span></div><p className="mt-1 text-xs text-teal-700">{selectedTicket ? `${Number(selectedTicket.nett_mass).toLocaleString()} kg ÷ 1,000 × ${Number(form.rate || 0).toLocaleString()} per tonne` : 'Select a signed ticket to calculate.'}</p></div><label className="text-sm font-medium text-slate-700">Invoice number<input value={form.invoice} onChange={(e) => setForm({ ...form, invoice: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="text-sm font-medium text-slate-700">Waybill reference<input value={form.waybill} onChange={(e) => setForm({ ...form, waybill: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="text-sm font-medium text-slate-700 sm:col-span-2">Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1 min-h-20 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Route, agreed terms, or supporting detail" /></label></div><div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={() => setShowForm(false)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Cancel</button><button onClick={() => saveClaim(false)} disabled={saving} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Save draft</button><button onClick={() => saveClaim(true)} disabled={saving} className="inline-flex items-center gap-1.5 bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"><Send className="h-4 w-4" /> Submit to Finance</button></div></div></div>}
     {showTransporter && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"><div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-slate-900">Add transporter</h2><button onClick={() => setShowTransporter(false)} className="text-slate-500 hover:text-slate-900" title="Close"><X className="h-5 w-5" /></button></div><div className="space-y-3 p-5"><label className="block text-sm font-medium text-slate-700">Code<input value={transporterForm.code} onChange={(e) => setTransporterForm({ ...transporterForm, code: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="e.g. TRANS-001" /></label><label className="block text-sm font-medium text-slate-700">Name<input value={transporterForm.name} onChange={(e) => setTransporterForm({ ...transporterForm, name: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="block text-sm font-medium text-slate-700">Default currency<select value={transporterForm.currency} onChange={(e) => setTransporterForm({ ...transporterForm, currency: e.target.value })} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option>USD</option><option>ZIG</option><option>ZAR</option></select></label></div><div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={() => setShowTransporter(false)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Cancel</button><button onClick={addTransporter} disabled={saving} className="bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Add transporter</button></div></div></div>}
