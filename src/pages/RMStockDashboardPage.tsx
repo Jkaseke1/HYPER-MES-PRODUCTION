@@ -1,23 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import {
-  ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Calendar, Filter,
-  Download, Plus, ChevronDown, ChevronUp, RefreshCw, Eye, EyeOff,
+  ArrowDownToLine, ArrowUpFromLine, AlertTriangle, Calendar,
+  Download, ChevronDown, ChevronUp, RefreshCw, Eye, EyeOff, DatabaseZap,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-
-const MATERIAL_NAMES = [
-  'Beef Carcass Meal', 'Solvent Soya', 'Full Fat Soya Meal', 'Low Fat Soya Meal',
-  'Soya Beans', 'Cotton Seed', 'Cottonseed Meal', 'Sunflower Cake',
-  'Sunflower Meal', 'Sunflower Seeds', 'Sesame Seeds', 'Congluten',
-  'Maize Yellow', 'Maize White', 'Mealie Meal', 'Millet',
-  'Maize Bran', 'Wheat Bran', 'RICE BRAN', 'Sorghum',
-  'Mollases', 'Hay Bales', 'Cotton Hulls', 'Cotton cake fuzzy',
-  'Lucerne pellets', 'Maltculms', 'Thin Corn', 'Barley Straw',
-  'Wheat Straw', 'Sorghum Straw/Pellets', 'Limestone flour', 'Limestone grits',
-  'Magnesium Oxide', 'Mono calcium Phosphate', 'Calcium Oxide', 'Salt Fine', 'Salt Course',
-];
+import { useAuth } from '../context/AuthContext';
 
 type SnapshotRow = {
   id: string;
@@ -28,13 +17,14 @@ type SnapshotRow = {
   total_available: number;
   issues_to_production: number;
   theo_closing_stock: number;
-  physical_stock: number;
+  physical_stock: number | null;
   system_stock: number;
-  stock_variance: number;
+  stock_variance: number | null;
   comment: string | null;
 };
 
-function fmt(n: number) {
+function fmt(n: number | null | undefined) {
+  if (n == null) return '—';
   if (n === 0) return '0';
   return n.toLocaleString('en-GB', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
@@ -46,7 +36,11 @@ export default function RMStockDashboardPage() {
   const [hideZeros, setHideZeros] = useState(false);
   const [sortKey, setSortKey] = useState<'name' | 'variance' | 'stock'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [showNewSnapshot, setShowNewSnapshot] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const { profile } = useAuth();
+  const canRefreshReporting = ['admin', 'md', 'finance', 'accountant', 'raw_material_manager', 'warehouse_manager']
+    .includes(profile?.role || '');
 
   const fetchData = async () => {
     setLoading(true);
@@ -56,31 +50,7 @@ export default function RMStockDashboardPage() {
       .eq('snapshot_date', date)
       .order('raw_material_name');
 
-    const existing = (data as SnapshotRow[]) || [];
-    const existingNames = new Set(existing.map((r) => r.raw_material_name));
-
-    // Pad missing materials with zero rows
-    const padded = [...existing];
-    for (const name of MATERIAL_NAMES) {
-      if (!existingNames.has(name)) {
-        padded.push({
-          id: '',
-          raw_material_name: name,
-          opening_stock: 0,
-          opening_stock_base_date: null,
-          mtd_receipts: 0,
-          total_available: 0,
-          issues_to_production: 0,
-          theo_closing_stock: 0,
-          physical_stock: 0,
-          system_stock: 0,
-          stock_variance: 0,
-          comment: '',
-        });
-      }
-    }
-
-    setRows(padded.sort((a, b) => a.raw_material_name.localeCompare(b.raw_material_name)));
+    setRows(((data as SnapshotRow[]) || []).sort((a, b) => a.raw_material_name.localeCompare(b.raw_material_name)));
     setLoading(false);
   };
 
@@ -95,8 +65,8 @@ export default function RMStockDashboardPage() {
     r.sort((a, b) => {
       let cmp = 0;
       if (sortKey === 'name') cmp = a.raw_material_name.localeCompare(b.raw_material_name);
-      else if (sortKey === 'variance') cmp = Math.abs(b.stock_variance) - Math.abs(a.stock_variance);
-      else if (sortKey === 'stock') cmp = b.physical_stock - a.physical_stock;
+      else if (sortKey === 'variance') cmp = Math.abs(b.stock_variance ?? 0) - Math.abs(a.stock_variance ?? 0);
+      else if (sortKey === 'stock') cmp = (b.physical_stock ?? 0) - (a.physical_stock ?? 0);
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return r;
@@ -109,28 +79,18 @@ export default function RMStockDashboardPage() {
         r.opening_stock !== 0 ||
         r.mtd_receipts !== 0 ||
         r.issues_to_production !== 0 ||
-        r.physical_stock !== 0
+        (r.physical_stock ?? 0) !== 0
     );
   }, [sortedRows, hideZeros]);
 
   const varianceCount = useMemo(
-    () => rows.filter((r) => Math.abs(r.stock_variance) > 0.1).length,
+    () => rows.filter((r) => Math.abs(r.stock_variance ?? 0) > 0.1).length,
     [rows]
   );
 
   async function updatePhysicalStock(row: SnapshotRow, value: number) {
     if (row.id) {
       await supabase.from('rm_daily_snapshots').update({ physical_stock: value }).eq('id', row.id);
-    } else {
-      await supabase.from('rm_daily_snapshots').insert({
-        snapshot_date: date,
-        raw_material_name: row.raw_material_name,
-        physical_stock: value,
-        opening_stock: 0,
-        mtd_receipts: 0,
-        issues_to_production: 0,
-        system_stock: 0,
-      });
     }
     fetchData();
   }
@@ -138,52 +98,20 @@ export default function RMStockDashboardPage() {
   async function updateComment(row: SnapshotRow, value: string) {
     if (row.id) {
       await supabase.from('rm_daily_snapshots').update({ comment: value }).eq('id', row.id);
-    } else {
-      await supabase.from('rm_daily_snapshots').insert({
-        snapshot_date: date,
-        raw_material_name: row.raw_material_name,
-        comment: value,
-        opening_stock: 0,
-        mtd_receipts: 0,
-        issues_to_production: 0,
-        physical_stock: 0,
-        system_stock: 0,
-      });
     }
     fetchData();
   }
 
-  async function createSnapshot() {
-    const prevDate = format(subDays(new Date(date), 1), 'yyyy-MM-dd');
-    const { data: prev } = await supabase
-      .from('rm_daily_snapshots')
-      .select('*')
-      .eq('snapshot_date', prevDate);
-
-    const prevRows = (prev as SnapshotRow[]) || [];
-    if (prevRows.length === 0) {
-      alert('No snapshot found for ' + prevDate + ' to copy from.');
-      return;
+  async function refreshReporting() {
+    setRefreshing(true);
+    setRefreshError(null);
+    const { error } = await supabase.rpc('refresh_rm_stock_dashboard', { p_to_date: date });
+    if (error) {
+      setRefreshError(error.message);
+    } else {
+      await fetchData();
     }
-
-    const inserts = prevRows.map((r) => ({
-      snapshot_date: date,
-      raw_material_name: r.raw_material_name,
-      opening_stock: r.physical_stock,
-      opening_stock_base_date: r.snapshot_date,
-      mtd_receipts: 0,
-      issues_to_production: 0,
-      physical_stock: r.physical_stock,
-      system_stock: 0,
-      comment: '',
-    }));
-
-    await supabase.from('rm_daily_snapshots').upsert(inserts, {
-      onConflict: 'snapshot_date,raw_material_name',
-    });
-
-    setShowNewSnapshot(false);
-    fetchData();
+    setRefreshing(false);
   }
 
   function exportCSV() {
@@ -234,16 +162,20 @@ export default function RMStockDashboardPage() {
             <input
               type="date"
               value={date}
+              min="2026-09-01"
               onChange={(e) => setDate(e.target.value)}
               className="pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
             />
           </div>
-          <button
-            onClick={() => setShowNewSnapshot(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg border border-teal-200 hover:bg-teal-100 transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" /> New Snapshot
-          </button>
+          {canRefreshReporting && (
+            <button
+              onClick={refreshReporting}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-60 transition-colors"
+            >
+              <DatabaseZap className="w-3.5 h-3.5" /> {refreshing ? 'Rebuilding...' : 'Rebuild reporting'}
+            </button>
+          )}
           <button
             onClick={fetchData}
             className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
@@ -269,6 +201,13 @@ export default function RMStockDashboardPage() {
         </div>
       </div>
 
+      {refreshError && (
+        <div className="flex items-center gap-2 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 rounded-lg">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Reporting refresh failed: {refreshError}</span>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -279,8 +218,8 @@ export default function RMStockDashboardPage() {
                   <span className="flex items-center gap-1">Raw Material {sortKey === 'name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</span>
                 </th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Opening Stock (kg)</th>
-                <th className="px-3 py-3 font-medium text-right whitespace-nowrap">
-                  <span className="flex items-center gap-1 justify-end text-emerald-600"><ArrowDownToLine className="w-3 h-3" /> MTD Receipts</span>
+                <th className="px-3 py-3 font-medium text-right whitespace-nowrap" title="All confirmed stock moving into RM, including receipts, returns, and adjustments">
+                  <span className="flex items-center gap-1 justify-end text-emerald-600"><ArrowDownToLine className="w-3 h-3" /> MTD In</span>
                 </th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Total Available</th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap">
@@ -288,7 +227,7 @@ export default function RMStockDashboardPage() {
                 </th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Theo. Closing</th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap">Physical Stock</th>
-                <th className="px-3 py-3 font-medium text-right whitespace-nowrap">System Stock</th>
+                <th className="px-3 py-3 font-medium text-right whitespace-nowrap" title="Calculated from the controlled RM movement ledger">Ledger Stock</th>
                 <th className="px-3 py-3 font-medium text-right whitespace-nowrap cursor-pointer hover:text-gray-700" onClick={() => toggleSort('variance')}>
                   <span className="flex items-center gap-1 justify-end">Variance {sortKey === 'variance' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}</span>
                 </th>
@@ -305,7 +244,7 @@ export default function RMStockDashboardPage() {
                   <tr
                     key={row.raw_material_name}
                     className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${
-                      Math.abs(row.stock_variance) > 0.1 ? 'bg-red-50/30' : ''
+                      Math.abs(row.stock_variance ?? 0) > 0.1 ? 'bg-red-50/30' : ''
                     }`}
                   >
                     <td className="px-3 py-2.5 font-medium text-gray-900 whitespace-nowrap">{row.raw_material_name}</td>
@@ -323,7 +262,7 @@ export default function RMStockDashboardPage() {
                       <input
                         type="number"
                         step="0.001"
-                        value={row.physical_stock === 0 ? '' : row.physical_stock}
+                        value={row.physical_stock == null ? '' : row.physical_stock}
                         onChange={(e) => {
                           const val = e.target.value === '' ? 0 : Number(e.target.value);
                           updatePhysicalStock(row, val);
@@ -333,11 +272,7 @@ export default function RMStockDashboardPage() {
                       />
                     </td>
                     <td className="px-3 py-2.5 text-right text-gray-400 tabular-nums whitespace-nowrap">
-                      {row.system_stock === 0 ? (
-                        <span className="text-gray-300 italic text-[11px]">Sage sync pending</span>
-                      ) : (
-                        fmt(row.system_stock)
-                      )}
+                      {fmt(row.system_stock)}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">{varianceBadge(row.stock_variance)}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
@@ -357,21 +292,6 @@ export default function RMStockDashboardPage() {
         </div>
       </div>
 
-      {/* New Snapshot confirmation */}
-      {showNewSnapshot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-lg">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Create New Snapshot</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              This will copy the previous day's physical stock as the new opening stock for <strong>{date}</strong>.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowNewSnapshot(false)} className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
-              <button onClick={createSnapshot} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors">Create</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
