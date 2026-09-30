@@ -1102,12 +1102,12 @@ export default function MaterialTransferPage() {
       });
       if (error) throw error;
 
-      setViewTransfer(null);
       setReturnTransfer(null);
       setReturnReason('');
       setSuccessMessage(`${transfer.raw_materials?.name || 'Material'} is queued for Sage return from PD to RM. PlantControl will update only after Sage confirms it.`);
       window.setTimeout(() => setSuccessMessage(''), 6000);
-      await fetchData();
+      // Keep the audit open: it is the live status view for the queued return.
+      await fetchData(true);
     } catch (error: any) {
       setReturnDialogError(error.message || 'Could not queue the return to RM.');
     } finally {
