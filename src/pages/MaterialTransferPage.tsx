@@ -56,6 +56,10 @@ interface MaterialTransferReversal {
   status: 'pending' | 'processing' | 'posted' | 'failed' | 'cancelled';
   sage_reference: string;
   failure_message?: string | null;
+  requested_at?: string | null;
+  posted_at?: string | null;
+  failed_at?: string | null;
+  updated_at?: string | null;
 }
 
 function withClientTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
@@ -163,6 +167,63 @@ function MaterialTransferStatusBadge({ status }: { status: string }) {
       status={status}
       className={status === 'received' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : ''}
     />
+  );
+}
+
+function ReturnToRmTimeline({ reversal, originalSageLog }: { reversal?: MaterialTransferReversal; originalSageLog?: SageTransferSyncLog }) {
+  if (!reversal) return null;
+
+  const formatTimestamp = (value?: string | null) => value ? format(new Date(value), 'dd MMM yyyy, HH:mm') : 'Awaiting update';
+  const base = 'flex gap-3 border-l-2 pl-3.5';
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Return to RM</h4>
+        <ReturnToRmBadge reversal={reversal} />
+      </div>
+      <div className="space-y-3">
+        <div className={`${base} border-emerald-200`}>
+          <CheckCircle2 className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 rounded-full bg-emerald-50 p-0.5 text-emerald-700" />
+          <div className="min-w-0 pb-0.5">
+            <p className="text-xs font-bold text-slate-800">Original transfer posted to Sage</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{originalSageLog?.updated_at ? formatTimestamp(originalSageLog.updated_at) : 'Original transfer confirmed'}</p>
+          </div>
+        </div>
+        <div className={`${base} border-orange-200`}>
+          <RotateCcw className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 rounded-full bg-orange-50 p-0.5 text-orange-700" />
+          <div className="min-w-0 pb-0.5">
+            <p className="text-xs font-bold text-slate-800">Return requested</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{formatTimestamp(reversal.requested_at)} · {reversal.reversal_number}</p>
+          </div>
+        </div>
+        {reversal.status === 'posted' ? (
+          <div className={`${base} border-orange-400`}>
+            <CheckCircle2 className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 rounded-full bg-orange-100 p-0.5 text-orange-700" />
+            <div className="min-w-0 pb-0.5">
+              <p className="text-xs font-bold text-orange-800">Returned to RM</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Sage confirmed · {formatTimestamp(reversal.posted_at)} · {reversal.sage_reference}</p>
+            </div>
+          </div>
+        ) : reversal.status === 'failed' ? (
+          <div className={`${base} border-rose-300`}>
+            <AlertTriangle className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 rounded-full bg-rose-50 p-0.5 text-rose-700" />
+            <div className="min-w-0 pb-0.5">
+              <p className="text-xs font-bold text-rose-800">Return needs attention</p>
+              <p className="mt-0.5 text-[11px] text-rose-700">{reversal.failure_message || 'Sage did not confirm the return.'}</p>
+            </div>
+          </div>
+        ) : (
+          <div className={`${base} border-amber-300`}>
+            {reversal.status === 'processing' ? <Loader2 className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full bg-blue-50 p-0.5 text-blue-700" /> : <Clock className="-ml-[1.45rem] mt-0.5 h-4 w-4 shrink-0 rounded-full bg-amber-50 p-0.5 text-amber-700" />}
+            <div className="min-w-0 pb-0.5">
+              <p className="text-xs font-bold text-slate-800">{reversal.status === 'processing' ? 'Posting return to Sage' : 'Return queued for Sage'}</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Reference {reversal.sage_reference}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -514,7 +575,7 @@ export default function MaterialTransferPage() {
         .eq('warehouses.code', 'BUFFER'),
       supabase
         .from('material_transfer_reversals')
-        .select('id, reversal_number, original_transfer_id, status, sage_reference, failure_message')
+        .select('id, reversal_number, original_transfer_id, status, sage_reference, failure_message, requested_at, posted_at, failed_at, updated_at')
         .order('created_at', { ascending: false }),
     ]);
 
@@ -1730,6 +1791,10 @@ export default function MaterialTransferPage() {
                         <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">Approval Audit History</h3>
                       </div>
                       <ApprovalHistory entityType="material_transfer" entityId={viewTransfer.id} />
+                      <ReturnToRmTimeline
+                        reversal={reversalsByTransferId[viewTransfer.id]}
+                        originalSageLog={sageSyncLogs[viewTransfer.id]}
+                      />
                     </div>
                   </div>
                 </div>
