@@ -13,8 +13,14 @@ sage_reference2 = left(format('MES return to RM %s; original %s', reversal_numbe
 updated_at = now()
 WHERE status IN ('pending', 'failed');
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_material_transfer_reversals_sage_reference
-  ON public.material_transfer_reversals (sage_reference);
+-- Sage history already contains reused legacy references on posted returns.
+-- Preserve that immutable history, while preventing a collision for any return
+-- that can still be queued, retried, or posted by PlantControl.
+DROP INDEX IF EXISTS public.uq_material_transfer_reversals_sage_reference;
+
+CREATE UNIQUE INDEX uq_material_transfer_reversals_sage_reference
+  ON public.material_transfer_reversals (sage_reference)
+  WHERE status IS DISTINCT FROM 'posted';
 
 CREATE OR REPLACE FUNCTION public.request_material_transfer_return_to_rm(
   p_transfer_id uuid,
