@@ -49,6 +49,15 @@ interface SageTransferSyncLog {
   created_at: string;
 }
 
+interface MaterialTransferReversal {
+  id: string;
+  reversal_number: string;
+  original_transfer_id: string;
+  status: 'pending' | 'processing' | 'posted' | 'failed' | 'cancelled';
+  sage_reference: string;
+  failure_message?: string | null;
+}
+
 function withClientTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -332,6 +341,7 @@ export default function MaterialTransferPage() {
   const { profile } = useAuth();
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
   const [sageSyncLogs, setSageSyncLogs] = useState<Record<string, SageTransferSyncLog>>({});
+  const [reversalsByTransferId, setReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [rmWarehouseBalances, setRmWarehouseBalances] = useState<Record<string, number>>({});
@@ -349,6 +359,7 @@ export default function MaterialTransferPage() {
   const [transferError, setTransferError] = useState<string[] | null>(null);
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const [refreshingTransferStock, setRefreshingTransferStock] = useState(false);
+  const [refreshingReturnStock, setRefreshingReturnStock] = useState(false);
   const [openMaterialPickerId, setOpenMaterialPickerId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
 
@@ -387,6 +398,9 @@ export default function MaterialTransferPage() {
         fetchData(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
+        fetchData(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfer_reversals' }, () => {
         fetchData(true);
       })
       .subscribe();
@@ -430,7 +444,7 @@ export default function MaterialTransferPage() {
     fetchInProgress.current = true;
     if (!silent) setLoading(true);
     try {
-    const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes] = await Promise.all([
+    const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes, reversalsRes] = await Promise.all([
       supabase
         .from('material_transfers')
         .select('*, requester:profiles!requested_by(full_name, email), raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
@@ -450,6 +464,10 @@ export default function MaterialTransferPage() {
         .from('warehouse_stock_balances')
         .select('raw_material_id, quantity, warehouses!inner(code)')
         .eq('warehouses.code', 'BUFFER'),
+      supabase
+        .from('material_transfer_reversals')
+        .select('id, reversal_number, original_transfer_id, status, sage_reference, failure_message')
+        .order('created_at', { ascending: false }),
     ]);
 
     if (transfersRes.data) {
@@ -496,6 +514,15 @@ export default function MaterialTransferPage() {
         balances[b.raw_material_id] = Number(b.quantity || 0);
       });
       setBufferWarehouseBalances(balances);
+    }
+    if (reversalsRes.error) {
+      console.warn('Failed to load material transfer returns:', reversalsRes.error.message);
+    } else {
+      const nextReversals: Record<string, MaterialTransferReversal> = {};
+      (reversalsRes.data || []).forEach((reversal: MaterialTransferReversal) => {
+        if (!nextReversals[reversal.original_transfer_id]) nextReversals[reversal.original_transfer_id] = reversal;
+      });
+      setReversalsByTransferId(nextReversals);
     }
     } catch (error) {
       console.error('Failed to refresh material transfers:', error);
@@ -570,6 +597,57 @@ export default function MaterialTransferPage() {
       return freshBalances;
     } finally {
       setRefreshingTransferStock(false);
+    }
+  }
+
+  async function requestFreshSageReturnStock(materialId: string) {
+    setRefreshingReturnStock(true);
+    try {
+      const { data: refreshLogId, error: refreshError } = await withClientTimeout(
+        supabase.rpc('request_material_transfer_reversal_sage_refresh', { p_material_ids: [materialId] }),
+        12_000,
+        'Could not start the live Sage PD stock check within 12 seconds. Check the connection and try again.',
+      );
+      if (refreshError) throw refreshError;
+      if (!refreshLogId) throw new Error('PlantControl did not return a Sage PD stock refresh reference. No return was created.');
+
+      const timeoutAt = Date.now() + 30_000;
+      let refreshCompleted = false;
+      while (Date.now() < timeoutAt) {
+        const { data: refreshLog, error: statusError } = await withClientTimeout(
+          supabase.from('sync_log').select('status, message').eq('id', refreshLogId).maybeSingle(),
+          6_000,
+          'Could not read the Sage PD stock-check status. Check the connection and try again.',
+        );
+        if (statusError) throw statusError;
+        if (refreshLog?.status === 'success') {
+          refreshCompleted = true;
+          break;
+        }
+        if (refreshLog?.status === 'failed') throw new Error(refreshLog.message || 'Sage PD stock refresh failed.');
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+      }
+      if (!refreshCompleted) throw new Error('Live Sage PD stock refresh did not complete within 30 seconds. No return was created.');
+
+      const { data: balance, error: balanceError } = await withClientTimeout(
+        supabase
+          .from('sage_stock_balances')
+          .select('quantity, last_synced_at')
+          .eq('warehouse_id', 19)
+          .eq('raw_material_id', materialId)
+          .maybeSingle(),
+        8_000,
+        'Sage refreshed PD stock, but PlantControl could not read the new balance. Try again.',
+      );
+      if (balanceError) throw balanceError;
+      const syncedAt = balance?.last_synced_at ? new Date(balance.last_synced_at) : null;
+      if (!syncedAt || Date.now() - syncedAt.getTime() > 2 * 60 * 1000) {
+        throw new Error('Sage PD stock did not refresh in time. Please try again.');
+      }
+      void fetchData(true);
+      return Number(balance?.quantity || 0);
+    } finally {
+      setRefreshingReturnStock(false);
     }
   }
 
@@ -741,6 +819,7 @@ export default function MaterialTransferPage() {
   const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
   const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
   const canReverseTransfer = ['admin', 'finance'].includes(profile?.role || '');
+  const canReturnCompletedTransfer = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   const canAddIstLine = ['admin', 'finance'].includes(profile?.role || '');
   const canRetrySage = ['admin', 'finance', 'accountant', 'production_manager', 'warehouse_manager', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
 
@@ -805,6 +884,47 @@ export default function MaterialTransferPage() {
       await fetchData();
     } catch (error: any) {
       alert(`Could not reverse transfer: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function returnCompletedTransferToRm(transfer: MaterialTransfer) {
+    if (!canReturnCompletedTransfer || transfer.status !== 'received') return;
+    const reason = window.prompt(
+      `Reason for returning ${transfer.raw_materials?.name || 'this material'} (${Number(transfer.quantity).toLocaleString()} ${transfer.unit || 'kg'}) from PD to RM?`,
+      'Return unused material to RM warehouse',
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setTransferError(['Enter a reason before returning a completed transfer to RM.']);
+      return;
+    }
+
+    setSaving(true);
+    setTransferError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) throw new Error('Your session has expired. Sign in again.');
+
+      const sagePdQuantity = await requestFreshSageReturnStock(transfer.raw_material_id);
+      if (sagePdQuantity < Number(transfer.quantity || 0)) {
+        throw new Error(`Insufficient Sage PD stock. Available: ${sagePdQuantity.toLocaleString()}; required: ${Number(transfer.quantity).toLocaleString()} ${transfer.unit || 'kg'}.`);
+      }
+
+      const { error } = await supabase.rpc('request_material_transfer_return_to_rm', {
+        p_transfer_id: transfer.id,
+        p_requested_by: user.id,
+        p_reason: reason.trim(),
+      });
+      if (error) throw error;
+
+      setViewTransfer(null);
+      setSuccessMessage(`${transfer.raw_materials?.name || 'Material'} is queued for Sage return from PD to RM. PlantControl will update only after Sage confirms it.`);
+      window.setTimeout(() => setSuccessMessage(''), 6000);
+      await fetchData();
+    } catch (error: any) {
+      setTransferError([`Could not queue return to RM: ${error.message}`]);
     } finally {
       setSaving(false);
     }
@@ -1357,6 +1477,32 @@ export default function MaterialTransferPage() {
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                   Reverse transfer
                 </button>
+              )}
+              {viewTransfer && canReturnCompletedTransfer && viewTransfer.status === 'received' && sageSyncLogs[viewTransfer.id]?.status === 'success' && (!reversalsByTransferId[viewTransfer.id] || reversalsByTransferId[viewTransfer.id].status === 'failed') && (
+                <button
+                  onClick={() => returnCompletedTransferToRm(viewTransfer)}
+                  disabled={saving || refreshingReturnStock}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                  title="Post a new Sage-confirmed return from Production to RM for this completed transfer"
+                >
+                  {saving || refreshingReturnStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                  {reversalsByTransferId[viewTransfer.id]?.status === 'failed' ? 'Retry return to RM' : 'Return to RM'}
+                </button>
+              )}
+              {viewTransfer && reversalsByTransferId[viewTransfer.id] && (
+                <span className={`inline-flex items-center rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${
+                  reversalsByTransferId[viewTransfer.id].status === 'posted'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : reversalsByTransferId[viewTransfer.id].status === 'failed'
+                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                      : 'border-amber-200 bg-amber-50 text-amber-800'
+                }`} title={reversalsByTransferId[viewTransfer.id].failure_message || reversalsByTransferId[viewTransfer.id].sage_reference}>
+                  {reversalsByTransferId[viewTransfer.id].status === 'posted'
+                    ? 'Returned to RM'
+                    : reversalsByTransferId[viewTransfer.id].status === 'failed'
+                      ? 'Return needs attention'
+                      : 'Return queued for Sage'}
+                </span>
               )}
               {viewTransfer && canAddIstLine && viewTransfer.status === 'in_buffer' && (
                 <button

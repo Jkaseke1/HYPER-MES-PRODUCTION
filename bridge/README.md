@@ -11,6 +11,7 @@ This bridge connects the HYPER MES system with Sage Pastel accounting software, 
 - **batchCompleteAuto.js** - Handles production completion → Sage finished goods receipts
 - **dispatchAuto.js** - Handles dispatch deliveries → Sage customer invoices
 - **materialTransferSdkAuto.js** - Handles received RM → Production warehouse transfers through the protected Sage SDK API
+- **materialTransferReturnSdkAuto.js** - Handles Finance-authorized, Sage-confirmed Production → RM returns for completed material-transfer lines
 
 ### ✅ **Priority 3: Bridge Worker (COMPLETE)**
 - **bridgeWorker.js** - Main worker that polls `sync_log` every 5 seconds by default
@@ -86,6 +87,12 @@ From the repository root:
 3. Bridge: Reads material_transfers + raw_materials.sage_code
 4. Sage SDK API: Posts warehouse transfer RM → PD with `confirmPost: true`
 
+### **Event 6: Return Material Transfer to RM**
+1. Finance validates live Sage PD stock and requests a return for one completed material-transfer line
+2. Bridge: reads the linked reversal record and original IST reference
+3. Sage SDK API: posts warehouse transfer PD → RM with `confirmPost: true`
+4. MES: updates its warehouse ledger only after Sage confirms the return
+
 ## 🔧 **Configuration**
 
 ### **Environment Variables**
@@ -115,7 +122,7 @@ SAGE_SDK_API_KEY=your-protected-sdk-api-key
 ### Phased rollout event scope
 
 For this release set
-`BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed,material_transfer_to_production`.
+`BRIDGE_ALLOWED_EVENT_TYPES=grn_confirmed,material_transfer_to_production,material_transfer_return_to_rm`.
 The worker then ignores pending production, dispatch, and all other unsupported
 events. Add further event types only after they are separately approved.
 

@@ -10,6 +10,7 @@ const { handleGoodsIssue }    = require('./goodsIssueAuto');
 const { handleBatchComplete } = require('./batchCompleteAuto');
 const { handleDispatch }      = require('./dispatchAuto');
 const { handleMaterialTransferToProduction } = require('./materialTransferSdkAuto');
+const { handleMaterialTransferReturnToRm } = require('./materialTransferReturnSdkAuto');
 const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto');
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
@@ -119,14 +120,19 @@ async function refreshRequestedSageStock(event) {
   if (!itemCodes.length) throw new Error('Stock refresh request does not contain any Sage item codes.');
   if (itemCodes.length > 20) throw new Error('A Sage stock refresh may contain at most 20 materials.');
 
-  const result = await queueSageStockSync(itemCodes, 'material transfer preflight', { warehouseCodes: ['RM'] });
+  const warehouseCodes = [...new Set((event.details?.warehouseCodes || ['RM'])
+    .map((code) => String(code || '').trim().toUpperCase())
+    .filter((code) => ['RM', 'PD'].includes(code)))];
+  if (warehouseCodes.length !== 1) throw new Error('A material-transfer Sage stock refresh must request exactly one warehouse: RM or PD.');
+
+  const result = await queueSageStockSync(itemCodes, 'material transfer preflight', { warehouseCodes });
   if (result.failures.length) {
     throw new Error(`Sage stock refresh failed: ${result.failures.slice(0, 3).join('; ')}`);
   }
 
   return {
-    message: `Live Sage RM stock refreshed for ${itemCodes.length} material${itemCodes.length === 1 ? '' : 's'}.`,
-    details: { itemCodes, warehouse: 'RM', synced: result.synced },
+    message: `Live Sage ${warehouseCodes[0]} stock refreshed for ${itemCodes.length} material${itemCodes.length === 1 ? '' : 's'}.`,
+    details: { itemCodes, warehouse: warehouseCodes[0], synced: result.synced },
   };
 }
 
@@ -236,7 +242,7 @@ async function refreshSageMasterData(reason) {
 }
 
 function postedStockCodes(eventType, details) {
-  if (eventType === 'material_transfer_to_production') return [details?.sdkTransfer?.itemCode].filter(Boolean);
+  if (eventType === 'material_transfer_to_production' || eventType === 'material_transfer_return_to_rm') return [details?.sdkTransfer?.itemCode].filter(Boolean);
   if (eventType === 'materials_issued') return (details?.sdkMaterialIssue?.lines || []).map((line) => line.itemCode).filter(Boolean);
   if (eventType === 'grn_confirmed') return (details?.sdkGoodsReceipt?.lines || []).map((line) => line.itemCode).filter(Boolean);
   if (eventType === 'return_to_supplier_requested') return (details?.sdkReturnToSupplier?.lines || []).map((line) => line.itemCode).filter(Boolean);
@@ -400,6 +406,9 @@ async function processPendingEvents() {
           break;
         case 'material_transfer_to_production':
           handlerResult = await handleMaterialTransferToProduction(event);
+          break;
+        case 'material_transfer_return_to_rm':
+          handlerResult = await handleMaterialTransferReturnToRm(event);
           break;
         case 'finished_goods_transfer_to_dispatch':
           handlerResult = await handleFinishedGoodsTransfer(event);
