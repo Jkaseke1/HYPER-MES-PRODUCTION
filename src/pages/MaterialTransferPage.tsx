@@ -161,12 +161,13 @@ function ReturnToRmBadge({ reversal }: { reversal?: MaterialTransferReversal }) 
   );
 }
 
-function MaterialTransferStatusBadge({ status }: { status: string }) {
+function MaterialTransferStatusBadge({ status, reversal }: { status: string; reversal?: MaterialTransferReversal }) {
+  if (status === 'received' && reversal) {
+    return <ReturnToRmBadge reversal={reversal} />;
+  }
+
   return (
-    <StatusBadge
-      status={status}
-      className={status === 'received' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : ''}
-    />
+    <StatusBadge status={status} />
   );
 }
 
@@ -1203,6 +1204,9 @@ export default function MaterialTransferPage() {
                   const hasFailedSync = syncLogs.some((log) => log.status === 'failed');
                   const allPosted = syncLogs.length === group.transfers.length && syncLogs.every((log) => log.status === 'success');
                   const hasActiveSync = syncLogs.some((log) => ['pending', 'processing', 'retry'].includes(log.status));
+                  const postedReturns = group.transfers
+                    .map((transfer) => reversalsByTransferId[transfer.id])
+                    .filter((reversal) => reversal?.status === 'posted') as MaterialTransferReversal[];
                   const transferDate = firstTransfer.transfer_date || firstTransfer.created_at;
                   const requester = (firstTransfer as any).requester?.full_name || (firstTransfer as any).requester?.email || '—';
                   return (
@@ -1227,7 +1231,13 @@ export default function MaterialTransferPage() {
                         <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity.toLocaleString()} kg</td>
                         <td className="px-3 py-3 text-xs font-medium text-slate-700">{requester}</td>
                         <td className="px-3 py-3">
-                          {statuses.length === 1 ? <MaterialTransferStatusBadge status={statuses[0] || 'pending'} /> : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
+                          {postedReturns.length === group.transfers.length && postedReturns.length > 0
+                            ? <ReturnToRmBadge reversal={postedReturns[0]} />
+                            : postedReturns.length > 0
+                              ? <span className="inline-flex rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-700">{postedReturns.length} returned to RM</span>
+                              : statuses.length === 1
+                                ? <MaterialTransferStatusBadge status={statuses[0] || 'pending'} />
+                                : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
                         </td>
                         <td className="px-3 py-3">
                           {hasFailedSync ? <span className="text-xs font-bold text-red-700">Sage failed</span> : allPosted ? <span className="text-xs font-bold text-emerald-700">Posted to Sage</span> : hasActiveSync ? <span className="text-xs font-bold text-amber-700">Posting</span> : <span className="text-xs font-semibold text-slate-500">Not queued</span>}
@@ -1273,8 +1283,7 @@ export default function MaterialTransferPage() {
                                         <td className="px-3 py-2 text-right font-mono text-emerald-700">{(bufferWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
                                         <td className="px-3 py-2">
                                           <div className="flex flex-wrap items-center gap-1.5">
-                                            <MaterialTransferStatusBadge status={transfer.status || 'pending'} />
-                                            <ReturnToRmBadge reversal={reversal} />
+                                            <MaterialTransferStatusBadge status={transfer.status || 'pending'} reversal={reversal} />
                                           </div>
                                         </td>
                                         <td className="px-3 py-2"><div className="flex items-center gap-2"><SageSyncBadge log={sageSyncLogs[transfer.id]} />{canRetrySage && sageSyncLogs[transfer.id]?.status === 'failed' && <button type="button" onClick={(event) => { event.stopPropagation(); retryFailedSageLine(sageSyncLogs[transfer.id]); }} disabled={retryingSageId === sageSyncLogs[transfer.id]?.id} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" title="Retry only this failed Sage line"><RotateCcw className={`h-3 w-3 ${retryingSageId === sageSyncLogs[transfer.id]?.id ? 'animate-spin' : ''}`} />Retry line</button>}</div></td>
@@ -1648,7 +1657,7 @@ export default function MaterialTransferPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <MaterialTransferStatusBadge status={viewTransfer?.status || 'pending'} />
+              <MaterialTransferStatusBadge status={viewTransfer?.status || 'pending'} reversal={viewTransfer ? reversalsByTransferId[viewTransfer.id] : undefined} />
               {viewTransfer && canReverseTransfer && viewTransfer.status === 'in_buffer' && (
                 <button
                   onClick={() => reverseTransfer(viewTransfer)}
@@ -1671,7 +1680,6 @@ export default function MaterialTransferPage() {
                   {reversalsByTransferId[viewTransfer.id]?.status === 'failed' ? 'Retry return to RM' : 'Return to RM'}
                 </button>
               )}
-              {viewTransfer && <ReturnToRmBadge reversal={reversalsByTransferId[viewTransfer.id]} />}
               {viewTransfer && canAddIstLine && viewTransfer.status === 'in_buffer' && (
                 <button
                   type="button"
@@ -1713,7 +1721,7 @@ export default function MaterialTransferPage() {
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Current Status</p>
                     <div className="mt-1.5">
-                      <MaterialTransferStatusBadge status={viewTransfer.status || 'pending'} />
+                      <MaterialTransferStatusBadge status={viewTransfer.status || 'pending'} reversal={reversalsByTransferId[viewTransfer.id]} />
                     </div>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
