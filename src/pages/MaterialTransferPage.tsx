@@ -90,6 +90,17 @@ function getSageSyncText(log?: SageTransferSyncLog) {
   return log.status.replace(/_/g, ' ');
 }
 
+function getLineSageReference(
+  transferNumber?: string | null,
+  reversal?: MaterialTransferReversal,
+  log?: SageTransferSyncLog,
+) {
+  return reversal?.sage_reference
+    || log?.sage_response?.transfer?.reference
+    || transferNumber
+    || 'Awaiting Sage reference';
+}
+
 function SageSyncBadge({ log }: { log?: SageTransferSyncLog }) {
   const base = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap';
 
@@ -1283,7 +1294,7 @@ export default function MaterialTransferPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-100">
               <tr>
-                {['IST', 'Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Status', 'Sage', 'Actions'].map((header) => (
+                {['IST', 'Date', 'Transfer bundle', 'Lines', 'Total quantity', 'Initiated by', 'Status', 'Sage refs', 'Sage', 'Actions'].map((header) => (
                   <th key={header} className={`px-3 py-2 font-semibold text-slate-600 text-xs ${['Lines', 'Total quantity'].includes(header) ? 'text-right' : 'text-left'}`}>
                     {header}
                   </th>
@@ -1293,7 +1304,7 @@ export default function MaterialTransferPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {transferGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                     No material transfers found
                   </td>
                 </tr>
@@ -1310,6 +1321,11 @@ export default function MaterialTransferPage() {
                   const postedReturns = group.transfers
                     .map((transfer) => reversalsByTransferId[transfer.id])
                     .filter((reversal) => reversal?.status === 'posted') as MaterialTransferReversal[];
+                  const sageReferences = [...new Set(group.transfers.map((transfer) => getLineSageReference(
+                    transfer.transfer_number,
+                    reversalsByTransferId[transfer.id],
+                    sageSyncLogs[transfer.id],
+                  )))];
                   const transferDate = firstTransfer.transfer_date || firstTransfer.created_at;
                   const requester = (firstTransfer as any).requester?.full_name || (firstTransfer as any).requester?.email || '—';
                   return (
@@ -1342,6 +1358,11 @@ export default function MaterialTransferPage() {
                                 ? <MaterialTransferStatusBadge status={statuses[0] || 'pending'} />
                                 : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
                         </td>
+                        <td className="px-3 py-3 font-mono text-[11px] text-slate-600">
+                          <span title={sageReferences.join('\n')}>
+                            {sageReferences.length === 1 ? sageReferences[0] : `${sageReferences.length} line refs`}
+                          </span>
+                        </td>
                         <td className="px-3 py-3">
                           {hasFailedSync ? <span className="text-xs font-bold text-red-700">Sage failed</span> : allPosted ? <span className="text-xs font-bold text-emerald-700">Posted to Sage</span> : hasActiveSync ? <span className="text-xs font-bold text-amber-700">Posting</span> : <span className="text-xs font-semibold text-slate-500">Not queued</span>}
                         </td>
@@ -1358,7 +1379,7 @@ export default function MaterialTransferPage() {
                       </tr>
                       {expanded && (
                         <tr key={`${group.key}-details`} className="bg-slate-50/70">
-                          <td colSpan={9} className="px-5 py-3">
+                          <td colSpan={10} className="px-5 py-3">
                             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                               <table className="w-full text-xs">
                                 <thead className="bg-slate-50 text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
@@ -1368,6 +1389,7 @@ export default function MaterialTransferPage() {
                                     <th className="px-3 py-2 text-right">RM balance</th>
                                     <th className="px-3 py-2 text-right">Buffer balance</th>
                                     <th className="px-3 py-2">Status</th>
+                                    <th className="px-3 py-2">Sage reference</th>
                                     <th className="px-3 py-2">Sage</th>
                                     <th className="px-3 py-2" />
                                   </tr>
@@ -1376,6 +1398,7 @@ export default function MaterialTransferPage() {
                                   {group.transfers.map((transfer) => {
                                     const quantity = Math.abs(transfer.quantity || 0);
                                     const reversal = reversalsByTransferId[transfer.id];
+                                    const sageReference = getLineSageReference(transfer.transfer_number, reversal, sageSyncLogs[transfer.id]);
                                     return (
                                       <tr key={transfer.id} className="hover:bg-slate-50">
                                         <td className="px-3 py-2 font-semibold text-slate-800">
@@ -1389,6 +1412,7 @@ export default function MaterialTransferPage() {
                                             <MaterialTransferStatusBadge status={transfer.status || 'pending'} reversal={reversal} />
                                           </div>
                                         </td>
+                                        <td className="max-w-[190px] truncate px-3 py-2 font-mono text-[11px] text-slate-600" title={sageReference}>{sageReference}</td>
                                         <td className="px-3 py-2"><div className="flex items-center gap-2"><SageSyncBadge log={sageSyncLogs[transfer.id]} />{canRetrySage && sageSyncLogs[transfer.id]?.status === 'failed' && <button type="button" onClick={(event) => { event.stopPropagation(); retryFailedSageLine(sageSyncLogs[transfer.id]); }} disabled={retryingSageId === sageSyncLogs[transfer.id]?.id} className="inline-flex items-center gap-1 rounded border border-rose-200 bg-white px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" title="Retry only this failed Sage line"><RotateCcw className={`h-3 w-3 ${retryingSageId === sageSyncLogs[transfer.id]?.id ? 'animate-spin' : ''}`} />Retry line</button>}</div></td>
                                         <td className="px-3 py-2 text-right">
                                           <button onClick={() => setViewTransfer(transfer)} className="rounded-lg p-1.5 transition-colors hover:bg-slate-100" title="View transfer audit" aria-label="View transfer audit">

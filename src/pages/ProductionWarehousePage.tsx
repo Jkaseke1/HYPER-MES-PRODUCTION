@@ -695,6 +695,11 @@ export default function ProductionWarehousePage() {
     return { label: sync.sync_status === 'retry' ? 'Retry queued' : 'Queued for Sage', detail: sync.sync_message || 'This material is queued for Sage posting.', className: 'border-amber-200 bg-amber-50 text-amber-800' };
   };
 
+  const getLineSageReference = (transfer: PendingTransfer) => {
+    const reversal = incomingReversalsByTransferId[transfer.id];
+    return reversal?.sage_reference || transfer.transfer_number || 'Awaiting Sage reference';
+  };
+
   return (
     <div className="production-workspace mx-auto max-w-[1500px] space-y-4 p-4 lg:p-6">
       <section className="warehouse-heading flex flex-wrap items-center justify-between gap-4">
@@ -772,7 +777,7 @@ export default function ProductionWarehousePage() {
               </Link>
             )}
           </div>
-          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 lg:grid lg:grid-cols-[42px_minmax(100px,.8fr)_115px_180px_minmax(120px,1fr)_170px_130px_150px] lg:items-center lg:gap-3">
+          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 xl:grid xl:grid-cols-[42px_minmax(100px,.7fr)_115px_180px_minmax(120px,1fr)_170px_130px_135px_150px] xl:items-center xl:gap-3">
             <span />
             <span>IST</span>
             <span>Materials</span>
@@ -780,6 +785,7 @@ export default function ProductionWarehousePage() {
             <span>Requested by</span>
             <span>IST date</span>
             <span className="text-right">Transfer total</span>
+            <span>Sage refs</span>
             <span className="text-right">Action</span>
           </div>
           </div>
@@ -802,7 +808,7 @@ export default function ProductionWarehousePage() {
                       : 'border-amber-200 bg-amber-50 text-amber-800';
               return (
                 <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 lg:grid-cols-[42px_minmax(100px,.8fr)_115px_180px_minmax(120px,1fr)_170px_130px_150px] lg:items-center">
+                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 xl:grid-cols-[42px_minmax(100px,.7fr)_115px_180px_minmax(120px,1fr)_170px_130px_135px_150px] xl:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="incoming-expand-button flex h-8 w-8 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700" aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${bundle.purpose || 'incoming IST'}`}>
                       {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
@@ -816,6 +822,9 @@ export default function ProductionWarehousePage() {
                     <div className="incoming-bundle-quantity text-right">
                       <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                     </div>
+                    <span className="font-mono text-[11px] text-slate-600" title={bundle.transfers.map(getLineSageReference).join('\n')}>
+                      {bundle.transfers.length === 1 ? getLineSageReference(bundle.transfers[0]) : `${bundle.transfers.length} line refs`}
+                    </span>
                     <div className="incoming-action flex justify-end">
                     {canApproveMaterialTransfer && stage.canReceive && (
                       selectedIncomingBundleKey === bundle.key ? (
@@ -955,11 +964,12 @@ export default function ProductionWarehousePage() {
                     {expandedIncomingBundleData.transfers.map((transfer) => {
                       const lineStage = getLineSageStage(transfer);
                       return (
-                        <div key={transfer.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-white px-4 py-2.5">
+                        <div key={transfer.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(130px,190px)_auto] items-center gap-3 bg-white px-4 py-2.5">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-bold text-slate-900">{transfer.raw_materials?.name || 'Raw material'}</p>
                             <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500"><span className="text-teal-700">{transfer.raw_materials?.code || 'No Sage code'}</span><span className="mx-1 text-slate-300">|</span>{transfer.transfer_number}</p>
                           </div>
+                          <p className="truncate font-mono text-[11px] text-slate-600" title={getLineSageReference(transfer)}>{getLineSageReference(transfer)}</p>
                           <div className="flex shrink-0 items-center gap-2">
                             <span title={lineStage.detail} className={`inline-flex max-w-[118px] truncate border px-2 py-1 text-[10px] font-semibold ${lineStage.className}`}>{lineStage.label}</span>
                             <span className="whitespace-nowrap text-right font-mono text-xs font-bold text-slate-900">{Number(transfer.quantity).toLocaleString()} {transfer.unit}</span>
