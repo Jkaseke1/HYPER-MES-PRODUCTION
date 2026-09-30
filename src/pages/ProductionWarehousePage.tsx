@@ -748,7 +748,7 @@ export default function ProductionWarehousePage() {
               </Link>
             )}
           </div>
-          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 xl:grid xl:grid-cols-[42px_minmax(100px,.7fr)_115px_180px_minmax(120px,1fr)_170px_130px_135px_150px] xl:items-center xl:gap-3">
+          <div className="incoming-column-header hidden border-b border-slate-200 bg-slate-50 px-5 py-2 xl:grid xl:grid-cols-[40px_minmax(96px,.8fr)_104px_180px_minmax(100px,.8fr)_154px_118px_92px_112px] xl:items-center xl:gap-3">
             <span />
             <span>IST</span>
             <span>Materials</span>
@@ -779,7 +779,7 @@ export default function ProductionWarehousePage() {
                       : 'border-amber-200 bg-amber-50 text-amber-800';
               return (
                 <div key={bundle.key} className={`incoming-bundle py-3 ${selectedIncomingBundleKey && selectedIncomingBundleKey !== bundle.key ? 'opacity-60' : ''}`}>
-                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 xl:grid-cols-[42px_minmax(100px,.7fr)_115px_180px_minmax(120px,1fr)_170px_130px_135px_150px] xl:items-center">
+                  <div className="warehouse-ist-row incoming-bundle-summary grid gap-3 xl:grid-cols-[40px_minmax(96px,.8fr)_104px_180px_minmax(100px,.8fr)_154px_118px_92px_112px] xl:items-center">
                     <button type="button" onClick={() => setExpandedIncomingBundle(isOpen ? null : bundle.key)} className="incoming-expand-button flex h-8 w-8 items-center justify-center border border-teal-200 bg-teal-50 text-teal-700" aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${bundle.purpose || 'incoming IST'}`}>
                       {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
@@ -799,12 +799,12 @@ export default function ProductionWarehousePage() {
                     <div className="incoming-action flex justify-end">
                     {canApproveMaterialTransfer && stage.canReceive && (
                       selectedIncomingBundleKey === bundle.key ? (
-                        <button type="button" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
-                          {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing approval</> : <><CheckCircle2 className="h-4 w-4" /> Approve selected IST</>}
+                        <button type="button" title="Approve selected IST for Production receipt" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                          {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing</> : <><CheckCircle2 className="h-4 w-4" /> Approve</>}
                         </button>
                       ) : (
-                      <button type="button" disabled={Boolean(selectedIncomingBundleKey)} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-4 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">
-                          <CheckCircle2 className="h-4 w-4" /> {hasProcessedIncomingIst ? 'Next IST' : 'Select IST'}
+                      <button type="button" title={hasProcessedIncomingIst ? 'Select the next IST to approve' : 'Select this IST for approval'} disabled={Boolean(selectedIncomingBundleKey)} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">
+                          <CheckCircle2 className="h-4 w-4" /> {hasProcessedIncomingIst ? 'Next' : 'Select'}
                         </button>
                       )
                     )}

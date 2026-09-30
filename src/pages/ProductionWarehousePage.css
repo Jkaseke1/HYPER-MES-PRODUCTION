@@ -36,7 +36,7 @@
 .production-workspace .warehouse-ist-row .text-lg { font-size: 14px; }
 .production-workspace .incoming-material-count, .production-workspace .incoming-status { white-space: nowrap; border-radius: 4px; }
 .production-workspace .incoming-bundle-quantity { min-width: 0; border-left-color: #dce9e7 !important; }
-.production-workspace .incoming-action button { min-width: 128px; }
+.production-workspace .incoming-action button { min-width: 104px; }
 .production-workspace .warehouse-ist-row .border-amber-200 { border: 0; background: #f5f0e4; color: #8a6520; border-radius: 4px; }
 .production-workspace .warehouse-ist-row .border-emerald-200 { border: 0; background: #e9f5ee; color: #23774e; border-radius: 4px; }
 .production-workspace .warehouse-ist-row > button:not(:first-child) { border-radius: 6px; font-size: 12px; }
