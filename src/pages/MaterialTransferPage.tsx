@@ -171,6 +171,71 @@ function MaterialTransferStatusBadge({ status, reversal }: { status: string; rev
   );
 }
 
+function ReturnToRmProgress({ reversal }: { reversal?: MaterialTransferReversal }) {
+  if (!reversal) return null;
+
+  const isPosted = reversal.status === 'posted';
+  const isProcessing = reversal.status === 'processing';
+  const isFailed = reversal.status === 'failed';
+  const activeStage = isPosted ? 4 : isProcessing || isFailed ? 3 : 2;
+  const stages = [
+    { label: 'Requested', detail: 'Return recorded' },
+    { label: 'Queued', detail: 'Awaiting Sage' },
+    { label: 'Sage posting', detail: 'PD to RM transfer' },
+    { label: 'Returned to RM', detail: 'Sage confirmed' },
+  ];
+  const summary = isPosted
+    ? `Sage confirmed this material back in RM${reversal.sage_reference ? ` as ${reversal.sage_reference}` : ''}.`
+    : isFailed
+      ? reversal.failure_message || 'Sage could not confirm the return. Review the error before retrying.'
+      : isProcessing
+        ? 'The Sage bridge is posting the PD to RM warehouse transfer now.'
+        : 'The return is recorded and waiting for the Sage bridge to collect it.';
+
+  return (
+    <section className={`border-l-4 px-4 py-3.5 ${isFailed ? 'border-rose-500 bg-rose-50' : isPosted ? 'border-orange-500 bg-orange-50' : 'border-amber-500 bg-amber-50'}`} aria-label="Return to RM progress">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isFailed ? 'bg-rose-100 text-rose-700' : 'bg-orange-100 text-orange-700'}`}>
+            {isFailed ? <AlertTriangle className="h-4 w-4" /> : isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          </span>
+          <div>
+            <p className="text-sm font-black text-slate-900">Return to RM status</p>
+            <p className="mt-0.5 max-w-3xl text-xs leading-5 text-slate-600">{summary}</p>
+          </div>
+        </div>
+        <ReturnToRmBadge reversal={reversal} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-4">
+        {stages.map((stage, index) => {
+          const step = index + 1;
+          const complete = !isFailed && step < activeStage || isPosted;
+          const current = !isFailed && step === activeStage;
+          const failed = isFailed && step === activeStage;
+          return (
+            <div key={stage.label} className="min-w-0">
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-black ${failed ? 'border-rose-300 bg-rose-100 text-rose-700' : complete ? 'border-orange-300 bg-orange-100 text-orange-700' : current ? 'border-amber-300 bg-amber-100 text-amber-800' : 'border-slate-200 bg-white text-slate-400'}`}>
+                  {failed ? '!' : complete ? <CheckCircle2 className="h-3 w-3" /> : step}
+                </span>
+                <span className={`h-px flex-1 ${step === stages.length ? 'hidden' : complete ? 'bg-orange-300' : 'bg-slate-200'}`} />
+              </div>
+              <p className={`text-[11px] font-bold ${failed ? 'text-rose-800' : current ? 'text-amber-900' : complete ? 'text-orange-800' : 'text-slate-500'}`}>{stage.label}</p>
+              <p className="mt-0.5 text-[10px] text-slate-500">{failed ? 'Needs attention' : stage.detail}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-orange-200/70 pt-2 text-[11px] text-slate-600">
+        <span><strong className="text-slate-800">Return reference:</strong> {reversal.reversal_number}</span>
+        <span><strong className="text-slate-800">Sage reference:</strong> {reversal.sage_reference || 'Awaiting Sage reference'}</span>
+      </div>
+    </section>
+  );
+}
+
 function ReturnToRmTimeline({ reversal, originalSageLog }: { reversal?: MaterialTransferReversal; originalSageLog?: SageTransferSyncLog }) {
   if (!reversal) return null;
 
@@ -1734,6 +1799,8 @@ export default function MaterialTransferPage() {
                     </p>
                   </div>
                 </div>
+
+                <ReturnToRmProgress reversal={reversalsByTransferId[viewTransfer.id]} />
 
                 {/* 2-Column Main Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
