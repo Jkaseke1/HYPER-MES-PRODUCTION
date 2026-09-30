@@ -61,6 +61,7 @@ const navGroups: NavGroup[] = [
     items: [
       // Inbound workflow
       { to: '/weigh-bridge', icon: Scale, label: 'Weigh Bridge' },
+      { to: '/inbound-transport', icon: Truck, label: 'Inbound Transport Costs' },
       { to: '/goods-received', icon: PackageCheck, label: 'Goods Received (GRN)' },
       { to: '/quality-inspection', icon: ClipboardCheck, label: 'Quality Inspection' },
       { to: '/warehouse', icon: PackageIcon2, label: 'RM Warehouse' },
