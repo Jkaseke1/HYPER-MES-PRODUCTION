@@ -128,7 +128,7 @@ function ReturnToRmBadge({ reversal }: { reversal?: MaterialTransferReversal }) 
 
   if (reversal.status === 'posted') {
     return (
-      <span className={`${base} bg-teal-50 text-teal-700 border-teal-200`} title={reversal.sage_reference}>
+      <span className={`${base} bg-orange-50 text-orange-700 border-orange-200`} title={reversal.sage_reference}>
         <CheckCircle2 className="w-3 h-3" /> Returned to RM
       </span>
     );
@@ -154,6 +154,15 @@ function ReturnToRmBadge({ reversal }: { reversal?: MaterialTransferReversal }) 
     <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`} title={reversal.sage_reference}>
       <Clock className="w-3 h-3" /> Return queued
     </span>
+  );
+}
+
+function MaterialTransferStatusBadge({ status }: { status: string }) {
+  return (
+    <StatusBadge
+      status={status}
+      className={status === 'received' ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : ''}
+    />
   );
 }
 
@@ -1144,7 +1153,7 @@ export default function MaterialTransferPage() {
                         <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity.toLocaleString()} kg</td>
                         <td className="px-3 py-3 text-xs font-medium text-slate-700">{requester}</td>
                         <td className="px-3 py-3">
-                          {statuses.length === 1 ? <StatusBadge status={statuses[0] || 'pending'} /> : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
+                          {statuses.length === 1 ? <MaterialTransferStatusBadge status={statuses[0] || 'pending'} /> : <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">Mixed status</span>}
                         </td>
                         <td className="px-3 py-3">
                           {hasFailedSync ? <span className="text-xs font-bold text-red-700">Sage failed</span> : allPosted ? <span className="text-xs font-bold text-emerald-700">Posted to Sage</span> : hasActiveSync ? <span className="text-xs font-bold text-amber-700">Posting</span> : <span className="text-xs font-semibold text-slate-500">Not queued</span>}
@@ -1190,7 +1199,7 @@ export default function MaterialTransferPage() {
                                         <td className="px-3 py-2 text-right font-mono text-emerald-700">{(bufferWarehouseBalances[transfer.raw_material_id] ?? 0).toLocaleString()} {transfer.unit || 'kg'}</td>
                                         <td className="px-3 py-2">
                                           <div className="flex flex-wrap items-center gap-1.5">
-                                            <StatusBadge status={transfer.status || 'pending'} />
+                                            <MaterialTransferStatusBadge status={transfer.status || 'pending'} />
                                             <ReturnToRmBadge reversal={reversal} />
                                           </div>
                                         </td>
