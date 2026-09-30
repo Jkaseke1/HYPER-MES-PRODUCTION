@@ -1,7 +1,7 @@
 -- Each PD -> RM return line needs a unique Sage reference. An IST can contain
 -- many materials, while Sage treats a repeated warehouse-transfer reference as
 -- a conflict (HTTP 409). Preserve posted historical references and repair only
--- returns that are safe to retry or have not been claimed by the bridge.
+-- returns that have not been posted to Sage.
 
 UPDATE public.material_transfer_reversals
 SET sage_reference = CASE
@@ -11,7 +11,7 @@ SET sage_reference = CASE
 END,
 sage_reference2 = left(format('MES return to RM %s; original %s', reversal_number, coalesce(nullif(original_ist_number, ''), 'transfer')), 50),
 updated_at = now()
-WHERE status IN ('pending', 'failed');
+WHERE status IS DISTINCT FROM 'posted';
 
 -- Sage history already contains reused legacy references on posted returns.
 -- Preserve that immutable history, while preventing a collision for any return
