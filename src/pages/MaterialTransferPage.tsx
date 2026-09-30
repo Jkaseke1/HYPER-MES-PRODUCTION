@@ -62,6 +62,13 @@ interface MaterialTransferReversal {
   updated_at?: string | null;
 }
 
+interface ReturnOutcome {
+  transferId: string;
+  tone: 'progress' | 'success' | 'error';
+  title: string;
+  message: string;
+}
+
 function withClientTimeout<T>(operation: PromiseLike<T>, timeoutMs: number, message: string): Promise<T> {
   let timeoutId: number | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -528,6 +535,7 @@ export default function MaterialTransferPage() {
   const [returnTransfer, setReturnTransfer] = useState<MaterialTransfer | null>(null);
   const [returnReason, setReturnReason] = useState('');
   const [returnDialogError, setReturnDialogError] = useState<string | null>(null);
+  const [returnOutcome, setReturnOutcome] = useState<ReturnOutcome | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
@@ -1068,6 +1076,7 @@ export default function MaterialTransferPage() {
     setReturnTransfer(transfer);
     setReturnReason('');
     setReturnDialogError(null);
+    setReturnOutcome(null);
   }
 
   function closeReturnToRmDialog() {
@@ -1075,6 +1084,15 @@ export default function MaterialTransferPage() {
     setReturnTransfer(null);
     setReturnReason('');
     setReturnDialogError(null);
+  }
+
+  function showReturnOutcome(outcome: ReturnOutcome, dismissAfterMs?: number) {
+    setReturnOutcome(outcome);
+    if (dismissAfterMs) {
+      window.setTimeout(() => {
+        setReturnOutcome((current) => current?.transferId === outcome.transferId ? null : current);
+      }, dismissAfterMs);
+    }
   }
 
   async function returnCompletedTransferToRm(transfer: MaterialTransfer, reason: string) {
@@ -1086,6 +1104,15 @@ export default function MaterialTransferPage() {
 
     setSaving(true);
     setReturnDialogError(null);
+    // Leave the reason dialog immediately; the audit is the live return-status view.
+    setReturnTransfer(null);
+    setReturnReason('');
+    showReturnOutcome({
+      transferId: transfer.id,
+      tone: 'progress',
+      title: 'Checking live Sage PD stock',
+      message: 'Validating the Production balance before a return can be created.',
+    });
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error('Your session has expired. Sign in again.');
@@ -1102,14 +1129,25 @@ export default function MaterialTransferPage() {
       });
       if (error) throw error;
 
-      setReturnTransfer(null);
-      setReturnReason('');
-      setSuccessMessage(`${transfer.raw_materials?.name || 'Material'} is queued for Sage return from PD to RM. PlantControl will update only after Sage confirms it.`);
-      window.setTimeout(() => setSuccessMessage(''), 6000);
+      showReturnOutcome({
+        transferId: transfer.id,
+        tone: 'success',
+        title: 'Return queued for Sage',
+        message: `${transfer.raw_materials?.name || 'Material'} is queued from PD to RM. The audit status bar will advance when Sage confirms the transfer.`,
+      }, 10_000);
       // Keep the audit open: it is the live status view for the queued return.
       await fetchData(true);
     } catch (error: any) {
-      setReturnDialogError(error.message || 'Could not queue the return to RM.');
+      const message = error?.message || 'Could not queue the return to RM.';
+      const timedOut = /did not complete within 30 seconds/i.test(message);
+      showReturnOutcome({
+        transferId: transfer.id,
+        tone: 'error',
+        title: 'Return not started',
+        message: timedOut
+          ? 'Live Sage PD stock could not be refreshed in time. No return was created and warehouse balances are unchanged. Check the Sage bridge, then retry.'
+          : message,
+      }, 14_000);
     } finally {
       setSaving(false);
     }
@@ -1770,6 +1808,35 @@ export default function MaterialTransferPage() {
           <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50">
             {viewTransfer && (
               <>
+                {returnOutcome?.transferId === viewTransfer.id && (() => {
+                  const isProgress = returnOutcome.tone === 'progress';
+                  const isSuccess = returnOutcome.tone === 'success';
+                  const tone = isProgress
+                    ? 'border-sky-200 bg-sky-50 text-sky-900'
+                    : isSuccess
+                      ? 'border-orange-200 bg-orange-50 text-orange-900'
+                      : 'border-rose-200 bg-rose-50 text-rose-900';
+                  const iconTone = isProgress
+                    ? 'bg-sky-100 text-sky-700'
+                    : isSuccess
+                      ? 'bg-orange-100 text-orange-700'
+                      : 'bg-rose-100 text-rose-700';
+                  return (
+                    <div className={`flex items-start justify-between gap-4 border px-4 py-3 shadow-sm ${tone}`} role="status">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconTone}`}>
+                          {isProgress ? <Loader2 className="h-4 w-4 animate-spin" /> : isSuccess ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-black">{returnOutcome.title}</p>
+                          <p className="mt-0.5 text-xs leading-5 text-current/80">{returnOutcome.message}</p>
+                        </div>
+                      </div>
+                      {!isProgress && <button type="button" onClick={() => setReturnOutcome(null)} className="shrink-0 p-1 text-current/60 transition-colors hover:text-current" aria-label="Dismiss return notification"><X className="h-4 w-4" /></button>}
+                    </div>
+                  );
+                })()}
+
                 {/* Top Stat Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
