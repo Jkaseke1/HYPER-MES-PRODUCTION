@@ -67,7 +67,7 @@ interface SageTransferStatus extends PendingTransfer {
 interface IncomingStage {
   label: string;
   detail: string;
-  tone: 'amber' | 'blue' | 'emerald' | 'rose' | 'slate';
+  tone: 'amber' | 'blue' | 'emerald' | 'orange' | 'rose' | 'slate';
   canReceive: boolean;
 }
 
@@ -81,6 +81,14 @@ interface LineSageStage {
   label: string;
   detail: string;
   className: string;
+}
+
+interface MaterialTransferReversal {
+  original_transfer_id: string;
+  reversal_number: string;
+  status: 'pending' | 'processing' | 'posted' | 'failed' | 'cancelled';
+  sage_reference?: string | null;
+  failure_message?: string | null;
 }
 
 interface IncomingBundle {
@@ -140,6 +148,7 @@ export default function ProductionWarehousePage() {
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const [bufferBalances, setBufferBalances] = useState<Record<string, number>>({});
   const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
+  const [incomingReversalsByTransferId, setIncomingReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
 
   async function fetchTransfers(silent = false) {
     if (!silent) setLoading(true);
@@ -196,13 +205,23 @@ export default function ProductionWarehousePage() {
 
     const incomingTransferIds = nextIncomingTransfers.map((transfer: PendingTransfer) => transfer.id);
     if (incomingTransferIds.length > 0) {
-      const { data: incomingSyncRows, error: incomingSyncError } = await supabase
-        .from('sync_log')
-        .select('id, reference_id, status, message, updated_at')
-        .eq('event_type', 'material_transfer_to_production')
-        .in('reference_id', incomingTransferIds)
-        .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
-        .order('updated_at', { ascending: false });
+      const [
+        { data: incomingSyncRows, error: incomingSyncError },
+        { data: incomingReversalRows, error: incomingReversalsError },
+      ] = await Promise.all([
+        supabase
+          .from('sync_log')
+          .select('id, reference_id, status, message, updated_at')
+          .eq('event_type', 'material_transfer_to_production')
+          .in('reference_id', incomingTransferIds)
+          .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('material_transfer_reversals')
+          .select('original_transfer_id, reversal_number, status, sage_reference, failure_message')
+          .in('original_transfer_id', incomingTransferIds)
+          .order('requested_at', { ascending: false }),
+      ]);
       if (incomingSyncError) {
         console.error('Failed to load incoming transfer stages:', incomingSyncError);
       } else {
@@ -218,8 +237,20 @@ export default function ProductionWarehousePage() {
         });
         setIncomingSyncByTransferId(nextIncomingSync);
       }
+      if (incomingReversalsError) {
+        console.error('Failed to load incoming transfer returns:', incomingReversalsError);
+      } else {
+        const nextIncomingReversals: Record<string, MaterialTransferReversal> = {};
+        (incomingReversalRows || []).forEach((row: MaterialTransferReversal) => {
+          if (!nextIncomingReversals[row.original_transfer_id]) {
+            nextIncomingReversals[row.original_transfer_id] = row;
+          }
+        });
+        setIncomingReversalsByTransferId(nextIncomingReversals);
+      }
     } else {
       setIncomingSyncByTransferId({});
+      setIncomingReversalsByTransferId({});
     }
 
     const { data: sageSyncRows, error: failedSyncError } = await supabase
@@ -314,6 +345,9 @@ export default function ProductionWarehousePage() {
         fetchTransfers(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
+        fetchTransfers(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfer_reversals' }, () => {
         fetchTransfers(true);
       })
       .subscribe();
@@ -444,6 +478,20 @@ export default function ProductionWarehousePage() {
         return { label: 'Partly received', detail: `${waitingLines.length} line${waitingLines.length === 1 ? '' : 's'} remain in the Buffer awaiting Production receipt.`, tone: 'amber', canReceive: false };
       }
       return { label: 'Ready for production receipt', detail: 'All lines are allocated in Buffer and can now be received into Production Warehouse 19.', tone: 'amber', canReceive: true };
+    }
+
+    const returnLines = bundle.transfers
+      .map((transfer) => incomingReversalsByTransferId[transfer.id])
+      .filter(Boolean) as MaterialTransferReversal[];
+    const completedReturns = returnLines.filter((reversal) => reversal.status === 'posted');
+    if (completedReturns.length > 0) {
+      const isWholeBundleReturned = completedReturns.length === bundle.transfers.length;
+      return {
+        label: isWholeBundleReturned ? 'Returned to RM' : 'Contains return to RM',
+        detail: `${completedReturns.length} material${completedReturns.length === 1 ? '' : 's'} in this IST ${completedReturns.length === 1 ? 'was' : 'were'} Sage-confirmed as returned from Production to RM.`,
+        tone: 'orange',
+        canReceive: false,
+      };
     }
 
     const syncLines = bundle.transfers.map((transfer) => incomingSyncByTransferId[transfer.id]).filter(Boolean);
@@ -615,6 +663,19 @@ export default function ProductionWarehousePage() {
   };
 
   const getLineSageStage = (transfer: PendingTransfer): LineSageStage => {
+    const reversal = incomingReversalsByTransferId[transfer.id];
+    if (reversal?.status === 'posted') {
+      return { label: 'Returned to RM', detail: `Sage confirmed the PD to RM return${reversal.sage_reference ? ` as ${reversal.sage_reference}` : ''}.`, className: 'border-orange-200 bg-orange-50 text-orange-700' };
+    }
+    if (reversal?.status === 'failed') {
+      return { label: 'Return failed', detail: reversal.failure_message || 'The PD to RM return needs attention.', className: 'border-rose-200 bg-rose-50 text-rose-700' };
+    }
+    if (reversal?.status === 'processing') {
+      return { label: 'Returning to RM', detail: 'The Sage bridge is posting this PD to RM return now.', className: 'border-sky-200 bg-sky-50 text-sky-700' };
+    }
+    if (reversal?.status === 'pending') {
+      return { label: 'Return queued', detail: 'This PD to RM return is queued for Sage posting.', className: 'border-amber-200 bg-amber-50 text-amber-800' };
+    }
     if (transfer.status !== 'received') {
       return { label: 'Awaiting receipt', detail: 'This line has not yet been received into Production Warehouse.', className: 'border-amber-200 bg-amber-50 text-amber-800' };
     }
@@ -732,6 +793,8 @@ export default function ProductionWarehousePage() {
                 ? 'border-rose-200 bg-rose-50 text-rose-700'
                 : stage.tone === 'blue'
                   ? 'border-sky-200 bg-sky-50 text-sky-700'
+                  : stage.tone === 'orange'
+                    ? 'border-orange-200 bg-orange-50 text-orange-700'
                   : stage.tone === 'emerald'
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                     : stage.tone === 'slate'
@@ -858,6 +921,8 @@ export default function ProductionWarehousePage() {
           ? 'border-rose-200 bg-rose-50 text-rose-700'
           : stage.tone === 'blue'
             ? 'border-sky-200 bg-sky-50 text-sky-700'
+            : stage.tone === 'orange'
+              ? 'border-orange-200 bg-orange-50 text-orange-700'
             : stage.tone === 'emerald'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
               : stage.tone === 'slate'
