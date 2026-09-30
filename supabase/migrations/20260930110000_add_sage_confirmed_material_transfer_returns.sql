@@ -186,7 +186,7 @@ BEGIN
 
   v_original_ist := upper(btrim(coalesce(v_transfer.purpose, '')));
   v_sage_reference := CASE
-    WHEN v_original_ist ~ '^HFIST[0-9]+$' THEN 'HFRV' || substring(v_original_ist FROM 6)
+    WHEN v_original_ist ~ '^HFIST[0-9]+$' THEN left('HFRV' || substring(v_original_ist FROM 6) || '-' || upper(right(replace(v_transfer.id::text, '-', ''), 6)), 50)
     ELSE 'HFRV-' || upper(substring(replace(v_transfer.id::text, '-', '') FROM 1 FOR 8))
   END;
 
@@ -194,6 +194,8 @@ BEGIN
     v_reversal_id := v_reversal.id;
     UPDATE public.material_transfer_reversals
     SET reason = btrim(p_reason), status = 'pending', requested_by = p_requested_by,
+        sage_reference = v_sage_reference,
+        sage_reference2 = left(format('MES return to RM %s; original %s', v_reversal.reversal_number, coalesce(nullif(v_original_ist, ''), v_transfer.transfer_number)), 50),
         requested_at = now(), failed_at = NULL, failure_message = NULL, updated_at = now()
     WHERE id = v_reversal_id;
   ELSE
