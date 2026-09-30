@@ -43,7 +43,6 @@ interface PendingTransfer {
   quantity: number;
   unit: string;
   status: string;
-  buffer_warehouse_id?: string | null;
   transfer_batch_key?: string | null;
   created_at: string;
   purpose?: string;
@@ -108,9 +107,6 @@ type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
 const formatWarehouseQuantity = (value: number) =>
   value.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
-const bufferAllocationKey = (rawMaterialId: string, warehouseId?: string | null) =>
-  `${rawMaterialId}:${warehouseId || 'unassigned'}`;
-
 export default function ProductionWarehousePage() {
   const { profile } = useAuth();
   const isProductionReceiver = profile?.role === 'production_receiver';
@@ -151,7 +147,6 @@ export default function ProductionWarehousePage() {
   const [thresholdDraft, setThresholdDraft] = useState<Record<string, string>>({});
   const [lastAlertSignature, setLastAlertSignature] = useState('');
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
-  const [bufferBalances, setBufferBalances] = useState<Record<string, number>>({});
   const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
   const [incomingReversalsByTransferId, setIncomingReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
 
@@ -179,7 +174,7 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, raw_material_id, buffer_warehouse_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
         .in('status', ['in_buffer', 'received'])
         .order('created_at', { ascending: false })
         .limit(500),
@@ -195,25 +190,6 @@ export default function ProductionWarehousePage() {
     const nextIncomingTransfers = (incomingData as any) || [];
     setIncomingTransfers(nextIncomingTransfers);
     setPendingAcceptanceTransfers(nextIncomingTransfers.filter((transfer: PendingTransfer) => transfer.status === 'in_buffer'));
-
-    const nextBufferBalances: Record<string, number> = {};
-    const bufferWarehouseIds = [...new Set(nextIncomingTransfers
-      .filter((transfer: PendingTransfer) => transfer.status === 'in_buffer' && transfer.buffer_warehouse_id)
-      .map((transfer: PendingTransfer) => transfer.buffer_warehouse_id as string))];
-    if (bufferWarehouseIds.length > 0) {
-      const { data: bufferData, error: bufferError } = await supabase
-        .from('warehouse_stock_balances')
-        .select('raw_material_id, warehouse_id, quantity')
-        .in('warehouse_id', bufferWarehouseIds);
-      if (bufferError) {
-        console.error('Failed to load production buffer balances:', bufferError);
-      } else {
-        (bufferData || []).forEach((balance: any) => {
-          nextBufferBalances[bufferAllocationKey(balance.raw_material_id, balance.warehouse_id)] = Number(balance.quantity || 0);
-        });
-      }
-    }
-    setBufferBalances(nextBufferBalances);
 
     const incomingTransferIds = nextIncomingTransfers.map((transfer: PendingTransfer) => transfer.id);
     if (incomingTransferIds.length > 0) {
@@ -466,29 +442,9 @@ export default function ProductionWarehousePage() {
     () => incomingBundles.find((bundle) => bundle.key === expandedIncomingBundle) || null,
     [incomingBundles, expandedIncomingBundle],
   );
-  const requiredBufferByAllocation = useMemo(() => incomingTransfers
-    .filter((transfer) => transfer.status === 'in_buffer')
-    .reduce<Record<string, number>>((totals, transfer) => {
-      const key = bufferAllocationKey(transfer.raw_material_id, transfer.buffer_warehouse_id);
-      totals[key] = (totals[key] || 0) + Number(transfer.quantity || 0);
-      return totals;
-    }, {}), [incomingTransfers]);
-
   const getIncomingStage = (bundle: IncomingBundle): IncomingStage => {
     const waitingLines = bundle.pendingTransfers;
     if (waitingLines.length > 0) {
-      const missingAllocation = waitingLines.find((transfer) => {
-        const key = bufferAllocationKey(transfer.raw_material_id, transfer.buffer_warehouse_id);
-        return Number(bufferBalances[key] || 0) < Number(requiredBufferByAllocation[key] || 0);
-      });
-      if (missingAllocation) {
-        return {
-          label: 'Buffer allocation missing',
-          detail: `${missingAllocation.raw_materials?.name || 'A material'} has no completed Buffer allocation. Production receipt is blocked until the buffer ledger is repaired.`,
-          tone: 'rose',
-          canReceive: false,
-        };
-      }
       if (waitingLines.length !== bundle.transfers.length) {
         return { label: 'Partly received', detail: `${waitingLines.length} line${waitingLines.length === 1 ? '' : 's'} remain in the Buffer awaiting Production receipt.`, tone: 'amber', canReceive: false };
       }
