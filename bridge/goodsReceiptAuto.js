@@ -126,7 +126,7 @@ async function handleGoodsReceipt(syncEvent) {
   if (grn.approved_by) {
     const { data: approver, error: approverError } = await supabase
       .from('profiles')
-      .select('full_name,email')
+      .select('full_name,email,sage_agent_name')
       .eq('id', grn.approved_by)
       .maybeSingle();
 
@@ -134,7 +134,7 @@ async function handleGoodsReceipt(syncEvent) {
       throw new Error(`Approver profile query failed: ${approverError.message}`);
     }
 
-    plantControlUser = (approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
+    plantControlUser = (approver?.sage_agent_name || approver?.full_name || approver?.email?.split('@')[0] || 'PlantControl').trim();
   }
 
   const manualGrvNumber = (grn.manual_grv_number || '').trim();
@@ -209,6 +209,7 @@ async function handleGoodsReceipt(syncEvent) {
   };
 
   console.log(`  GRN: ${grn.grn_number} - ${grn.suppliers?.name || supplierCode}`);
+  console.log(`  Sage agent: ${plantControlUser}`);
   console.log(`  Lines: ${lines.length}, warehouse ${warehouseCode}`);
 
   if (DRY_RUN) {

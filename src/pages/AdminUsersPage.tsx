@@ -143,6 +143,7 @@ export default function AdminUsersPage() {
     full_name: '',
     email: '',
     phone: '',
+    sage_agent_name: '',
     role: 'operator' as Profile['role']
   });
   
@@ -263,6 +264,7 @@ export default function AdminUsersPage() {
       full_name: user.full_name || '',
       email: user.email || '',
       phone: user.phone || '',
+      sage_agent_name: user.sage_agent_name || '',
       role: user.role || 'operator'
     });
     setUserModal(true);
@@ -280,6 +282,7 @@ export default function AdminUsersPage() {
           full_name: userProfile.full_name,
           email: userProfile.email,
           phone: userProfile.phone,
+          sage_agent_name: userProfile.sage_agent_name.trim() || null,
           role: userProfile.role
         })
         .eq('id', selectedUser.id);
@@ -1093,6 +1096,16 @@ export default function AdminUsersPage() {
                   value={userProfile.email}
                   onChange={(e) => setUserProfile({ ...userProfile, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Sage Agent Name</label>
+                <input
+                  type="text"
+                  value={userProfile.sage_agent_name}
+                  onChange={(e) => setUserProfile({ ...userProfile, sage_agent_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                  placeholder="Exact active Sage Agent name"
                 />
               </div>
               <div>
