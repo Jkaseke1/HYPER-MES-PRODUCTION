@@ -4,9 +4,13 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import TransporterAccounts, { type RateInput, type TransporterRateCard } from '../components/inbound-transport/TransporterAccounts';
+import TransporterSetupDialog, { type TransporterMasterInput } from '../components/inbound-transport/TransporterSetupDialog';
 import './InboundTransportPage.css';
 
-type Transporter = { id: string; transporter_code: string; name: string; contact_name: string | null; contact_phone: string | null; default_currency: string; is_active: boolean };
+type Transporter = {
+  id: string; transporter_code: string; name: string; legal_name: string | null; account_reference: string | null; contact_name: string | null; contact_phone: string | null; contact_email: string | null;
+  tax_registration_no: string | null; payment_terms_days: number; business_address: string | null; vehicle_capabilities: string | null; compliance_expiry: string | null; notes: string; default_currency: string; is_active: boolean;
+};
 type Ticket = {
   id: string; ticket_no: string; vehicle_reg: string | null; haulier_code: string | null; driver_name: string | null; nett_mass: number | null; driver_signed: boolean;
   inbound_transport_mode: 'supplier_provided' | 'company_hired'; inbound_transporter_id: string | null; inbound_rate_per_tonne: number | null; inbound_currency_code: string | null;
@@ -38,6 +42,7 @@ export default function InboundTransportPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showTransporter, setShowTransporter] = useState(false);
+  const [showTransporterSetup, setShowTransporterSetup] = useState(false);
   const [form, setForm] = useState({ ticketId: '', transporterId: '', rate: '', currency: 'USD', invoice: '', waybill: '', notes: '' });
   const [transporterForm, setTransporterForm] = useState({ code: '', name: '', contactName: '', contactPhone: '', currency: 'USD' });
 
@@ -47,8 +52,8 @@ export default function InboundTransportPage() {
   const fetchData = async () => {
     setLoading(true);
     const [claimsRes, transportersRes, ticketsRes, grnsRes, rateCardsRes] = await Promise.all([
-      supabase.from('inbound_transport_claims').select('*, inbound_transporters(id, transporter_code, name, contact_name, contact_phone, default_currency, is_active)').order('created_at', { ascending: false }),
-      supabase.from('inbound_transporters').select('id, transporter_code, name, contact_name, contact_phone, default_currency, is_active').eq('is_active', true).order('name'),
+      supabase.from('inbound_transport_claims').select('*, inbound_transporters(id, transporter_code, name, legal_name, account_reference, contact_name, contact_phone, contact_email, tax_registration_no, payment_terms_days, business_address, vehicle_capabilities, compliance_expiry, notes, default_currency, is_active)').order('created_at', { ascending: false }),
+      supabase.from('inbound_transporters').select('id, transporter_code, name, legal_name, account_reference, contact_name, contact_phone, contact_email, tax_registration_no, payment_terms_days, business_address, vehicle_capabilities, compliance_expiry, notes, default_currency, is_active').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('id, ticket_no, vehicle_reg, haulier_code, driver_name, nett_mass, driver_signed, inbound_transport_mode, inbound_transporter_id, inbound_rate_per_tonne, inbound_currency_code').eq('driver_signed', true).gt('nett_mass', 0).order('created_at', { ascending: false }),
       supabase.from('goods_received_notes').select('id, grn_number, status, weigh_bridge_ticket_id').not('weigh_bridge_ticket_id', 'is', null).order('created_at', { ascending: false }),
       supabase.from('inbound_transporter_rate_cards').select('id, transporter_id, route_from, route_to, vehicle_type, material_group, currency_code, rate_per_tonne, effective_from, effective_to, is_active, notes').order('effective_from', { ascending: false }),
@@ -154,6 +159,30 @@ export default function InboundTransportPage() {
     setSaving(false);
   };
 
+  const createTransporterMaster = async (input: TransporterMasterInput) => {
+    setSaving(true); setError(null);
+    const { error: transporterError } = await supabase.from('inbound_transporters').insert({
+      transporter_code: input.code.trim().toUpperCase(),
+      name: input.name.trim(),
+      legal_name: input.legalName.trim(),
+      account_reference: input.accountReference.trim() || null,
+      default_currency: input.currency,
+      payment_terms_days: Number(input.paymentTermsDays),
+      contact_name: input.contactName.trim() || null,
+      contact_phone: input.contactPhone.trim() || null,
+      contact_email: input.contactEmail.trim() || null,
+      tax_registration_no: input.taxRegistrationNo.trim() || null,
+      business_address: input.address.trim() || null,
+      vehicle_capabilities: input.vehicleCapabilities.trim() || null,
+      compliance_expiry: input.complianceExpiry || null,
+      notes: input.notes.trim(),
+      created_by: profile?.id,
+    });
+    if (transporterError) setError(transporterError.message); else await fetchData();
+    setSaving(false);
+    return !transporterError;
+  };
+
   const addRateCard = async (transporterId: string, input: RateInput) => {
     setSaving(true); setError(null);
     const { error: rateError } = await supabase.from('inbound_transporter_rate_cards').insert({
@@ -178,6 +207,7 @@ export default function InboundTransportPage() {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h1 className="text-xl font-semibold text-slate-900">Inbound Transport Costs</h1><p className="mt-0.5 text-sm text-slate-500">Weighbridge-linked freight claims with Finance approval control.</p></div>
       <div className="flex flex-wrap gap-2">
+        {canPrepare && <button onClick={() => setShowTransporterSetup(true)} className="inline-flex items-center gap-1.5 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"><Truck className="h-3.5 w-3.5" /> Set up transporter</button>}
         {canPrepare && <button onClick={() => setShowTransporter(true)} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Truck className="h-3.5 w-3.5" /> Add transporter</button>}
         {canPrepare && <button onClick={openClaim} disabled={!eligibleTickets.length || !transporters.length} className="inline-flex items-center gap-1.5 bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> New transport claim</button>}
       </div>
@@ -200,6 +230,8 @@ export default function InboundTransportPage() {
     </tbody></table></div></div>
 
     <TransporterAccounts transporters={transporters} claims={claims} rateCards={rateCards} saving={saving} onAddRate={addRateCard} />
+
+    <TransporterSetupDialog open={showTransporterSetup} saving={saving} onClose={() => setShowTransporterSetup(false)} onSave={createTransporterMaster} />
 
     {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"><div className="w-full max-w-2xl border border-slate-200 bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 bg-slate-900 px-5 py-4 text-white"><div><h2 className="font-semibold">New transport claim</h2><p className="mt-0.5 text-xs text-slate-300">Value is calculated from signed net mass and rate per tonne.</p></div><button onClick={() => setShowForm(false)} className="p-1 text-slate-300 hover:text-white" title="Close"><X className="h-5 w-5" /></button></div><div className="grid gap-4 p-5 sm:grid-cols-2"><label className="text-sm font-medium text-slate-700">Evidence ticket<select value={form.ticketId} onChange={(e) => selectTicket(e.target.value)} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Select ticket and GRN</option>{eligibleTickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.ticket_no} · {grnByTicket.get(ticket.id)?.grn_number} · {Number(ticket.nett_mass).toLocaleString()} kg</option>)}</select></label><label className="text-sm font-medium text-slate-700">Transporter<select value={form.transporterId} onChange={(e) => { const transporter = transporters.find((item) => item.id === e.target.value); setForm({ ...form, transporterId: e.target.value, currency: transporter?.default_currency || form.currency }); }} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">Select transporter</option>{transporters.map((transporter) => <option key={transporter.id} value={transporter.id}>{transporter.transporter_code} · {transporter.name}</option>)}</select></label>{selectedTicket && <div className="transport-evidence-summary sm:col-span-2"><div><span>Signed ticket</span><strong>{selectedTicket.ticket_no}</strong><small>{selectedTicket.vehicle_reg || 'Vehicle not recorded'} · {Number(selectedTicket.nett_mass).toLocaleString()} kg</small></div><div><span>GRN</span><strong>{grnByTicket.get(selectedTicket.id)?.grn_number}</strong><small>{ticketTransporter ? `Matched to ${ticketTransporter.name}` : `Haulier code: ${selectedTicket.haulier_code || 'not recorded'}`}</small></div></div>}<label className="text-sm font-medium text-slate-700">Rate per tonne<input type="number" min="0" step="0.01" value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="0.00" /></label><label className="text-sm font-medium text-slate-700">Currency<select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option>USD</option><option>ZIG</option><option>ZAR</option></select></label><div className="border border-teal-200 bg-teal-50 p-3 sm:col-span-2"><div className="flex items-center justify-between"><span className="text-sm font-medium text-teal-900">Calculated transport cost</span><span className="font-mono text-lg font-semibold text-teal-900">{money(calculated, form.currency)}</span></div><p className="mt-1 text-xs text-teal-700">{selectedTicket ? `${Number(selectedTicket.nett_mass).toLocaleString()} kg ÷ 1,000 × ${Number(form.rate || 0).toLocaleString()} per tonne` : 'Select a signed ticket to calculate.'}</p></div><label className="text-sm font-medium text-slate-700">Invoice number<input value={form.invoice} onChange={(e) => setForm({ ...form, invoice: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="text-sm font-medium text-slate-700">Waybill reference<input value={form.waybill} onChange={(e) => setForm({ ...form, waybill: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="text-sm font-medium text-slate-700 sm:col-span-2">Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1 min-h-20 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Route, agreed terms, or supporting detail" /></label></div><div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={() => setShowForm(false)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Cancel</button><button onClick={() => saveClaim(false)} disabled={saving} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Save draft</button><button onClick={() => saveClaim(true)} disabled={saving} className="inline-flex items-center gap-1.5 bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"><Send className="h-4 w-4" /> Submit to Finance</button></div></div></div>}
     {showTransporter && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"><div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl"><div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-slate-900">Add transporter</h2><button onClick={() => setShowTransporter(false)} className="text-slate-500 hover:text-slate-900" title="Close"><X className="h-5 w-5" /></button></div><div className="space-y-3 p-5"><label className="block text-sm font-medium text-slate-700">Code<input value={transporterForm.code} onChange={(e) => setTransporterForm({ ...transporterForm, code: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" placeholder="e.g. TRANS-001" /></label><label className="block text-sm font-medium text-slate-700">Name<input value={transporterForm.name} onChange={(e) => setTransporterForm({ ...transporterForm, name: e.target.value })} className="mt-1 w-full border border-slate-300 px-3 py-2 text-sm" /></label><label className="block text-sm font-medium text-slate-700">Default currency<select value={transporterForm.currency} onChange={(e) => setTransporterForm({ ...transporterForm, currency: e.target.value })} className="mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm"><option>USD</option><option>ZIG</option><option>ZAR</option></select></label></div><div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={() => setShowTransporter(false)} className="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Cancel</button><button onClick={addTransporter} disabled={saving} className="bg-teal-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Add transporter</button></div></div></div>}

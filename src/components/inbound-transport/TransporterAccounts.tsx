@@ -5,8 +5,17 @@ export type TransporterAccount = {
   id: string;
   transporter_code: string;
   name: string;
+  legal_name: string | null;
+  account_reference: string | null;
   contact_name: string | null;
   contact_phone: string | null;
+  contact_email: string | null;
+  tax_registration_no: string | null;
+  payment_terms_days: number;
+  business_address: string | null;
+  vehicle_capabilities: string | null;
+  compliance_expiry: string | null;
+  notes: string;
   default_currency: string;
 };
 
@@ -94,6 +103,14 @@ export default function TransporterAccounts({
       return flags.map((flag) => ({ claim, flag }));
     });
   }, [accountClaims]);
+  const today = new Date().toISOString().slice(0, 10);
+  const complianceState = !selected?.compliance_expiry
+    ? 'Not recorded'
+    : selected.compliance_expiry < today
+      ? 'Expired'
+      : selected.compliance_expiry === today
+        ? 'Expires today'
+        : 'Recorded';
 
   const submitRate = async () => {
     if (!selected || !rateInput.routeFrom.trim() || !rateInput.routeTo.trim() || !rateInput.rate || Number(rateInput.rate) <= 0) return;
@@ -123,7 +140,9 @@ export default function TransporterAccounts({
       </div>
 
       {selected && <div className="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-        <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-mono text-xs text-teal-700">{selected.transporter_code}</p><h3 className="mt-1 text-lg font-semibold text-slate-900">{selected.name}</h3><p className="mt-1 text-xs text-slate-500">{selected.contact_name || 'Contact not recorded'}{selected.contact_phone ? ` · ${selected.contact_phone}` : ''}</p></div><button type="button" onClick={() => setShowRateForm(true)} className="inline-flex items-center justify-center gap-1.5 bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"><Plus className="h-3.5 w-3.5" /> Add rate card</button></div>
+        <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-mono text-xs text-teal-700">{selected.transporter_code}{selected.account_reference ? ` · ${selected.account_reference}` : ''}</p><h3 className="mt-1 text-lg font-semibold text-slate-900">{selected.name}</h3><p className="mt-1 text-xs text-slate-500">{selected.legal_name || selected.name}</p></div><button type="button" onClick={() => setShowRateForm(true)} className="inline-flex items-center justify-center gap-1.5 bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800"><Plus className="h-3.5 w-3.5" /> Add rate card</button></div>
+
+        <div className="mt-4 grid gap-x-5 gap-y-2 border border-slate-200 bg-white p-3 text-xs sm:grid-cols-2 xl:grid-cols-4"><div><p className="text-slate-400">Contact</p><p className="mt-0.5 font-medium text-slate-800">{selected.contact_name || 'Not recorded'}</p><p className="mt-0.5 text-slate-600">{selected.contact_phone || selected.contact_email || 'No phone or email'}</p></div><div><p className="text-slate-400">Payment terms</p><p className="mt-0.5 font-medium text-slate-800">{selected.payment_terms_days} days · {selected.default_currency}</p><p className="mt-0.5 text-slate-600">Tax: {selected.tax_registration_no || 'Not recorded'}</p></div><div><p className="text-slate-400">Compliance</p><p className={`mt-0.5 font-medium ${complianceState === 'Expired' || complianceState === 'Expires today' ? 'text-rose-700' : 'text-slate-800'}`}>{complianceState}</p><p className="mt-0.5 text-slate-600">{selected.compliance_expiry || 'No expiry date'}</p></div><div><p className="text-slate-400">Capabilities</p><p className="mt-0.5 font-medium text-slate-800">{selected.vehicle_capabilities || 'Not recorded'}</p><p className="mt-0.5 truncate text-slate-600" title={selected.business_address || ''}>{selected.business_address || 'No address recorded'}</p></div></div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3"><div className="border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Approved, unpaid</p><p className="mt-1 font-mono text-lg font-semibold text-slate-900">{money(accountSummary.approvedUnpaid, selected.default_currency)}</p></div><div className="border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Paid history</p><p className="mt-1 font-mono text-lg font-semibold text-teal-700">{money(accountSummary.paid, selected.default_currency)}</p></div><div className="border border-slate-200 bg-white p-3"><p className="text-xs text-slate-500">Recorded tonnes</p><p className="mt-1 font-mono text-lg font-semibold text-slate-900">{accountSummary.tonnes.toLocaleString(undefined, { maximumFractionDigits: 3 })} t</p></div></div>
 
