@@ -7,6 +7,8 @@ export type TransporterAccount = {
   name: string;
   legal_name: string | null;
   account_reference: string | null;
+  sage_supplier_account?: string | null;
+  sage_supplier_link?: number | null;
   contact_name: string | null;
   contact_phone: string | null;
   contact_email: string | null;
@@ -134,6 +136,7 @@ export default function TransporterAccounts({
           const currency = transporterClaims[0]?.currency_code || transporter.default_currency;
           return <button key={transporter.id} type="button" onClick={() => { setSelectedId(transporter.id); setShowRateForm(false); }} className={`min-w-0 p-4 text-left transition-colors hover:bg-slate-50 ${selectedId === transporter.id ? 'bg-teal-50/60 ring-1 ring-inset ring-teal-500' : ''}`}>
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-slate-900">{transporter.name}</p><p className="mt-0.5 font-mono text-xs text-slate-500">{transporter.transporter_code}</p></div><ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" /></div>
+            {transporter.sage_supplier_account && <p className="mt-2 text-xs text-slate-500">Sage supplier: <span className="font-mono">{transporter.sage_supplier_account}</span></p>}
             <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Approved, unpaid</p><p className="mt-1 font-mono text-sm font-semibold text-slate-900">{money(outstanding, currency)}</p></div><p className="text-xs text-slate-500">{transporterClaims.length} claims</p></div>
           </button>;
         })}

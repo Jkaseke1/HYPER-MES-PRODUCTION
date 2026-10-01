@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, CheckCircle2, CircleDollarSign, ClipboardCheck, Landmark, Link2, Loader2, Plus, ReceiptText, Scale, Send, ShieldCheck, Truck, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, CircleDollarSign, Landmark, Link2, Loader2, Plus, ReceiptText, Scale, Send, ShieldCheck, Truck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import TransporterAccounts, { type RateInput, type TransporterRateCard } from '../components/inbound-transport/TransporterAccounts';
 import TransporterSetupDialog, { type TransporterMasterInput } from '../components/inbound-transport/TransporterSetupDialog';
+import SageTransportHistory from '../components/inbound-transport/SageTransportHistory';
 import './InboundTransportPage.css';
 
 type Transporter = {
@@ -53,7 +54,7 @@ export default function InboundTransportPage() {
     setLoading(true);
     const [claimsRes, transportersRes, ticketsRes, grnsRes, rateCardsRes] = await Promise.all([
       supabase.from('inbound_transport_claims').select('*, inbound_transporters(id, transporter_code, name, legal_name, account_reference, contact_name, contact_phone, contact_email, tax_registration_no, payment_terms_days, business_address, vehicle_capabilities, compliance_expiry, notes, default_currency, is_active)').order('created_at', { ascending: false }),
-      supabase.from('inbound_transporters').select('id, transporter_code, name, legal_name, account_reference, contact_name, contact_phone, contact_email, tax_registration_no, payment_terms_days, business_address, vehicle_capabilities, compliance_expiry, notes, default_currency, is_active').eq('is_active', true).order('name'),
+      supabase.from('inbound_transporters').select('*').eq('is_active', true).order('name'),
       supabase.from('weigh_bridge_tickets').select('id, ticket_no, vehicle_reg, haulier_code, driver_name, nett_mass, driver_signed, inbound_transport_mode, inbound_transporter_id, inbound_rate_per_tonne, inbound_currency_code').eq('driver_signed', true).gt('nett_mass', 0).order('created_at', { ascending: false }),
       supabase.from('goods_received_notes').select('id, grn_number, status, weigh_bridge_ticket_id').not('weigh_bridge_ticket_id', 'is', null).order('created_at', { ascending: false }),
       supabase.from('inbound_transporter_rate_cards').select('id, transporter_id, route_from, route_to, vehicle_type, material_group, currency_code, rate_per_tonne, effective_from, effective_to, is_active, notes').order('effective_from', { ascending: false }),
@@ -230,6 +231,7 @@ export default function InboundTransportPage() {
     </tbody></table></div></div>
 
     <TransporterAccounts transporters={transporters} claims={claims} rateCards={rateCards} saving={saving} onAddRate={addRateCard} />
+    {canReview && <SageTransportHistory />}
 
     <TransporterSetupDialog open={showTransporterSetup} saving={saving} onClose={() => setShowTransporterSetup(false)} onSave={createTransporterMaster} />
 
