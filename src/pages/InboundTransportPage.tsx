@@ -145,10 +145,16 @@ export default function InboundTransportPage() {
   };
 
   const markPaid = async (claim: Claim) => {
-    const reference = window.prompt('Payment reference');
+    const reference = window.prompt('Sage payment reference');
     if (!reference?.trim()) return;
+    const auditNumber = window.prompt('Sage payment audit number');
+    if (!auditNumber?.trim()) return;
     setSaving(true); setError(null);
-    const { error: paidError } = await supabase.rpc('mark_inbound_transport_claim_paid', { p_claim_id: claim.id, p_payment_reference: reference });
+    const { error: paidError } = await supabase.rpc('mark_inbound_transport_claim_paid', {
+      p_claim_id: claim.id,
+      p_payment_reference: reference,
+      p_sage_payment_audit_number: auditNumber,
+    });
     if (paidError) setError(paidError.message);
     setSaving(false); await fetchData();
   };

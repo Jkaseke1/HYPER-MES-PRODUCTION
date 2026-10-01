@@ -14,6 +14,7 @@ const { handleMaterialTransferReturnToRm } = require('./materialTransferReturnSd
 const { handleFinishedGoodsTransfer } = require('./finishedGoodsTransferSdkAuto');
 const { handleRmCostUpdated } = require('./rmCostUpdatedAuto');
 const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
+const { syncSageTransportCosts } = require('./sageTransportCostSync');
 const { syncRawMaterials } = require('./syncMasterData');
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
@@ -41,6 +42,11 @@ const ALLOWED_EVENT_TYPES = new Set(
     .filter(Boolean),
 );
 const STOCK_SYNC_ENABLED = process.env.SAGE_STOCK_SYNC_ENABLED === 'true';
+const TRANSPORT_COST_SYNC_ENABLED = process.env.SAGE_TRANSPORT_COST_SYNC_ENABLED === 'true';
+const configuredTransportCostSyncInterval = Number(process.env.SAGE_TRANSPORT_COST_SYNC_INTERVAL_MS);
+const TRANSPORT_COST_SYNC_INTERVAL_MS = Number.isFinite(configuredTransportCostSyncInterval)
+  ? Math.max(configuredTransportCostSyncInterval, 5 * 60 * 1000)
+  : 15 * 60 * 1000;
 const ENFORCE_GRN_ONLY = process.env.BRIDGE_ENFORCE_GRN_ONLY === 'true';
 const ENFORCE_SAGE_IDENTITY = process.env.BRIDGE_ENFORCE_SAGE_IDENTITY === 'true';
 // A targeted stock refresh is read-only in Sage. It is always allowed through
@@ -247,6 +253,18 @@ function postedStockCodes(eventType, details) {
   if (eventType === 'grn_confirmed') return (details?.sdkGoodsReceipt?.lines || []).map((line) => line.itemCode).filter(Boolean);
   if (eventType === 'return_to_supplier_requested') return (details?.sdkReturnToSupplier?.lines || []).map((line) => line.itemCode).filter(Boolean);
   return [];
+}
+
+async function refreshSageTransportCosts(reason) {
+  try {
+    const result = await syncSageTransportCosts();
+    if (result.skipped) console.log(`  Sage transporter-cost sync (${reason}): ${result.reason}`);
+    else console.log(`  Sage transporter-cost sync (${reason}): ${result.entries} PostAP entry/entries imported for ${result.accounts} transporter account(s).`);
+    return result;
+  } catch (error) {
+    console.error(`  Sage transporter-cost sync failed (${reason}): ${error.message}`);
+    return { failed: true, message: error.message };
+  }
 }
 
 async function processPendingEvents() {
@@ -554,6 +572,7 @@ async function startWorker() {
   console.log(` Poll interval: ${POLL_INTERVAL_MS / 1000}s`);
   console.log(` Event scope: ${ALLOWED_EVENT_TYPES.size > 0 ? [...ALLOWED_EVENT_TYPES].join(', ') : 'all supported Sage events'}`);
   console.log(` Sage stock sync: ${STOCK_SYNC_ENABLED ? 'ENABLED' : 'DISABLED'}`);
+  console.log(` Sage transporter-cost sync: ${TRANSPORT_COST_SYNC_ENABLED ? `ENABLED (${TRANSPORT_COST_SYNC_INTERVAL_MS / (60 * 1000)}m)` : 'DISABLED'}`);
   console.log(` Sage master sync: ${MASTER_SYNC_ENABLED ? `ENABLED (${MASTER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h; scope=${MASTER_SYNC_SCOPE_CONFIGURED ? 'configured' : 'missing, safe no-op'})` : 'DISABLED'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
@@ -573,6 +592,9 @@ async function startWorker() {
   if (STOCK_SYNC_ENABLED && !DRY_RUN) {
     void refreshSageStock(undefined, 'startup reconciliation batch');
   }
+  if (TRANSPORT_COST_SYNC_ENABLED && !DRY_RUN) {
+    void refreshSageTransportCosts('startup reconciliation');
+  }
   if (MASTER_SYNC_ENABLED && !DRY_RUN) {
     void refreshSageMasterData('startup catalogue refresh');
   }
@@ -581,6 +603,9 @@ async function startWorker() {
   setInterval(processPendingEvents, POLL_INTERVAL_MS);
   if (STOCK_SYNC_ENABLED && !DRY_RUN) {
     setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
+  }
+  if (TRANSPORT_COST_SYNC_ENABLED && !DRY_RUN) {
+    setInterval(() => { refreshSageTransportCosts('scheduled refresh'); }, TRANSPORT_COST_SYNC_INTERVAL_MS);
   }
   if (MASTER_SYNC_ENABLED && !DRY_RUN) {
     setInterval(() => { refreshSageMasterData('scheduled catalogue refresh'); }, MASTER_SYNC_INTERVAL_MS);
