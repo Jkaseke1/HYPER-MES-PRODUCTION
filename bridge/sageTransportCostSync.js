@@ -16,6 +16,11 @@ function normalise(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function readEntryField(entry, name) {
+  const pascalName = name.charAt(0).toUpperCase() + name.slice(1);
+  return entry[name] ?? entry[pascalName];
+}
+
 async function getJson(url) {
   const response = await fetch(url, { headers: { 'X-Hyper-Api-Key': SDK_API_KEY } });
   const body = await response.json().catch(() => ({}));
@@ -55,29 +60,29 @@ async function finishRun(id, fields) {
 }
 
 function toHistoryRow(entry, runId, readAt) {
-  const transactionType = String(entry.transactionType || '').trim();
+  const transactionType = String(readEntryField(entry, 'transactionType') || '').trim();
   if (!['APTx', 'CBAP'].includes(transactionType)) throw new Error(`Unexpected Sage PostAP transaction type: ${transactionType || 'blank'}`);
-  const supplierAccount = normalise(entry.supplierAccount);
-  const auditNumber = String(entry.auditNumber || '').trim();
+  const supplierAccount = normalise(readEntryField(entry, 'supplierAccount'));
+  const auditNumber = String(readEntryField(entry, 'auditNumber') || '').trim();
   if (!supplierAccount || !auditNumber) throw new Error('Sage transporter-cost response contains an entry without supplier account or audit number.');
   return {
     company_database: 'Hyperfeeds 2024',
     supplier_account: supplierAccount,
-    transaction_date: String(entry.transactionDate || '').slice(0, 10),
+    transaction_date: String(readEntryField(entry, 'transactionDate') || '').slice(0, 10),
     transaction_type: transactionType,
-    description: String(entry.description || '').trim(),
-    reference: String(entry.reference || '').trim(),
-    batch_reference: String(entry.batchReference || '').trim(),
+    description: String(readEntryField(entry, 'description') || '').trim(),
+    reference: String(readEntryField(entry, 'reference') || '').trim(),
+    batch_reference: String(readEntryField(entry, 'batchReference') || '').trim(),
     audit_number: auditNumber,
-    debit: Number(entry.debit || 0),
-    credit: Number(entry.credit || 0),
-    outstanding_at_extract: Number(entry.outstanding || 0),
-    sage_currency_id: Number(entry.currencyId || 0),
-    foreign_debit: Number(entry.foreignDebit || 0),
-    foreign_credit: Number(entry.foreignCredit || 0),
-    sage_auto_index: Number(entry.autoIndex),
-    payment_allocations: String(entry.paymentAllocations || ''),
-    posting_user: String(entry.userName || '').trim(),
+    debit: Number(readEntryField(entry, 'debit') || 0),
+    credit: Number(readEntryField(entry, 'credit') || 0),
+    outstanding_at_extract: Number(readEntryField(entry, 'outstanding') || 0),
+    sage_currency_id: Number(readEntryField(entry, 'currencyId') || 0),
+    foreign_debit: Number(readEntryField(entry, 'foreignDebit') || 0),
+    foreign_credit: Number(readEntryField(entry, 'foreignCredit') || 0),
+    sage_auto_index: Number(readEntryField(entry, 'autoIndex')),
+    payment_allocations: String(readEntryField(entry, 'paymentAllocations') || ''),
+    posting_user: String(readEntryField(entry, 'userName') || '').trim(),
     extracted_at: readAt,
     imported_at: new Date().toISOString(),
     last_seen_at: new Date().toISOString(),
@@ -111,8 +116,8 @@ async function syncSageTransportCosts() {
       throw new Error(`Unexpected Sage company database: ${result.companyDatabase || 'unknown'}`);
     }
     const entries = Array.isArray(result.entries) ? result.entries : [];
-    const unexpected = entries.find((entry) => !accounts.includes(normalise(entry.supplierAccount)));
-    if (unexpected) throw new Error(`Sage transporter-cost response included an unapproved supplier account: ${unexpected.supplierAccount}`);
+    const unexpected = entries.find((entry) => !accounts.includes(normalise(readEntryField(entry, 'supplierAccount'))));
+    if (unexpected) throw new Error(`Sage transporter-cost response included an unapproved supplier account: ${readEntryField(unexpected, 'supplierAccount') || 'blank'}`);
     const readAt = result.readAtUtc || new Date().toISOString();
     await upsertRows(entries.map((entry) => toHistoryRow(entry, runId, readAt)));
     await finishRun(runId, { status: 'success', entry_count: entries.length, message: `Imported ${entries.length} read-only Sage PostAP entry/entries.` });
