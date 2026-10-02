@@ -63,8 +63,11 @@ namespace SDK_Test
         private static string ValidateDateRange(string fromDate, string toDate, out DateTime from, out DateTime to)
         {
             const string format = "yyyy-MM-dd";
-            if (!DateTime.TryParseExact(fromDate, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out from) ||
-                !DateTime.TryParseExact(toDate, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out to))
+            from = default(DateTime);
+            to = default(DateTime);
+            bool hasFromDate = DateTime.TryParseExact(fromDate, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out from);
+            bool hasToDate = DateTime.TryParseExact(toDate, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out to);
+            if (!hasFromDate || !hasToDate)
                 return "fromDate and toDate must use YYYY-MM-DD.";
 
             if (to <= from) return "toDate must be after fromDate.";
