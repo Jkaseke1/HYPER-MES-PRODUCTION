@@ -7,26 +7,26 @@ DROP POLICY IF EXISTS inbound_transport_claims_read ON public.inbound_transport_
 DROP POLICY IF EXISTS inbound_transport_claim_history_read ON public.inbound_transport_claim_history;
 
 CREATE POLICY inbound_transporters_read ON public.inbound_transporters FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 CREATE POLICY inbound_transporters_manage ON public.inbound_transporters FOR ALL TO authenticated
   USING (public.has_mes_role(ARRAY['admin'])) WITH CHECK (public.has_mes_role(ARRAY['admin']));
 CREATE POLICY inbound_transport_claims_read ON public.inbound_transport_claims FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 CREATE POLICY inbound_transport_claim_history_read ON public.inbound_transport_claim_history FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 
 DROP POLICY IF EXISTS inbound_transport_sage_history_admin_read ON public.inbound_transport_sage_history;
 CREATE POLICY inbound_transport_sage_history_reconciliation_read ON public.inbound_transport_sage_history FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 DROP POLICY IF EXISTS inbound_transport_sage_sync_runs_admin_read ON public.inbound_transport_sage_sync_runs;
 CREATE POLICY inbound_transport_sage_sync_runs_reconciliation_read ON public.inbound_transport_sage_sync_runs FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 DROP POLICY IF EXISTS inbound_transport_charge_allocations_admin_read ON public.inbound_transport_sage_charge_allocations;
 CREATE POLICY inbound_transport_charge_allocations_reconciliation_read ON public.inbound_transport_sage_charge_allocations FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 DROP POLICY IF EXISTS inbound_transport_payment_allocations_admin_read ON public.inbound_transport_sage_payment_allocations;
 CREATE POLICY inbound_transport_payment_allocations_reconciliation_read ON public.inbound_transport_sage_payment_allocations FOR SELECT TO authenticated
-  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']));
+  USING (public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']));
 
 CREATE OR REPLACE FUNCTION public.guard_weighbridge_hired_transport_admin()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -53,8 +53,8 @@ CREATE OR REPLACE FUNCTION public.guard_inbound_transport_claim_admin()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF TG_OP = 'INSERT' AND pg_trigger_depth() > 1 THEN RETURN NEW; END IF;
-  IF NOT public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager', 'finance', 'accountant']) THEN
-    RAISE EXCEPTION 'Transport claims may only be handled by Raw Materials, Finance, or Admin.';
+  IF NOT public.has_mes_role(ARRAY['admin', 'raw_material_manager', 'rm_manager']) THEN
+    RAISE EXCEPTION 'Transport claims may only be handled by Raw Materials or Admin.';
   END IF;
   RETURN NEW;
 END;
@@ -97,7 +97,7 @@ DECLARE
   v_supplier_account text; v_existing_claim_total numeric(18,2); v_existing_entry_total numeric(18,2);
   v_current_amount numeric(18,2); v_entry_amount numeric(18,2); v_paid_total numeric(18,2);
 BEGIN
-  IF NOT public.has_mes_role(ARRAY['admin', 'finance', 'accountant']) THEN RAISE EXCEPTION 'Only Finance, Accountant, or Admin may reconcile Sage transport payments.'; END IF;
+  IF NOT public.has_mes_role(ARRAY['admin']) THEN RAISE EXCEPTION 'Only Admin may reconcile imported Sage transport evidence.'; END IF;
   IF p_entry_type NOT IN ('APTx', 'CBAP') OR coalesce(p_allocated_amount, 0) <= 0 THEN RAISE EXCEPTION 'Choose a Sage charge or payment and enter a positive allocation amount.'; END IF;
   SELECT * INTO v_claim FROM public.inbound_transport_claims WHERE id = p_claim_id FOR UPDATE;
   IF NOT FOUND OR v_claim.status NOT IN ('approved', 'paid') THEN RAISE EXCEPTION 'Only an approved transport claim can be reconciled.'; END IF;
@@ -142,7 +142,7 @@ claims AS (
 )
 SELECT 'company_hired_grn_missing_claim'::text AS exception_type, 'high'::text AS severity, grn_number, ticket_no, transporter_name, null::text AS claim_number,
   round((coalesce(nett_mass,0)/1000)*coalesce(inbound_rate_per_tonne,0),2) AS expected_amount, null::numeric AS sage_charge_amount, null::numeric AS sage_paid_amount,
-  'Company-hired delivery has a GRN but no PlantControl transport claim.'::text AS detail, 'Raw Materials Manager must review the linked ticket and GRN before Finance processes any freight.'::text AS action
+  'Company-hired delivery has a GRN but no PlantControl transport claim.'::text AS detail, 'Raw Materials Manager must review the linked ticket and GRN before any freight is processed.'::text AS action
 FROM missing_claims
 UNION ALL
 SELECT 'claim_missing_supporting_document', 'review', grn_number, ticket_no, transporter_name, claim_number, calculated_amount, charge_allocated, payment_allocated,
@@ -150,15 +150,15 @@ SELECT 'claim_missing_supporting_document', 'review', grn_number, ticket_no, tra
 FROM claims WHERE status IN ('draft','submitted','approved') AND invoice_number IS NULL AND waybill_reference IS NULL
 UNION ALL
 SELECT 'approved_claim_awaiting_sage_charge', 'review', grn_number, ticket_no, transporter_name, claim_number, calculated_amount, charge_allocated, payment_allocated,
-  'Approved expected freight has no matched Sage charge yet.', 'Finance should match the imported Sage charge or investigate before payment.'
+  'Approved expected freight has no matched Sage charge yet.', 'Admin must match the imported Sage charge or investigate before payment.'
 FROM claims WHERE status='approved' AND coalesce(reconciliation_status,'awaiting_sage_charge')='awaiting_sage_charge'
 UNION ALL
 SELECT CASE WHEN reconciliation_status='part_paid' THEN 'claim_part_paid' ELSE 'charge_awaiting_payment' END, 'review', grn_number, ticket_no, transporter_name, claim_number, calculated_amount, charge_allocated, payment_allocated,
-  'Sage charge is linked but the expected delivery value is not fully paid.', 'Finance should reconcile the remaining Sage payment or record the reason for the balance.'
+  'Sage charge is linked but the expected delivery value is not fully paid.', 'Admin must reconcile the remaining Sage payment or record the reason for the balance.'
 FROM claims WHERE reconciliation_status IN ('awaiting_payment','part_paid')
 UNION ALL
 SELECT 'sage_payment_unmatched', 'high', null, null, tr.name, null, null, null, h.debit-h.credit,
-  'Imported Sage transporter payment is not allocated to a PlantControl delivery.', 'Finance must reconcile the payment to a matching approved claim before treating it as cleared.'
+  'Imported Sage transporter payment is not allocated to a PlantControl delivery.', 'Admin must reconcile the payment to a matching approved claim before treating it as cleared.'
 FROM public.inbound_transport_sage_history h JOIN public.inbound_transporters tr ON upper(btrim(tr.sage_supplier_account))=upper(btrim(h.supplier_account))
 WHERE h.transaction_type='CBAP' AND h.transaction_date >= (SELECT monitoring_enabled_from FROM settings)
   AND NOT EXISTS (SELECT 1 FROM public.inbound_transport_sage_payment_allocations a WHERE a.sage_history_id=h.id);
