@@ -12,7 +12,7 @@ audit number, and amount. A Sage audit number can be matched to one claim only.
 
 ## Release steps
 
-1. Apply `supabase/migrations/20261002100000_add_read_only_sage_transporter_reconciliation.sql` in the PlantControl Supabase SQL editor. This changes PlantControl tables only, never Sage.
+1. Apply `supabase/migrations/20261002100000_add_read_only_sage_transporter_reconciliation.sql` in the PlantControl Supabase SQL editor. This changes PlantControl tables only, never Sage. If Supabase presents a choice, choose **Run without RLS** because the migration explicitly enables RLS and creates the Admin-only policies itself; its automatic rewrite can corrupt the function body.
 2. Deploy the rebuilt Sage SDK API that includes `TransportCostController.cs`.
 3. Set these **Machine** environment variables for the Sage SDK scheduled task:
 

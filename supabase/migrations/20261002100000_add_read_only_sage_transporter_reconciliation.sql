@@ -63,6 +63,14 @@ INSERT INTO public.inbound_transport_reconciliation_settings (singleton, monitor
 VALUES (true, current_date)
 ON CONFLICT (singleton) DO NOTHING;
 
+ALTER TABLE public.inbound_transport_reconciliation_settings ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.inbound_transport_reconciliation_settings FROM anon, authenticated;
+GRANT SELECT ON public.inbound_transport_reconciliation_settings TO authenticated;
+DROP POLICY IF EXISTS inbound_transport_reconciliation_settings_admin_read ON public.inbound_transport_reconciliation_settings;
+CREATE POLICY inbound_transport_reconciliation_settings_admin_read
+  ON public.inbound_transport_reconciliation_settings FOR SELECT TO authenticated
+  USING (public.has_mes_role(ARRAY['admin']));
+
 -- A payment is never treated as reconciled merely because a user typed a
 -- reference. It must be an imported Sage payment for the mapped transporter,
 -- with the exact audit number and the exact claim amount.
