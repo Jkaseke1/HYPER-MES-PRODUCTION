@@ -7,6 +7,7 @@ import TransporterAccounts, { type RateInput, type TransporterRateCard } from '.
 import TransporterSetupDialog, { type TransporterMasterInput } from '../components/inbound-transport/TransporterSetupDialog';
 import SageTransportHistory from '../components/inbound-transport/SageTransportHistory';
 import TransportClaimReconciliationDialog, { type ClaimReconciliation, type SageAllocation, type SageHistoryEntry } from '../components/inbound-transport/TransportClaimReconciliationDialog';
+import TransportExceptionsPanel from '../components/inbound-transport/TransportExceptionsPanel';
 import './InboundTransportPage.css';
 
 type Transporter = {
@@ -50,12 +51,13 @@ export default function InboundTransportPage() {
   const [showForm, setShowForm] = useState(false);
   const [showTransporter, setShowTransporter] = useState(false);
   const [showTransporterSetup, setShowTransporterSetup] = useState(false);
-  const [activeTab, setActiveTab] = useState<'claims' | 'accounts' | 'sage-history'>('claims');
+  const [activeTab, setActiveTab] = useState<'claims' | 'accounts' | 'sage-history' | 'exceptions'>('claims');
   const [form, setForm] = useState({ ticketId: '', transporterId: '', rate: '', currency: 'USD', invoice: '', waybill: '', notes: '' });
   const [transporterForm, setTransporterForm] = useState({ code: '', name: '', contactName: '', contactPhone: '', currency: 'USD' });
 
-  const canPrepare = profile?.role === 'admin';
-  const canReview = profile?.role === 'admin';
+  const canPrepare = ['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
+  const canReview = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
+  const canConfigureTransporters = profile?.role === 'admin';
 
   const fetchData = async () => {
     setLoading(true);
@@ -216,8 +218,8 @@ export default function InboundTransportPage() {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><h1 className="text-xl font-semibold text-slate-900">Inbound Transport Costs</h1><p className="mt-0.5 text-sm text-slate-500">Weighbridge-linked freight claims with Finance approval control.</p></div>
       <div className="flex flex-wrap gap-2">
-        {canPrepare && <button onClick={() => setShowTransporterSetup(true)} className="inline-flex items-center gap-1.5 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"><Truck className="h-3.5 w-3.5" /> Set up transporter</button>}
-        {canPrepare && <button onClick={() => setShowTransporter(true)} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Truck className="h-3.5 w-3.5" /> Add transporter</button>}
+        {canConfigureTransporters && <button onClick={() => setShowTransporterSetup(true)} className="inline-flex items-center gap-1.5 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"><Truck className="h-3.5 w-3.5" /> Set up transporter</button>}
+        {canConfigureTransporters && <button onClick={() => setShowTransporter(true)} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Truck className="h-3.5 w-3.5" /> Add transporter</button>}
         {canPrepare && <button onClick={openClaim} disabled={!eligibleTickets.length || !transporters.length} className="inline-flex items-center gap-1.5 bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> New transport claim</button>}
       </div>
     </div>
@@ -238,6 +240,7 @@ export default function InboundTransportPage() {
       <button id="transport-claims-tab" type="button" role="tab" aria-selected={activeTab === 'claims'} aria-controls="transport-claims-panel" className={activeTab === 'claims' ? 'is-active' : ''} onClick={() => setActiveTab('claims')}>Transport claims</button>
       <button id="transporter-accounts-tab" type="button" role="tab" aria-selected={activeTab === 'accounts'} aria-controls="transporter-accounts-panel" className={activeTab === 'accounts' ? 'is-active' : ''} onClick={() => setActiveTab('accounts')}>Transporter accounts <span>{transporters.length}</span></button>
       <button id="sage-history-tab" type="button" role="tab" aria-selected={activeTab === 'sage-history'} aria-controls="sage-history-panel" className={activeTab === 'sage-history' ? 'is-active' : ''} onClick={() => setActiveTab('sage-history')}>Sage history</button>
+      <button id="transport-exceptions-tab" type="button" role="tab" aria-selected={activeTab === 'exceptions'} aria-controls="transport-exceptions-panel" className={activeTab === 'exceptions' ? 'is-active' : ''} onClick={() => setActiveTab('exceptions')}>Transport exceptions</button>
     </div>
 
     {activeTab === 'claims' && <div id="transport-claims-panel" role="tabpanel" aria-labelledby="transport-claims-tab" className="overflow-hidden border border-slate-200 bg-white"><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3">Claim</th><th className="px-3 py-3">Evidence</th><th className="px-3 py-3">Transporter</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Sage chain</th><th className="px-3 py-3">Status</th><th className="px-3 py-3 text-right">Actions</th></tr></thead><tbody>
@@ -248,7 +251,8 @@ export default function InboundTransportPage() {
     </tbody></table></div></div>}
 
     {activeTab === 'accounts' && <div id="transporter-accounts-panel" role="tabpanel" aria-labelledby="transporter-accounts-tab"><TransporterAccounts transporters={transporters} claims={claims} rateCards={rateCards} saving={saving} onAddRate={addRateCard} /></div>}
-    {activeTab === 'sage-history' && canReview && <div id="sage-history-panel" role="tabpanel" aria-labelledby="sage-history-tab"><SageTransportHistory /></div>}
+    {activeTab === 'sage-history' && <div id="sage-history-panel" role="tabpanel" aria-labelledby="sage-history-tab"><SageTransportHistory /></div>}
+    {activeTab === 'exceptions' && <div id="transport-exceptions-panel" role="tabpanel" aria-labelledby="transport-exceptions-tab"><TransportExceptionsPanel /></div>}
 
     <TransporterSetupDialog open={showTransporterSetup} saving={saving} onClose={() => setShowTransporterSetup(false)} onSave={createTransporterMaster} />
 

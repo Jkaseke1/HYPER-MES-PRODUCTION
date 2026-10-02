@@ -568,7 +568,7 @@ export default function WeighBridgePage() {
                 data={form as any}
                 onChange={handleFormChange}
                 hideHeader
-                allowCompanyHiredTransport={profile?.role === 'admin' || profile?.role === 'weighbridge'}
+                allowCompanyHiredTransport={['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '')}
               />
             </div>
             {/* Sticky Footer */}
