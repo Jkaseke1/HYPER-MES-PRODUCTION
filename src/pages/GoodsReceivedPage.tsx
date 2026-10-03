@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Plus, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
@@ -263,7 +263,7 @@ export default function GoodsReceivedPage() {
         supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(ticket_no, status, vehicle_reg, nett_mass, inbound_transport_mode, inbound_rate_per_tonne, inbound_currency_code, inbound_invoice_number, inbound_waybill_reference, inbound_transporter_id, inbound_transporters(name, transporter_code))').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
-        supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code)').eq('status', 'open').order('created_at', { ascending: false }),
+        supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code), inbound_transporters(name, transporter_code)').eq('status', 'open').order('created_at', { ascending: false }),
         supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code, sage_code)').in('status', ['open', 'in_grn', 'linked']).order('created_at', { ascending: false }),
       ]);
 
@@ -1641,6 +1641,51 @@ export default function GoodsReceivedPage() {
                         <p className="text-xs text-slate-500">No open WB tickets. Go to <strong>Weigh Bridge</strong> to create one first.</p>
                       )}
                     </div>
+
+                    {(() => {
+                      const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
+                      if (!ticket) return null;
+                      const companyHired = ticket.inbound_transport_mode === 'company_hired';
+                      const transporter = Array.isArray(ticket.inbound_transporters)
+                        ? ticket.inbound_transporters[0]
+                        : ticket.inbound_transporters;
+                      const rate = Number(ticket.inbound_rate_per_tonne || 0);
+                      const expectedCost = (Number(ticket.nett_mass || 0) / 1000) * rate;
+
+                      return (
+                        <div className={`border p-4 ${companyHired ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex gap-3">
+                              <div className={`flex h-9 w-9 shrink-0 items-center justify-center ${companyHired ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'}`}>
+                                <Truck className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-slate-900">Inbound transport accountability</p>
+                                <p className="mt-0.5 text-xs text-slate-600">
+                                  {companyHired
+                                    ? 'Company freight evidence inherited from the signed weighbridge ticket.'
+                                    : 'Supplier-provided transport recorded on the signed weighbridge ticket.'}
+                                </p>
+                              </div>
+                            </div>
+                            <span className={`border px-2 py-1 text-xs font-bold ${companyHired ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-slate-300 bg-white text-slate-700'}`}>
+                              {companyHired ? 'Company-hired' : 'Supplier-provided'}
+                            </span>
+                          </div>
+
+                          {companyHired ? (
+                            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                              <div><p className="text-xs font-semibold text-slate-500">Transporter</p><p className="mt-1 font-semibold text-slate-900">{transporter?.name || ticket.haulier_code || 'Not recorded'}</p></div>
+                              <div><p className="text-xs font-semibold text-slate-500">Agreed rate</p><p className="mt-1 font-mono font-semibold text-slate-900">{ticket.inbound_currency_code || 'USD'} {rate.toLocaleString()} / t</p></div>
+                              <div><p className="text-xs font-semibold text-slate-500">Expected freight</p><p className="mt-1 font-mono font-semibold text-amber-900">{ticket.inbound_currency_code || 'USD'} {expectedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
+                              <div><p className="text-xs font-semibold text-slate-500">Supplier document</p><p className="mt-1 font-mono font-semibold text-slate-900">{ticket.inbound_invoice_number || ticket.inbound_waybill_reference || 'Missing'}</p></div>
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-xs font-medium text-slate-700">No company freight claim can be created for this GRN. PlantControl will retain this delivery as supplier-provided transport for audit purposes.</p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <fieldset disabled className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       {/* Vehicle & Driver */}
