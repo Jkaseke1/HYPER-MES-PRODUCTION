@@ -96,6 +96,7 @@ const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; t
 
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
+  const canViewInboundTransportDetails = ['admin', 'raw_material_manager', 'rm_manager', 'weighbridge', 'weigh_bridge'].includes(profile?.role || '');
   const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
   const canManageGrnCorrections = ['admin', 'finance', 'accountant', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
@@ -1642,7 +1643,7 @@ export default function GoodsReceivedPage() {
                       )}
                     </div>
 
-                    {(() => {
+                    {canViewInboundTransportDetails && (() => {
                       const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
                       if (!ticket) return null;
                       const companyHired = ticket.inbound_transport_mode === 'company_hired';
@@ -2373,21 +2374,19 @@ export default function GoodsReceivedPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                       <div><span className="text-slate-400">Ticket:</span> <span className="font-mono text-slate-800">{grnWeighbridgeLabel(viewing)}</span></div>
-                      <div><span className="text-slate-400">Vehicle:</span> <span className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</span></div>
-                      <div><span className="text-slate-400">Haulier:</span> <span className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</span></div>
-                      <div><span className="text-slate-400">Driver:</span> <span className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</span></div>
+                      {canViewInboundTransportDetails && <><div><span className="text-slate-400">Vehicle:</span> <span className="text-slate-800">{(viewing as any).wb_vehicle_reg || '-'}</span></div><div><span className="text-slate-400">Haulier:</span> <span className="text-slate-800">{(viewing as any).wb_haulier_code || '-'}</span></div><div><span className="text-slate-400">Driver:</span> <span className="text-slate-800">{(viewing as any).wb_driver_name || '-'}</span></div></>}
                       <div><span className="text-slate-400">1st Mass:</span> <span className="text-slate-800">{(viewing as any).wb_first_mass != null ? `${(viewing as any).wb_first_mass} kg` : '-'}</span></div>
                       <div><span className="text-slate-400">2nd Mass:</span> <span className="text-slate-800">{(viewing as any).wb_second_mass != null ? `${(viewing as any).wb_second_mass} kg` : '-'}</span></div>
                       <div><span className="text-slate-400">Nett:</span> <span className="font-semibold text-teal-700">{(viewing as any).wb_nett_mass != null ? `${(viewing as any).wb_nett_mass} kg` : '-'}</span></div>
                       <div><span className="text-slate-400">Signed:</span> <span className="text-slate-800">{(viewing as any).wb_driver_signed ? 'Yes' : 'No'}</span></div>
                     </div>
-                    {(viewing as any).wb_comment && (
+                    {canViewInboundTransportDetails && (viewing as any).wb_comment && (
                       <p className="text-[10px] text-slate-500 mt-1.5 italic">{(viewing as any).wb_comment}</p>
                     )}
                   </div>
                 )}
 
-                {(() => {
+                {canViewInboundTransportDetails && (() => {
                   const ticket = Array.isArray((viewing as any)?.weigh_bridge_tickets) ? (viewing as any).weigh_bridge_tickets[0] : (viewing as any)?.weigh_bridge_tickets;
                   if (!ticket) return null;
                   const hired = ticket.inbound_transport_mode === 'company_hired';
