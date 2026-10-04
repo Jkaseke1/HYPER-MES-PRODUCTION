@@ -95,10 +95,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
 
     if (allowCompanyHiredTransport) {
       supabase
-        .from('inbound_transporters')
-        .select('id, transporter_code, name, default_currency')
-        .eq('is_active', true)
-        .order('name')
+        .rpc('list_inbound_transporters_for_weighbridge')
         .then(({ data }) => setTransporters((data || []) as Transporter[]));
     }
   }, [allowCompanyHiredTransport]);
