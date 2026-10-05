@@ -1714,7 +1714,7 @@ export default function GoodsReceivedPage() {
                             </span>
                           </div>
 
-                          {companyHired ? (
+                          {companyHired ? <>
                             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                               <div><p className="text-xs font-semibold text-slate-500">Transporter</p><p className="mt-1 font-semibold text-slate-900">{transporter?.name || ticket.haulier_code || 'Not recorded'}</p></div>
                               <div><p className="text-xs font-semibold text-slate-500">Signed nett mass</p><p className="mt-1 font-mono font-semibold text-slate-900">{Number(ticket.nett_mass || 0).toLocaleString()} kg</p></div>
@@ -1727,7 +1727,7 @@ export default function GoodsReceivedPage() {
                               <div><Label className="text-xs font-semibold text-slate-600">Waybill reference</Label><Input value={transportWaybill} onChange={(event) => setTransportWaybill(event.target.value)} placeholder="Optional" className="mt-1 bg-white" /></div>
                               <div className="sm:col-span-2 lg:col-span-4"><Label className="text-xs font-semibold text-slate-600">Transport notes</Label><Input value={transportNotes} onChange={(event) => setTransportNotes(event.target.value)} placeholder="Route, agreed terms, or supporting detail" className="mt-1 bg-white" /><p className="mt-2 text-[11px] text-amber-800">Saving this GRN creates the expected transport cost. PlantControl later matches Sage charges and payments to show unpaid, part-paid, or paid.</p></div>
                             </div> : <p className="mt-3 text-xs text-amber-800">Only the Raw Materials Manager or Admin records transport cost details. Finance cannot access this information.</p>}
-                          ) : (
+                          </> : (
                             <p className="mt-3 text-xs font-medium text-slate-700">No company freight claim can be created for this GRN. PlantControl will retain this delivery as supplier-provided transport for audit purposes.</p>
                           )}
                         </div>
