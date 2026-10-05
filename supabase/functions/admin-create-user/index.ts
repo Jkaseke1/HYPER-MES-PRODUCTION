@@ -55,11 +55,27 @@ Deno.serve(async (request) => {
   const fullName = String(body.full_name || '').trim();
   const phone = String(body.phone || '').trim();
   const role = String(body.role || 'operator');
-  const roleIds = Array.isArray(body.role_ids) ? body.role_ids.filter((value: unknown) => typeof value === 'string') : [];
+  const roleIds = Array.isArray(body.role_ids)
+    ? [...new Set(body.role_ids.filter((value: unknown): value is string => typeof value === 'string' && value.length > 0))]
+    : [];
   const branchAccess = Array.isArray(body.branch_access) ? body.branch_access : [];
 
   if (!email || !password || !fullName) return json({ error: 'Email, password, and full name are required.' }, 400);
   if (password.length < 8) return json({ error: 'Password must be at least 8 characters.' }, 400);
+
+  if (roleIds.length) {
+    const { data: selectedRoles, error: selectedRolesError } = await adminClient
+      .from('roles')
+      .select('id, code')
+      .in('id', roleIds)
+      .eq('is_active', true);
+    if (selectedRolesError || (selectedRoles || []).length !== roleIds.length) {
+      return json({ error: 'One or more selected roles no longer exist or are inactive. Refresh the Admin Users page and try again.' }, 422);
+    }
+    if (role === 'finance_viewer' && (selectedRoles || []).some((selectedRole) => selectedRole.code === 'finance')) {
+      return json({ error: 'Finance Viewer is read-only. Remove the Finance role before creating this account.' }, 422);
+    }
+  }
 
   const { data: created, error: createError } = await adminClient.auth.admin.createUser({
     email,
@@ -111,8 +127,9 @@ Deno.serve(async (request) => {
     if (profileError) throw profileError;
 
     if (roleIds.length) {
-      const { error } = await adminClient.from('user_roles').insert(
+      const { error } = await adminClient.from('user_roles').upsert(
         roleIds.map((roleId: string) => ({ user_id: userId, role_id: roleId })),
+        { onConflict: 'user_id,role_id', ignoreDuplicates: true },
       );
       if (error) throw error;
     }

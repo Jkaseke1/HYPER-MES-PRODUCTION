@@ -360,6 +360,12 @@ export default function AdminUsersPage() {
       return;
     }
 
+    const selectedRoleCodes = roles.filter((role) => userRoles.includes(role.id)).map((role) => role.code);
+    if (userForm.role === 'finance_viewer' && selectedRoleCodes.includes('finance')) {
+      toast.error('Finance Viewer is read-only. Remove the Finance role; select only Finance Viewer as the default role.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { error: functionError } = await supabase.functions.invoke('admin-create-user', {
@@ -374,7 +380,19 @@ export default function AdminUsersPage() {
         },
       });
 
-      if (functionError) throw functionError;
+      if (functionError) {
+        let message = functionError.message;
+        const response = (functionError as any).context;
+        if (response && typeof response.json === 'function') {
+          try {
+            const details = await response.json();
+            message = details?.error || details?.message || message;
+          } catch {
+            // Preserve the transport-level error when the response has no JSON body.
+          }
+        }
+        throw new Error(message);
+      }
 
       toast.success('User created successfully!');
       setCreateUserModal(false);
@@ -1387,8 +1405,8 @@ export default function AdminUsersPage() {
                 <option value="warehouse_manager">Warehouse Manager</option>
                 <option value="warehouse_clerk">Warehouse Clerk</option>
                 <option value="logistics">Logistics Officer</option>
-                <option value="finance">Finance / Accountant</option>
-                <option value="finance_viewer">Finance Viewer (Read Only)</option>
+                <option value="finance">Finance / Accountant (can approve GRNs)</option>
+                <option value="finance_viewer">Finance Viewer (read-only)</option>
                 <option value="supervisor">Supervisor</option>
                 <option value="operator">Operator</option>
                 <option value="weighbridge">Weighbridge Operator</option>

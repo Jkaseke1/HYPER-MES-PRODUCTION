@@ -291,10 +291,6 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                         onChange('wb_inbound_transport_mode', 'supplier_provided');
                         onChange('wb_haulier_code', 'SUPPLIER');
                         onChange('wb_inbound_transporter_id', '');
-                        onChange('wb_inbound_rate_per_tonne', '');
-                        onChange('wb_inbound_invoice_number', '');
-                        onChange('wb_inbound_waybill_reference', '');
-                        onChange('wb_inbound_transport_notes', '');
                       }}
                       disabled={!allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired'}
                       className={`border px-3 py-2 text-left text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -316,16 +312,14 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                       }`}
                     >
                       Company-hired
-                      <span className={`mt-0.5 block text-[10px] font-normal ${data.wb_inbound_transport_mode === 'company_hired' ? 'text-orange-100' : 'text-slate-400'}`}>Creates a GRN-linked claim</span>
+                      <span className={`mt-0.5 block text-[10px] font-normal ${data.wb_inbound_transport_mode === 'company_hired' ? 'text-orange-100' : 'text-slate-400'}`}>Raw Materials completes cost on the GRN</span>
                     </button>}
                   </div>
 
-                  {!allowCompanyHiredTransport && (
-                    <p className="mt-2 text-[11px] text-slate-500">Company-hired transport and transporter cost accounts are managed by Admin.</p>
-                  )}
+                  {!allowCompanyHiredTransport && <p className="mt-2 text-[11px] text-slate-500">Company-hired transport is selected by authorised weighbridge users only.</p>}
 
                   {allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired' && (
-                    <div className="mt-3 grid grid-cols-1 gap-2.5 border-t border-orange-100 pt-3 sm:grid-cols-2">
+                    <div className="mt-3 border-t border-orange-100 pt-3">
                       <Field title="Transporter *">
                         <select
                           value={data.wb_inbound_transporter_id}
@@ -343,25 +337,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                           ))}
                         </select>
                       </Field>
-                      <Field title="Agreed rate per tonne *">
-                        <div className="flex gap-2">
-                          <input type="number" min="0" step="0.01" value={data.wb_inbound_rate_per_tonne} onChange={(e) => onChange('wb_inbound_rate_per_tonne', e.target.value)} placeholder="0.00" className={input} />
-                          <select value={data.wb_inbound_currency_code} onChange={(e) => onChange('wb_inbound_currency_code', e.target.value)} className="w-20 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900">
-                            <option>USD</option><option>ZIG</option><option>ZAR</option>
-                          </select>
-                        </div>
-                      </Field>
-                      <Field title="Invoice number">
-                        <input value={data.wb_inbound_invoice_number} onChange={(e) => onChange('wb_inbound_invoice_number', e.target.value)} placeholder="Optional at weighbridge" className={input} />
-                      </Field>
-                      <Field title="Waybill reference">
-                        <input value={data.wb_inbound_waybill_reference} onChange={(e) => onChange('wb_inbound_waybill_reference', e.target.value)} placeholder="Optional at weighbridge" className={input} />
-                      </Field>
-                      <div className="sm:col-span-2">
-                        <Field title="Transport notes">
-                          <input value={data.wb_inbound_transport_notes} onChange={(e) => onChange('wb_inbound_transport_notes', e.target.value)} placeholder="Route, agreed terms, or supporting detail" className={input} />
-                        </Field>
-                      </div>
+                      <p className="text-[11px] text-slate-600">The GRN Raw Materials Manager will enter the rate, invoice or waybill, and transport notes after linking this signed ticket to the GRN.</p>
                     </div>
                   )}
                 </div>

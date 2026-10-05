@@ -218,11 +218,10 @@ export default function InboundTransportPage() {
 
   return <div className="transport-control space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><h1 className="text-xl font-semibold text-slate-900">Inbound Transport Costs</h1><p className="mt-0.5 text-sm text-slate-500">Physical delivery evidence, locked at GRN, with independent Admin reconciliation.</p></div>
+      <div><h1 className="text-xl font-semibold text-slate-900">Inbound Transport Costs</h1><p className="mt-0.5 text-sm text-slate-500">Expected costs are recorded by Raw Materials on the linked GRN, then independently reconciled to Sage.</p></div>
       <div className="flex flex-wrap gap-2">
         {canConfigureTransporters && <button onClick={() => setShowTransporterSetup(true)} className="inline-flex items-center gap-1.5 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"><Truck className="h-3.5 w-3.5" /> Set up transporter</button>}
         {canConfigureTransporters && <button onClick={() => setShowTransporter(true)} className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Truck className="h-3.5 w-3.5" /> Add transporter</button>}
-        {canPrepare && <button onClick={openClaim} disabled={!eligibleTickets.length || !transporters.length} className="inline-flex items-center gap-1.5 bg-teal-600 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> New transport claim</button>}
       </div>
     </div>
 

@@ -97,6 +97,7 @@ const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; t
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canViewInboundTransportDetails = ['admin', 'raw_material_manager', 'rm_manager', 'weighbridge', 'weigh_bridge'].includes(profile?.role || '');
+  const canCaptureTransportCost = ['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
   const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
   const canManageGrnCorrections = ['admin', 'finance', 'accountant', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
@@ -237,6 +238,11 @@ export default function GoodsReceivedPage() {
   const [wbTickets, setWbTickets] = useState<any[]>([]);
   const [correctionWbTickets, setCorrectionWbTickets] = useState<any[]>([]);
   const [wbExpanded, setWbExpanded] = useState(false);
+  const [transportRate, setTransportRate] = useState('');
+  const [transportCurrency, setTransportCurrency] = useState('USD');
+  const [transportInvoice, setTransportInvoice] = useState('');
+  const [transportWaybill, setTransportWaybill] = useState('');
+  const [transportNotes, setTransportNotes] = useState('');
   const [items, setItems] = useState<GRNItem[]>([emptyItem]);
 
   // Weigh bridge inline form fields
@@ -480,6 +486,10 @@ export default function GoodsReceivedPage() {
         toast.error('The linked weighbridge ticket needs a positive nett mass and driver sign-off.');
         return;
       }
+      if (ticket.inbound_transport_mode === 'company_hired' && canCaptureTransportCost && Number(transportRate) <= 0) {
+        toast.error('Enter the agreed transport rate per tonne for this company-hired delivery.');
+        return;
+      }
     }
 
     setSaving(true);
@@ -539,6 +549,21 @@ export default function GoodsReceivedPage() {
 
       if (itemsError) throw itemsError;
 
+      const ticket = wbTickets.find((candidate: any) => candidate.id === weighBridgeTicketId);
+      if (ticket?.inbound_transport_mode === 'company_hired' && canCaptureTransportCost) {
+        const { error: transportError } = await supabase.rpc('save_inbound_transport_claim', {
+          p_claim_id: null,
+          p_weigh_bridge_ticket_id: ticket.id,
+          p_transporter_id: ticket.inbound_transporter_id,
+          p_rate_per_tonne: Number(transportRate),
+          p_currency_code: transportCurrency,
+          p_invoice_number: transportInvoice,
+          p_waybill_reference: transportWaybill,
+          p_notes: transportNotes || 'Cost details recorded by Raw Materials Manager on the GRN.',
+        });
+        if (transportError) throw transportError;
+      }
+
       if (weighBridgeTicketId) {
         const { error: ticketError } = await supabase
           .from('weigh_bridge_tickets')
@@ -573,6 +598,11 @@ export default function GoodsReceivedPage() {
     setSupplierOrderNo('');
     setExternalReference('');
     setWeighBridgeTicketId('');
+    setTransportRate('');
+    setTransportCurrency('USD');
+    setTransportInvoice('');
+    setTransportWaybill('');
+    setTransportNotes('');
     setItems([emptyItem]);
     setWbForm({
       transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
@@ -1567,6 +1597,11 @@ export default function GoodsReceivedPage() {
                             setWeighBridgeTicketId(val);
                             const ticket = wbTickets.find((t: any) => t.id === val);
                             if (ticket) {
+                              setTransportRate('');
+                              setTransportCurrency(ticket.inbound_currency_code || 'USD');
+                              setTransportInvoice('');
+                              setTransportWaybill('');
+                              setTransportNotes('');
                               const matchedMaterial = materials.find((m) => m.code === ticket.product_code || (m as any).sage_code === ticket.product_code);
                               if (ticket.supplier_id) {
                                 setSupplierId(ticket.supplier_id || 'other');
@@ -1626,6 +1661,11 @@ export default function GoodsReceivedPage() {
                             size="sm"
                             onClick={() => {
                               setWeighBridgeTicketId('');
+                              setTransportRate('');
+                              setTransportCurrency('USD');
+                              setTransportInvoice('');
+                              setTransportWaybill('');
+                              setTransportNotes('');
                               setWbForm({
                                 transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
                                 comment: '', trailer_number: '', driver_name: '', driver_id: '',
@@ -1650,7 +1690,7 @@ export default function GoodsReceivedPage() {
                       const transporter = Array.isArray(ticket.inbound_transporters)
                         ? ticket.inbound_transporters[0]
                         : ticket.inbound_transporters;
-                      const rate = Number(ticket.inbound_rate_per_tonne || 0);
+                      const rate = Number(transportRate || 0);
                       const expectedCost = (Number(ticket.nett_mass || 0) / 1000) * rate;
 
                       return (
@@ -1664,7 +1704,7 @@ export default function GoodsReceivedPage() {
                                 <p className="text-sm font-bold text-slate-900">Inbound transport accountability</p>
                                 <p className="mt-0.5 text-xs text-slate-600">
                                   {companyHired
-                                    ? 'Company freight evidence inherited from the signed weighbridge ticket.'
+                                    ? 'Weighbridge selected the transporter. Raw Materials now records the expected freight cost for reconciliation against Sage.'
                                     : 'Supplier-provided transport recorded on the signed weighbridge ticket.'}
                                 </p>
                               </div>
@@ -1677,10 +1717,16 @@ export default function GoodsReceivedPage() {
                           {companyHired ? (
                             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                               <div><p className="text-xs font-semibold text-slate-500">Transporter</p><p className="mt-1 font-semibold text-slate-900">{transporter?.name || ticket.haulier_code || 'Not recorded'}</p></div>
-                              <div><p className="text-xs font-semibold text-slate-500">Agreed rate</p><p className="mt-1 font-mono font-semibold text-slate-900">{ticket.inbound_currency_code || 'USD'} {rate.toLocaleString()} / t</p></div>
-                              <div><p className="text-xs font-semibold text-slate-500">Expected freight</p><p className="mt-1 font-mono font-semibold text-amber-900">{ticket.inbound_currency_code || 'USD'} {expectedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
-                              <div><p className="text-xs font-semibold text-slate-500">Supplier document</p><p className="mt-1 font-mono font-semibold text-slate-900">{ticket.inbound_invoice_number || ticket.inbound_waybill_reference || 'Missing'}</p></div>
+                              <div><p className="text-xs font-semibold text-slate-500">Signed nett mass</p><p className="mt-1 font-mono font-semibold text-slate-900">{Number(ticket.nett_mass || 0).toLocaleString()} kg</p></div>
+                              <div><p className="text-xs font-semibold text-slate-500">Expected freight</p><p className="mt-1 font-mono font-semibold text-amber-900">{transportCurrency} {expectedCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p></div>
                             </div>
+                            {canCaptureTransportCost ? <div className="mt-4 grid gap-3 border-t border-amber-200 pt-4 sm:grid-cols-2 lg:grid-cols-4">
+                              <div><Label className="text-xs font-semibold text-slate-600">Agreed rate / tonne *</Label><Input type="number" min="0" step="0.01" value={transportRate} onChange={(event) => setTransportRate(event.target.value)} placeholder="0.00" className="mt-1 bg-white" /></div>
+                              <div><Label className="text-xs font-semibold text-slate-600">Currency</Label><Select value={transportCurrency} onValueChange={setTransportCurrency}><SelectTrigger className="mt-1 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="ZIG">ZIG</SelectItem><SelectItem value="ZAR">ZAR</SelectItem></SelectContent></Select></div>
+                              <div><Label className="text-xs font-semibold text-slate-600">Invoice number</Label><Input value={transportInvoice} onChange={(event) => setTransportInvoice(event.target.value)} placeholder="Optional" className="mt-1 bg-white" /></div>
+                              <div><Label className="text-xs font-semibold text-slate-600">Waybill reference</Label><Input value={transportWaybill} onChange={(event) => setTransportWaybill(event.target.value)} placeholder="Optional" className="mt-1 bg-white" /></div>
+                              <div className="sm:col-span-2 lg:col-span-4"><Label className="text-xs font-semibold text-slate-600">Transport notes</Label><Input value={transportNotes} onChange={(event) => setTransportNotes(event.target.value)} placeholder="Route, agreed terms, or supporting detail" className="mt-1 bg-white" /><p className="mt-2 text-[11px] text-amber-800">Saving this GRN creates the expected transport cost. PlantControl later matches Sage charges and payments to show unpaid, part-paid, or paid.</p></div>
+                            </div> : <p className="mt-3 text-xs text-amber-800">Only the Raw Materials Manager or Admin records transport cost details. Finance cannot access this information.</p>}
                           ) : (
                             <p className="mt-3 text-xs font-medium text-slate-700">No company freight claim can be created for this GRN. PlantControl will retain this delivery as supplier-provided transport for audit purposes.</p>
                           )}

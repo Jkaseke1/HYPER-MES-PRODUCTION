@@ -256,8 +256,8 @@ export default function WeighBridgePage() {
       alert('Select a supplier, or record the supplier name for Finance.');
       return;
     }
-    if (form.wb_inbound_transport_mode === 'company_hired' && (!form.wb_inbound_transporter_id || !form.wb_inbound_rate_per_tonne || Number(form.wb_inbound_rate_per_tonne) <= 0)) {
-      alert('Company-hired transport requires a transporter and a positive agreed rate per tonne.');
+    if (form.wb_inbound_transport_mode === 'company_hired' && !form.wb_inbound_transporter_id) {
+      alert('Company-hired transport requires a transporter. The Raw Materials Manager records the rate and supporting documents on the GRN.');
       return;
     }
     if (editing && !editingTicketId) {
@@ -287,11 +287,11 @@ export default function WeighBridgePage() {
         driver_signed: form.wb_driver_signed,
         inbound_transport_mode: form.wb_inbound_transport_mode,
         inbound_transporter_id: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_transporter_id : null,
-        inbound_rate_per_tonne: form.wb_inbound_transport_mode === 'company_hired' ? parseFloat(form.wb_inbound_rate_per_tonne) : null,
+        inbound_rate_per_tonne: null,
         inbound_currency_code: form.wb_inbound_currency_code || 'USD',
-        inbound_invoice_number: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_invoice_number.trim() || null : null,
-        inbound_waybill_reference: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_waybill_reference.trim() || null : null,
-        inbound_transport_notes: form.wb_inbound_transport_mode === 'company_hired' ? form.wb_inbound_transport_notes.trim() : '',
+        inbound_invoice_number: null,
+        inbound_waybill_reference: null,
+        inbound_transport_notes: '',
       };
       const query = editing
         ? supabase.from('weigh_bridge_tickets').update(payload).eq('id', editingTicketId || '')
