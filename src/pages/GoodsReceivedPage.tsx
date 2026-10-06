@@ -852,38 +852,44 @@ export default function GoodsReceivedPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_costing' | 'pending_finance' | 'pending' | 'approved' | 'rejected'>('all');
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 font-semibold">Approved</Badge>;
-      case 'pending_costing':
-        return <Badge className="bg-orange-500/15 text-orange-700 hover:bg-orange-500/20 border border-orange-500/30 px-2.5 py-0.5 font-semibold">Awaiting Costing</Badge>;
-      case 'pending_finance':
-        return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 font-semibold">Awaiting Finance</Badge>;
-      case 'pending':
-        return <Badge className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 font-semibold">Pending</Badge>;
-      case 'rejected':
-        return <Badge className="bg-rose-500/15 text-rose-700 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-0.5 font-semibold">Rejected</Badge>;
-      default:
-        return <Badge variant="outline" className="font-semibold">{status}</Badge>;
-    }
+    const details: Record<string, { label: string; detail: string; icon: typeof FileText; className: string }> = {
+      pending_costing: { label: 'Costing required', detail: 'Raw materials review', icon: DollarSign, className: 'border-orange-200 bg-orange-50 text-orange-800' },
+      pending_finance: { label: 'Finance review', detail: 'Approval required', icon: ShieldCheck, className: 'border-amber-200 bg-amber-50 text-amber-800' },
+      pending: { label: 'GRN review', detail: 'Awaiting next step', icon: FileText, className: 'border-slate-200 bg-slate-50 text-slate-700' },
+      approved: { label: 'Approved', detail: 'Ready for Sage', icon: CheckCircle, className: 'border-emerald-200 bg-emerald-50 text-emerald-800' },
+      rejected: { label: 'Needs correction', detail: 'GRN returned', icon: AlertCircle, className: 'border-rose-200 bg-rose-50 text-rose-800' },
+    };
+    const detail = details[status] || { label: status, detail: 'Workflow status', icon: FileText, className: 'border-slate-200 bg-slate-50 text-slate-700' };
+    const Icon = detail.icon;
+
+    return (
+      <div className={`inline-flex min-w-[138px] items-center gap-2 rounded-lg border px-2.5 py-2 ${detail.className}`}>
+        <Icon className="h-4 w-4 shrink-0" />
+        <div className="min-w-0 leading-tight">
+          <p className="text-[11px] font-bold">{detail.label}</p>
+          <p className="mt-0.5 text-[10px] opacity-75">{detail.detail}</p>
+        </div>
+      </div>
+    );
   };
 
   const getGrnWorkflowBadge = (grn: any) => {
     const rts = rtsByGrnId[grn.id];
     if (rts?.status === 'posted') {
       return (
-        <Badge className="border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 font-semibold text-rose-700 hover:bg-rose-500/20" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
-          <RotateCcw className="mr-1 h-3 w-3" /> RTS completed
-        </Badge>
+        <div className="inline-flex min-w-[138px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-rose-800" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
+          <RotateCcw className="h-4 w-4 shrink-0" />
+          <div className="leading-tight"><p className="text-[11px] font-bold">RTS completed</p><p className="mt-0.5 text-[10px] opacity-75">Return posted to Sage</p></div>
+        </div>
       );
     }
 
     if (rts?.status === 'failed') {
-      return <Badge className="border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 font-semibold text-rose-700 hover:bg-rose-500/20">RTS failed</Badge>;
+      return <div className="inline-flex min-w-[138px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-rose-800"><AlertCircle className="h-4 w-4 shrink-0" /><div className="leading-tight"><p className="text-[11px] font-bold">RTS failed</p><p className="mt-0.5 text-[10px] opacity-75">Review before retrying</p></div></div>;
     }
 
     if (rts && ['pending_finance', 'approved', 'processing'].includes(rts.status)) {
-      return <Badge className="border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 font-semibold text-amber-700 hover:bg-amber-500/20">RTS in progress</Badge>;
+      return <div className="inline-flex min-w-[138px] items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800"><RotateCcw className="h-4 w-4 shrink-0" /><div className="leading-tight"><p className="text-[11px] font-bold">RTS in progress</p><p className="mt-0.5 text-[10px] opacity-75">Supplier return workflow</p></div></div>;
     }
 
     return getStatusBadge(grn.status);
