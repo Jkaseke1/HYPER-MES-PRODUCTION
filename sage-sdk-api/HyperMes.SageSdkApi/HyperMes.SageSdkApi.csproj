@@ -90,6 +90,7 @@
     <Compile Include="SdkConnectionController.cs" />
     <Compile Include="SageRuntime.cs" />
     <Compile Include="SdkSession.cs" />
+    <Compile Include="SoldTonnageController.cs" />
     <Compile Include="StockController.cs" />
     <Compile Include="TransportCostController.cs" />
     <Compile Include="SupplierReturnController.cs" />
