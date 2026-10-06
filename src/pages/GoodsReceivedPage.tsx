@@ -96,8 +96,8 @@ const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; t
 
 export default function GoodsReceivedPage() {
   const { profile } = useAuth();
-  const canViewInboundTransportDetails = ['admin', 'raw_material_manager', 'rm_manager', 'weighbridge', 'weigh_bridge'].includes(profile?.role || '');
-  const canCaptureTransportCost = ['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
+  const canViewInboundTransportDetails = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'weighbridge', 'weigh_bridge'].includes(profile?.role || '');
+  const canCaptureTransportCost = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager'].includes(profile?.role || '');
   const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
   const canManageGrnCorrections = ['admin', 'finance', 'accountant', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
@@ -111,6 +111,8 @@ export default function GoodsReceivedPage() {
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
   const [viewRts, setViewRts] = useState<any | null>(null);
+  const [viewTransportClaim, setViewTransportClaim] = useState<any | null>(null);
+  const [savingViewTransportCost, setSavingViewTransportCost] = useState(false);
   const canEditFinanceCosts = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   const [editingFinanceCosts, setEditingFinanceCosts] = useState(false);
   const [savingFinanceCosts, setSavingFinanceCosts] = useState(false);
@@ -267,7 +269,7 @@ export default function GoodsReceivedPage() {
     if (showLoading) setLoading(true);
     try {
       const [grnsRes, suppliersRes, materialsRes, wbRes, correctionWbRes] = await Promise.all([
-        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(ticket_no, status, vehicle_reg, nett_mass, inbound_transport_mode, inbound_rate_per_tonne, inbound_currency_code, inbound_invoice_number, inbound_waybill_reference, inbound_transporter_id, inbound_transporters(name, transporter_code))').order('created_at', { ascending: false }),
+        supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(id, ticket_no, status, vehicle_reg, nett_mass, inbound_transport_mode, inbound_rate_per_tonne, inbound_currency_code, inbound_invoice_number, inbound_waybill_reference, inbound_transporter_id, inbound_transporters(name, transporter_code))').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
         supabase.from('raw_materials').select('*').eq('is_active', true).order('name'),
         supabase.from('weigh_bridge_tickets').select('*, suppliers(name, code), inbound_transporters(name, transporter_code)').eq('status', 'open').order('created_at', { ascending: false }),
@@ -626,7 +628,7 @@ export default function GoodsReceivedPage() {
   const handleViewGRN = async (grn: GoodsReceivedNote) => {
     setEditingFinanceCosts(false);
     setViewing(grn);
-    const [{ data: itemData }, { data: rtsData }] = await Promise.all([
+    const [{ data: itemData }, { data: rtsData }, { data: transportClaim }] = await Promise.all([
       supabase
         .from('grn_items')
         .select('*, raw_materials(code, name, unit)')
@@ -638,10 +640,53 @@ export default function GoodsReceivedPage() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('inbound_transport_claims')
+        .select('id, rate_per_tonne, currency_code, invoice_number, waybill_reference, notes, status')
+        .eq('grn_id', grn.id)
+        .maybeSingle(),
     ]);
     setViewItems(itemData || []);
     setViewRts(rtsData || null);
+    setViewTransportClaim(transportClaim || null);
+    const ticket = Array.isArray((grn as any).weigh_bridge_tickets) ? (grn as any).weigh_bridge_tickets[0] : (grn as any).weigh_bridge_tickets;
+    setTransportRate(transportClaim?.rate_per_tonne == null ? '' : String(transportClaim.rate_per_tonne));
+    setTransportCurrency(transportClaim?.currency_code || ticket?.inbound_currency_code || 'USD');
+    setTransportInvoice(transportClaim?.invoice_number || '');
+    setTransportWaybill(transportClaim?.waybill_reference || '');
+    setTransportNotes(transportClaim?.notes || '');
     setViewModalOpen(true);
+  };
+
+  const saveMissingTransportCost = async () => {
+    if (!viewing || !canCaptureTransportCost) return;
+    const ticket = Array.isArray((viewing as any).weigh_bridge_tickets) ? (viewing as any).weigh_bridge_tickets[0] : (viewing as any).weigh_bridge_tickets;
+    if (!ticket || ticket.inbound_transport_mode !== 'company_hired' || !ticket.inbound_transporter_id) {
+      toast.error('This GRN does not have a company-hired transporter selected at the weighbridge.');
+      return;
+    }
+    if (!['pending', 'pending_costing', 'pending_finance'].includes(viewing.status)) {
+      toast.error('Transport cost evidence is locked after GRN approval.');
+      return;
+    }
+    if (Number(transportRate) <= 0) { toast.error('Enter the agreed transport rate per tonne.'); return; }
+    setSavingViewTransportCost(true);
+    try {
+      const { data, error } = await supabase.rpc('save_inbound_transport_claim', {
+        p_claim_id: viewTransportClaim?.id || null,
+        p_weigh_bridge_ticket_id: ticket.id,
+        p_transporter_id: ticket.inbound_transporter_id,
+        p_rate_per_tonne: Number(transportRate),
+        p_currency_code: transportCurrency,
+        p_invoice_number: transportInvoice || null,
+        p_waybill_reference: transportWaybill || null,
+        p_notes: transportNotes || null,
+      });
+      if (error) throw error;
+      setViewTransportClaim({ id: data, rate_per_tonne: Number(transportRate), currency_code: transportCurrency, invoice_number: transportInvoice, waybill_reference: transportWaybill, notes: transportNotes, status: viewTransportClaim?.status || 'draft' });
+      toast.success('Expected transport cost recorded. Sage reconciliation will track the payment status.');
+      await fetchData(false);
+    } catch (error: any) { toast.error(`Could not save transport cost: ${error.message}`); } finally { setSavingViewTransportCost(false); }
   };
 
   useEffect(() => {
@@ -2455,7 +2500,8 @@ export default function GoodsReceivedPage() {
                   if (!ticket) return null;
                   const hired = ticket.inbound_transport_mode === 'company_hired';
                   const transporter = Array.isArray(ticket.inbound_transporters) ? ticket.inbound_transporters[0] : ticket.inbound_transporters;
-                  return <div className={`rounded-lg border p-2.5 ${hired ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-center gap-1.5 mb-1.5"><ShieldCheck className={`w-3.5 h-3.5 ${hired ? 'text-amber-700' : 'text-slate-500'}`} /><h3 className="text-xs font-semibold text-slate-700">Inbound Transport Accountability</h3></div>{hired ? <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs"><div><span className="text-slate-400">Mode:</span> <span className="font-semibold text-amber-800">Company-hired</span></div><div><span className="text-slate-400">Transporter:</span> <span className="text-slate-800">{transporter?.name || 'Not recorded'} {transporter?.transporter_code ? `(${transporter.transporter_code})` : ''}</span></div><div><span className="text-slate-400">Agreed rate:</span> <span className="font-mono text-slate-800">{ticket.inbound_currency_code || 'USD'} {ticket.inbound_rate_per_tonne ?? '—'} / t</span></div><div><span className="text-slate-400">Supplier document:</span> <span className="font-mono text-slate-800">{ticket.inbound_invoice_number || ticket.inbound_waybill_reference || 'Missing'}</span></div><p className="col-span-2 mt-1 text-[10px] text-amber-800">This ticket is locked as transport evidence because it is linked to this GRN. Compare its expected cost with Sage on Inbound Transport Costs.</p></div> : <p className="text-xs text-slate-600">Supplier-provided transport. No company freight claim should be created for this GRN.</p>}</div>;
+                  const canCorrectTransport = canCaptureTransportCost && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && ['draft', 'rejected', undefined].includes(viewTransportClaim?.status);
+                  return <div className={`rounded-lg border p-2.5 ${hired ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-center gap-1.5 mb-1.5"><ShieldCheck className={`w-3.5 h-3.5 ${hired ? 'text-amber-700' : 'text-slate-500'}`} /><h3 className="text-xs font-semibold text-slate-700">Inbound Transport Accountability</h3></div>{hired ? <><div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs"><div><span className="text-slate-400">Mode:</span> <span className="font-semibold text-amber-800">Company-hired</span></div><div><span className="text-slate-400">Transporter:</span> <span className="text-slate-800">{transporter?.name || 'Not recorded'} {transporter?.transporter_code ? `(${transporter.transporter_code})` : ''}</span></div><div><span className="text-slate-400">Agreed rate:</span> <span className="font-mono text-slate-800">{viewTransportClaim ? `${viewTransportClaim.currency_code} ${viewTransportClaim.rate_per_tonne}` : 'Missing'} / t</span></div><div><span className="text-slate-400">Supplier document:</span> <span className="font-mono text-slate-800">{viewTransportClaim?.invoice_number || viewTransportClaim?.waybill_reference || 'Missing'}</span></div></div>{canCorrectTransport && <div className="mt-3 space-y-2 border-t border-amber-200 pt-3"><p className="text-[11px] font-semibold text-amber-900">Complete missing transport cost</p><div className="grid grid-cols-2 gap-2"><Input type="number" min="0" step="0.01" value={transportRate} onChange={(event) => setTransportRate(event.target.value)} placeholder="Rate per tonne" className="h-8 bg-white text-xs" /><Select value={transportCurrency} onValueChange={setTransportCurrency}><SelectTrigger className="h-8 bg-white text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="ZIG">ZIG</SelectItem><SelectItem value="ZAR">ZAR</SelectItem></SelectContent></Select></div><Input value={transportInvoice} onChange={(event) => setTransportInvoice(event.target.value)} placeholder="Invoice number (optional)" className="h-8 bg-white text-xs" /><Input value={transportWaybill} onChange={(event) => setTransportWaybill(event.target.value)} placeholder="Waybill reference (optional)" className="h-8 bg-white text-xs" /><Button type="button" size="sm" onClick={() => void saveMissingTransportCost()} disabled={savingViewTransportCost} className="w-full bg-amber-700 text-white hover:bg-amber-800">{savingViewTransportCost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Truck className="mr-1.5 h-3.5 w-3.5" />}{savingViewTransportCost ? 'Saving...' : 'Save transport cost'}</Button></div>}<p className="mt-2 text-[10px] text-amber-800">The gate transporter remains locked. Only the GRN cost details can be completed here; payment is still verified from Sage.</p></> : <p className="text-xs text-slate-600">Supplier-provided transport. No company freight claim should be created for this GRN.</p>}</div>;
                 })()}
 
                 {/* Notes */}
