@@ -153,6 +153,7 @@ const navGroups: NavGroup[] = [
     label: 'Maintenance',
     icon: Wrench,
     items: [
+      { to: '/maintenance-procurement', icon: ClipboardList, label: 'Procurement' },
       { to: '/maintenance/pm-schedules', icon: Calendar, label: 'PM Schedules' },
       { to: '/maintenance/work-orders', icon: Wrench, label: 'Work Orders' },
       { to: '/maintenance/spares', icon: PackagePlus, label: 'Spares Inventory' },

@@ -17,10 +17,12 @@ const rolePaths: Record<string, string[]> = {
   finance: ['/weigh-bridge', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
   finance_viewer: ['/weigh-bridge', '/goods-received', '/quality-inspection', '/warehouse', '/stock-take', '/material-transfer', '/rm-stock-dashboard', '/rm-receipts-matrix', '/rm-issues-matrix', '/rm-history', '/rm-prices', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
   accountant: ['/goods-received', '/stock-take', '/formulations', '/production-orders', '/production-control', '/production-warehouse', '/finished-goods', '/reports/gross-margin', '/production-report', '/daily-production-report', '/reports/process-loss', '/reports/macropack-reconciliation', '/reports/rm-reconciliation', '/reconciliation'],
+  maintenance_tech: ['/maintenance-procurement', '/maintenance-work-orders', '/maintenance-schedules', '/spare-parts', '/maintenance-transactions', '/maintenance-low-stock'],
+  procurement: ['/maintenance-procurement'],
 };
 
 const roleLandingPaths: Record<string, string> = {
-  weighbridge: '/weigh-bridge', weigh_bridge: '/weigh-bridge', production_receiver: '/production-warehouse', warehouse_clerk: '/goods-received', raw_material_manager: '/warehouse', warehouse_manager: '/warehouse', production_manager: '/production-orders', supervisor: '/production-orders', operator: '/production-orders', logistics: '/dispatch', finance: '/goods-received', finance_viewer: '/goods-received', accountant: '/goods-received',
+  weighbridge: '/weigh-bridge', weigh_bridge: '/weigh-bridge', production_receiver: '/production-warehouse', warehouse_clerk: '/goods-received', raw_material_manager: '/warehouse', warehouse_manager: '/warehouse', production_manager: '/production-orders', supervisor: '/production-orders', operator: '/production-orders', logistics: '/dispatch', finance: '/goods-received', finance_viewer: '/goods-received', accountant: '/goods-received', maintenance_tech: '/maintenance-procurement', procurement: '/maintenance-procurement',
 };
 
 export function isFullAccessRole(role: MesRole): boolean {
