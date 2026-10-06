@@ -3,12 +3,14 @@ import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, 
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
+import './formula-editor.css';
+import './formulations-page.css';
 import StatusBadge from '../components/ui/StatusBadge';
-import StatCard from '../components/ui/StatCard';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
 type UnitSizeVariant = { size: string; batch_size: number };
+const STANDARD_FORMULA_BATCH_KG = 1000;
 
 type FormState = {
   name: string;
@@ -35,9 +37,9 @@ const emptyForm: FormState = {
   version: 1,
   category: '',
   description: '',
-  batch_size: '',
+  batch_size: String(STANDARD_FORMULA_BATCH_KG),
   batch_unit: 'kg',
-  unit_size_variants: [{ size: '', batch_size: 0 }],
+  unit_size_variants: [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }],
   target_protein: '',
   target_fat: '',
   target_fiber: '',
@@ -48,11 +50,19 @@ const emptyForm: FormState = {
 
 type IngRow = { raw_material_id: string; quantity: number; unit: string; percentage: number; is_critical: boolean };
 const emptyIng = (): IngRow => ({ raw_material_id: '', quantity: 0, unit: 'kg', percentage: 0, is_critical: false });
+type FormulaStage = 'formula' | 'bom';
+type LegacyBomNotice = { bomTotal: number; referenceBatch: number; variance: number };
 
 type FormulaReadiness = {
   ingredientTotalKg: number;
   varianceKg: number;
   isBalanced: boolean;
+};
+
+type FormulaGroup = {
+  key: string;
+  current: Formulation;
+  versions: Formulation[];
 };
 
 export function getFormulationCategory(name: string, existingCategory?: string | null): string {
@@ -139,16 +149,22 @@ export default function FormulationsPage() {
   const [formulaReadiness, setFormulaReadiness] = useState<Record<string, FormulaReadiness>>({});
   const [filter, setFilter] = useState<string>('All');
   const [ingredientFilter, setIngredientFilter] = useState<'all' | 'with' | 'without'>('all');
+  const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState('');
+  const [registerView, setRegisterView] = useState<'formulas' | 'review'>('formulas');
   const [loading, setLoading] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [formulaStage, setFormulaStage] = useState<FormulaStage>('formula');
+  const [legacyBomNotice, setLegacyBomNotice] = useState<LegacyBomNotice | null>(null);
   const [selected, setSelected] = useState<Formulation | null>(null);
   const [detailIngs, setDetailIngs] = useState<FormulationIngredient[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [ings, setIngs] = useState<IngRow[]>([emptyIng()]);
   const [editingIngredientQuantity, setEditingIngredientQuantity] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [sourceFormulaId, setSourceFormulaId] = useState('');
+  const [sourceFormulaSearch, setSourceFormulaSearch] = useState('');
   const [copiedBatchSize, setCopiedBatchSize] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -164,6 +180,7 @@ export default function FormulationsPage() {
   const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
 
   const filtered = formulations.filter(f => {
+    if (!showArchived && f.status === 'archived') return false;
     const categoryName = getFormulationCategory(f.name, f.category);
     if (filter !== 'All' && categoryName.toLowerCase() !== filter.toLowerCase() && f.category?.toLowerCase() !== filter.toLowerCase()) return false;
     if (search && !f.name.toLowerCase().includes(search.toLowerCase()) && !f.code.toLowerCase().includes(search.toLowerCase())) return false;
@@ -234,8 +251,37 @@ export default function FormulationsPage() {
 
   useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
   
-  const withIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) > 0);
-  const withoutIngredients = filtered.filter(f => (formulationIngredientCounts[f.id] || 0) === 0);
+  const formulaGroups: FormulaGroup[] = Array.from(
+    filtered.reduce((groups, formulation) => {
+      const key = formulation.code || formulation.name;
+      const group = groups.get(key) || { key, current: formulation, versions: [] };
+      group.versions.push(formulation);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, FormulaGroup>()).values(),
+  ).map(group => {
+    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    return { ...group, current: versions[0], versions };
+  });
+
+  // The version picker should show one product/formula entry at a time. Older
+  // versions remain available from the history control after a formula is
+  // opened, instead of making the initial list difficult to use.
+  const allFormulaGroups: FormulaGroup[] = Array.from(
+    formulations.reduce((groups, formulation) => {
+      const key = formulation.code || formulation.name;
+      const group = groups.get(key) || { key, current: formulation, versions: [] };
+      group.versions.push(formulation);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, FormulaGroup>()).values(),
+  ).map(group => {
+    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    return { ...group, current: versions[0], versions };
+  });
+
+  const withIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) > 0);
+  const withoutIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) === 0);
 
   function toggleCompareSelect(f: Formulation) {
     setCompareSelected(prev => {
@@ -270,45 +316,51 @@ export default function FormulationsPage() {
 
   function openNew() {
     setEditId(null);
+    setSourceFormulaId('');
+    setSourceFormulaSearch('');
     setForm({ ...emptyForm });
     setIngs([emptyIng()]);
+    setFormulaStage('formula');
+    setLegacyBomNotice(null);
     setCopiedBatchSize(null);
     setEditOpen(true);
   }
 
-  // Copy the technical BOM only. Identity fields stay blank so the result is
-  // always a new, independent formula instead of an apparent linked record.
+  // Start a new blank draft version from an existing formula. The product
+  // identity and version history are carried forward, but ingredients/BOM
+  // lines are intentionally not copied into the new formulation workspace.
   async function prefillFromFormulation(sourceId: string) {
+    setSourceFormulaId(sourceId);
     if (!sourceId) {
       // Reset to blank
       setForm({ ...emptyForm });
       setIngs([emptyIng()]);
       setCopiedBatchSize(null);
+      setLegacyBomNotice(null);
       return;
     }
     const src = formulations.find(f => f.id === sourceId);
     if (!src) return;
     const variants = (src as any).unit_size_variants;
-    const { data: srcIngs, error } = await supabase
-      .from('formulation_ingredients')
-      .select('raw_material_id, quantity, unit, percentage, is_critical')
-      .eq('formulation_id', src.id)
-      .order('sort_order');
-    if (error) {
-      alert('Failed to load BOM from source formulation: ' + error.message);
-      return;
-    }
     // Keep editId = null (always New mode)
+    const nextVersion = formulations
+      .filter(f => f.code === src.code)
+      .reduce((max, f) => Math.max(max, Number(f.version) || 0), 0) + 1;
+    const copiedVariants = Array.isArray(variants) && variants.length > 0
+      ? variants.map((variant: UnitSizeVariant, index: number) => index === 0
+        ? { ...variant, batch_size: STANDARD_FORMULA_BATCH_KG }
+        : variant)
+      : [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }];
     setForm({
-      name: '',
-      code: '',
-      sage_code: '',
-      version: 1,
+      name: src.name,
+      code: src.code,
+      sage_code: (src as any).sage_code || src.code,
+      version: nextVersion,
       category: src.category || '',
       description: src.description || '',
-      batch_size: src.batch_size.toString(),
+      batch_size: String(STANDARD_FORMULA_BATCH_KG),
       batch_unit: src.batch_unit,
-      unit_size_variants: Array.isArray(variants) ? variants : [{ size: '', batch_size: 0 }],
+      unit_size_variants: copiedVariants,
       target_protein: src.target_protein.toString(),
       target_fat: src.target_fat.toString(),
       target_fiber: src.target_fiber.toString(),
@@ -316,14 +368,20 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: 0,
       status: 'draft',
     });
-    setCopiedBatchSize(Number(src.batch_size) || null);
-    setIngs((srcIngs || []).length > 0 ? (srcIngs || []).map(i => ({
-      raw_material_id: i.raw_material_id,
-      quantity: Number(i.quantity) || 0,
-      unit: i.unit || 'kg',
-      percentage: Number(i.percentage) || 0,
-      is_critical: !!i.is_critical,
-    })) : [emptyIng()]);
+    setCopiedBatchSize(STANDARD_FORMULA_BATCH_KG);
+    setIngs([emptyIng()]);
+    setLegacyBomNotice(null);
+  }
+
+  function handleSourceFormulaChange(sourceId: string) {
+    // An empty source always means a genuinely independent, blank formula.
+    // Keeping this as an explicit state transition prevents stale metadata or
+    // ingredients from a previously selected source leaking into a new draft.
+    if (!sourceId) {
+      setSourceFormulaId('');
+      setSourceFormulaSearch('');
+    }
+    void prefillFromFormulation(sourceId);
   }
 
   async function openEdit(f: Formulation) {
@@ -348,10 +406,68 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: f.estimated_cost_per_unit,
       status: f.status,
     });
-    const { data } = await supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order');
-    setIngs((data || []).map(i => ({ raw_material_id: i.raw_material_id, quantity: i.quantity, unit: i.unit, percentage: i.percentage, is_critical: i.is_critical })));
+    const [specRes, bomRes] = await Promise.all([
+      supabase.from('formula_specs').select('id, reference_batch_size').eq('formulation_id', f.id).maybeSingle(),
+      supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order'),
+    ]);
+    let formulaLines: any[] = [];
+    if (!specRes.error && specRes.data?.id) {
+      const { data: specLines } = await supabase
+        .from('formula_spec_lines')
+        .select('raw_material_id, quantity, unit')
+        .eq('formula_spec_id', specRes.data.id)
+        .order('sort_order');
+      formulaLines = specLines || [];
+    }
+    const sourceLines = formulaLines.length > 0 ? formulaLines : (bomRes.data || []);
+    const bomTotal = sourceLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
+    const standardBatch = STANDARD_FORMULA_BATCH_KG;
+    const scaleToStandardBatch = bomTotal > 0 && Math.abs(bomTotal - standardBatch) > 0.01;
+    const normalizedLines = scaleToStandardBatch
+      ? sourceLines.map(line => ({
+          ...line,
+          quantity: Math.round(((Number(line.quantity) || 0) / bomTotal) * standardBatch * 10000) / 10000,
+        }))
+      : sourceLines;
+
+    // All production formulas are maintained against the standard 1,000 kg
+    // batch. Older records may carry a 50 kg reference or a BOM whose total
+    // is already 1,000 kg; normalize both cases before calculating % values.
+    setForm(current => ({
+      ...current,
+      batch_size: String(standardBatch),
+      unit_size_variants: (current.unit_size_variants?.length
+        ? current.unit_size_variants
+        : [{ size: '', batch_size: standardBatch }]).map((variant, index) => index === 0
+          ? { ...variant, batch_size: standardBatch }
+          : variant),
+    }));
+    setLegacyBomNotice(null);
+    const loadedIngredients = normalizedLines.map(i => ({
+      raw_material_id: i.raw_material_id,
+      quantity: Number(i.quantity) || 0,
+      unit: i.unit || 'kg',
+      percentage: standardBatch > 0 ? Math.round(((Number(i.quantity) || 0) / standardBatch) * 1000000) / 10000 : 0,
+      is_critical: !!i.is_critical,
+    }));
+    setIngs(loadedIngredients);
+    setFormulaStage('formula');
     setDetailOpen(false);
     setEditOpen(true);
+  }
+
+  function createVersion(source: Formulation) {
+    // Do not insert a database version just because the user opened the
+    // version workflow. The draft is created only after a changed formula is
+    // actually saved, so cancelling leaves history untouched.
+    setDetailOpen(false);
+    setBomEditMode(false);
+    setEditId(null);
+    setSourceFormulaSearch(`${source.name} (${source.code}) · v${source.version} · ${(formulationIngredientCounts[source.id] || 0)} BOM items · ${source.status}`);
+    void prefillFromFormulation(source.id).then(() => {
+      setFormulaStage('formula');
+      setEditOpen(true);
+    });
   }
 
   async function handleSave() {
@@ -376,6 +492,15 @@ export default function FormulationsPage() {
     const ingredientTotal = ings
       .filter((ingredient) => ingredient.raw_material_id)
       .reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
+    const entered = ings.filter(i => i.raw_material_id);
+    if (entered.some(i => !Number.isFinite(i.quantity) || i.quantity <= 0 || !Number.isFinite(i.percentage) || i.percentage < 0 || i.percentage > 100)) {
+      alert('Each ingredient needs a positive quantity and a percentage between 0 and 100.');
+      return;
+    }
+    if (Math.abs(entered.reduce((sum, i) => sum + i.percentage, 0) - 100) > 0.01) {
+      alert('Ingredient percentages must total 100% before saving the formula and BOM.');
+      return;
+    }
     if (Math.abs(ingredientTotal - resolvedBatchSize) > 0.01) {
       alert(`Formula mass balance must equal the reference batch size. Ingredients total ${ingredientTotal.toFixed(2)} kg; reference batch is ${resolvedBatchSize.toFixed(2)} kg.`);
       return;
@@ -401,10 +526,9 @@ export default function FormulationsPage() {
 
       let fId = editId;
       if (editId) {
-        // Increment version number on formula edit
-        const nextVersion = (form.version || 1) + 1;
-        const payloadWithVersion = { ...payload, version: nextVersion };
-        const { error } = await supabase.from('formulations').update(payloadWithVersion).eq('id', editId);
+        // Draft edits stay on the same version. New versions are created only
+        // through the explicit Create New Version action, preserving history.
+        const { error } = await supabase.from('formulations').update(payload).eq('id', editId);
         if (error) throw error;
       } else {
         const { data, error } = await supabase.from('formulations').insert(payload).select('id').single();
@@ -414,6 +538,38 @@ export default function FormulationsPage() {
 
       if (!fId) throw new Error('Formulation ID missing after save.');
 
+      // Persist the entered formula separately from the generated production BOM.
+      const { data: formulaSpec, error: formulaSpecError } = await supabase
+        .from('formula_specs')
+        .upsert({
+          formulation_id: fId,
+          reference_batch_size: resolvedBatchSize,
+          batch_unit: form.batch_unit,
+          status: 'generated',
+          generated_bom_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'formulation_id' })
+        .select('id')
+        .single();
+      if (formulaSpecError || !formulaSpec) throw formulaSpecError || new Error('Formula specification could not be saved.');
+
+      const { error: formulaLinesDeleteError } = await supabase
+        .from('formula_spec_lines')
+        .delete()
+        .eq('formula_spec_id', formulaSpec.id);
+      if (formulaLinesDeleteError) throw formulaLinesDeleteError;
+
+      const formulaRows = ings.filter(i => i.raw_material_id).map((i, idx) => ({
+        formula_spec_id: formulaSpec.id,
+        raw_material_id: i.raw_material_id,
+        quantity: i.quantity,
+        unit: i.unit,
+        notes: '',
+        sort_order: idx,
+      }));
+      const { error: formulaLinesInsertError } = await supabase.from('formula_spec_lines').insert(formulaRows);
+      if (formulaLinesInsertError) throw formulaLinesInsertError;
+
       const rows = ings
         .filter(i => i.raw_material_id)
         .map((i, idx) => ({
@@ -421,19 +577,21 @@ export default function FormulationsPage() {
           raw_material_id: i.raw_material_id,
           quantity: i.quantity,
           unit: i.unit,
-          percentage: i.percentage,
+          percentage: Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000,
           is_critical: i.is_critical,
           notes: '',
           sort_order: idx,
         }));
 
-      await supabase.from('formulation_ingredients').delete().eq('formulation_id', fId);
+      const { error: deleteError } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', fId);
+      if (deleteError) throw deleteError;
       if (rows.length) {
         const { error } = await supabase.from('formulation_ingredients').insert(rows);
         if (error) throw error;
       }
 
       setEditOpen(false);
+      setToastMessage(`Formula ${form.code} v${form.version} saved and BOM generated from the formula.`);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving formulation:', error);
@@ -507,21 +665,10 @@ export default function FormulationsPage() {
         if (insErr) throw insErr;
       }
 
-      // Increment formulation version number on BOM edit
-      const nextVersion = (selected.version || 1) + 1;
-      const { error: verErr } = await supabase
-        .from('formulations')
-        .update({ version: nextVersion, updated_at: new Date().toISOString() })
-        .eq('id', selected.id);
-      
-      if (!verErr) {
-        setSelected(prev => prev ? { ...prev, version: nextVersion } : null);
-      }
-
       setBomEditMode(false);
       const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
       setDetailIngs(data || []);
-      setToastMessage(`✨ BOM updated to v${nextVersion}! Total formulation percentage normalized to 100%.`);
+      setToastMessage(`BOM updated on draft v${selected.version}. Total formulation percentage normalized to 100%.`);
       setTimeout(() => setToastMessage(null), 4000);
       fetchFormulations();
     } catch (error: any) {
@@ -536,8 +683,44 @@ export default function FormulationsPage() {
     if (batchSize <= 0) return updatedIngs;
     return updatedIngs.map(i => ({
       ...i,
-      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100 * 100) / 100 : 0,
+      percentage: i.raw_material_id ? Math.round((Number(i.quantity) / batchSize) * 100000000) / 1000000 : 0,
     }));
+  };
+
+  const recalculateQuantities = (updatedIngs: IngRow[], batchSize = Number(form.batch_size) || 0) => {
+    if (batchSize <= 0) return updatedIngs;
+    return updatedIngs.map(i => ({
+      ...i,
+      quantity: i.raw_material_id
+        ? Math.round(((Number(i.percentage) || 0) / 100) * batchSize * 10000) / 10000
+        : 0,
+    }));
+  };
+
+  const recalculateFromFormula = (updatedIngs: IngRow[], batchSize: number) => {
+    const formulaTotal = updatedIngs
+      .filter(i => i.raw_material_id)
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+    if (formulaTotal <= 0 || batchSize <= 0) return updatedIngs;
+
+    const populatedIndexes = updatedIngs
+      .map((item, index) => item.raw_material_id ? index : -1)
+      .filter(index => index >= 0);
+    const lastIndex = populatedIndexes[populatedIndexes.length - 1];
+    let allocated = 0;
+
+    return updatedIngs.map((item, index) => {
+      if (!item.raw_material_id) return { ...item, quantity: 0, percentage: 0 };
+      const quantity = index === lastIndex
+        ? Math.round((batchSize - allocated) * 10000) / 10000
+        : Math.round(((Number(item.quantity) || 0) / formulaTotal) * batchSize * 10000) / 10000;
+      allocated += quantity;
+      return {
+        ...item,
+        quantity,
+        percentage: Math.round((quantity / batchSize) * 1000000) / 10000,
+      };
+    });
   };
 
   const updateReferenceBatchSize = (batchSize: string) => {
@@ -546,24 +729,42 @@ export default function FormulationsPage() {
     variants[0] = { ...(variants[0] || { size: '', batch_size: 0 }), batch_size: nextBatchSize };
     setForm({ ...form, batch_size: batchSize, unit_size_variants: variants });
 
-    if (copiedBatchSize && nextBatchSize > 0) {
-      const scale = nextBatchSize / copiedBatchSize;
-      const scaledIngredients = ings.map((ingredient) => ({
-        ...ingredient,
-        quantity: Math.round((Number(ingredient.quantity) || 0) * scale * 10000) / 10000,
-      }));
-      setIngs(recalculatePercentages(scaledIngredients, nextBatchSize));
-      setCopiedBatchSize(nextBatchSize);
-      return;
-    }
-
-    setIngs(recalculatePercentages(ings, nextBatchSize));
+    setIngs(recalculateQuantities(ings, nextBatchSize));
+    setLegacyBomNotice(previous => previous
+      ? { ...previous, referenceBatch: nextBatchSize, variance: previous.bomTotal - nextBatchSize }
+      : previous);
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
   const formulaIngredientTotal = ings.filter((ingredient) => ingredient.raw_material_id).reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
   const formulaBatchSize = Number(form.batch_size) || Number(form.unit_size_variants?.[0]?.batch_size) || 0;
   const formulaBalanceDifference = formulaIngredientTotal - formulaBatchSize;
+
+  const continueToBom = () => {
+    const entered = ings.filter(i => i.raw_material_id);
+    if (!formulaBatchSize || formulaBatchSize <= 0) {
+      alert('Enter a reference batch size before generating the BOM.');
+      return;
+    }
+    if (!entered.length || entered.some(i => !Number.isFinite(i.quantity) || i.quantity <= 0)) {
+      alert('Enter a positive quantity for every formula ingredient before generating the BOM.');
+      return;
+    }
+    if (Math.abs(formulaIngredientTotal - formulaBatchSize) > 0.01) {
+      if (!legacyBomNotice) {
+        alert(`The formula total must equal the reference batch size before generating the BOM. Current total: ${formulaIngredientTotal.toFixed(2)} kg; reference batch: ${formulaBatchSize.toFixed(2)} kg.`);
+        return;
+      }
+      // Legacy BOMs may have been stored against the wrong batch size. Preserve
+      // their ingredient ratios, scale them to the corrected reference batch,
+      // and let Finance review the generated result before saving.
+      setIngs(recalculateFromFormula(ings, formulaBatchSize));
+      setFormulaStage('bom');
+      return;
+    }
+    setIngs(recalculatePercentages(ings, formulaBatchSize));
+    setFormulaStage('bom');
+  };
 
   const catColor: Record<string, string> = {
     'Broiler': 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold',
@@ -597,7 +798,7 @@ export default function FormulationsPage() {
   const isFinanceUser = userRole.includes('admin') || userRole.includes('finance') || userRole === 'finance_manager' || userEmail.includes('jonga') || userRole === 'administrator';
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="formula-page p-6 space-y-6">
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 border border-emerald-500 animate-bounce">
           <CheckCircle2 className="w-5 h-5 text-emerald-200" />
@@ -625,10 +826,12 @@ export default function FormulationsPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <section className="formula-hero overflow-hidden rounded-2xl bg-[#0c2035] text-white shadow-lg">
+      <div className="flex flex-wrap items-center justify-between gap-5 px-6 py-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Formulations & BOM Master</h1>
-          <p className="text-sm text-slate-500 mt-1">Bill of Materials with Premix & Micro-Ingredient Highlighting (Finance Controlled)</p>
+          <span className="inline-block border border-amber-500/50 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-300">FORMULA CONTROL</span>
+          <h1 className="mt-3 text-2xl font-bold text-white">Formulations & BOM</h1>
+          <p className="mt-1 text-sm text-slate-300">Master recipes, batch quantities and approved versions</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -646,22 +849,30 @@ export default function FormulationsPage() {
             </button>
           )}
           {isFinanceUser && (
-            <button onClick={openNew} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-semibold transition-colors">
+            <button onClick={openNew} className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold transition-colors whitespace-nowrap">
               <Plus className="w-4 h-4" /> New Formula
             </button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total Formulas" value={totalFormulas} icon={FlaskConical} color="teal" />
-        <StatCard title="Active" value={activeCount} icon={CheckCircle2} color="emerald" />
-        <StatCard title="Draft" value={draftCount} icon={FileText} color="amber" />
-        <StatCard title="Archived" value={archivedCount} icon={Archive} color="slate" />
+      <div className="formula-stat-grid grid grid-cols-2 lg:grid-cols-4 border-t border-white/10">
+        {[
+          { label: 'Total formulas', value: totalFormulas, color: 'text-white', icon: FlaskConical },
+          { label: 'Active', value: activeCount, color: 'text-emerald-300', icon: CheckCircle2 },
+          { label: 'Draft', value: draftCount, color: 'text-amber-300', icon: FileText },
+          { label: 'Archived', value: archivedCount, color: 'text-cyan-300', icon: Archive },
+        ].map(stat => <div key={stat.label} className="formula-stat px-6 py-4 border-r border-white/10 last:border-0"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase text-slate-400">{stat.label}</p><stat.icon className={`h-4 w-4 ${stat.color}`} /></div><p className={`mt-2 text-3xl font-semibold tabular-nums ${stat.color}`}>{stat.value}</p></div>)}
+      </div>
+      </section>
+
+      <div role="tablist" aria-label="Formula views" className="formula-tabs flex gap-5 border-b border-slate-200">
+        <button role="tab" aria-selected={registerView === 'formulas'} onClick={() => setRegisterView('formulas')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'formulas' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>All formulas <span className="ml-2 text-xs tabular-nums">{totalFormulas}</span></button>
+        {isFinanceUser && <button role="tab" aria-selected={registerView === 'review'} onClick={() => setRegisterView('review')} className={`py-3 text-sm font-semibold border-b-2 ${registerView === 'review' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500'}`}>Finance review <span className="ml-2 text-xs tabular-nums text-amber-700">{financeReviewQueue.length}</span></button>}
       </div>
 
-      {isFinanceUser && !loading && (
-        <section className="border border-amber-200 bg-amber-50/60 rounded-lg overflow-hidden">
+      {isFinanceUser && registerView === 'review' && !loading && (
+        <section className="border-y border-slate-200 bg-white">
           <div className="flex flex-col gap-3 px-5 py-4 border-b border-amber-200 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700">
@@ -669,7 +880,6 @@ export default function FormulationsPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-slate-800">Finance Formula Review</h2>
-                <p className="text-sm text-slate-600">A formula can be used in production only when its active BOM totals its reference batch quantity.</p>
               </div>
             </div>
             <span className={`self-start rounded-md px-3 py-1 text-sm font-semibold sm:self-auto ${financeReviewQueue.length ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'}`}>
@@ -677,7 +887,7 @@ export default function FormulationsPage() {
             </span>
           </div>
           {financeReviewQueue.length > 0 ? (
-            <div className="max-h-80 overflow-auto bg-white">
+            <div className="overflow-x-auto bg-white">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                   <tr>
@@ -724,50 +934,46 @@ export default function FormulationsPage() {
         </section>
       )}
 
-      <div className="flex flex-col gap-4">
+      {registerView === 'formulas' && <>
+      <div className="formula-toolbar flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex gap-1 flex-wrap">
-            <button
-              key="All"
-              onClick={() => setFilter('All')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === 'All' ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-            >
-              All
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.code}
-                onClick={() => setFilter(c.code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === c.code ? 'bg-teal-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
-              >
-                {c.name}
-              </button>
-            ))}
+              <div className="formula-category-filter w-full sm:w-60">
+            <select aria-label="Formula category" value={filter} onChange={e => setFilter(e.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              <option value="All">All categories</option>
+              {categories.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+            </select>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search formulas..." className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 w-64" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search formulas..." className="formula-search pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 w-64" />
           </div>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setIngredientFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             All Formulas
           </button>
           <button
             onClick={() => setIngredientFilter('with')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'with' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'with' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             With Ingredients ({withIngredients.length})
           </button>
           <button
             onClick={() => setIngredientFilter('without')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'without' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${ingredientFilter === 'without' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
           >
             Without Ingredients ({withoutIngredients.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowArchived(current => !current)}
+            className={`formula-filter-pill px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showArchived ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+          >
+            {showArchived ? 'Hide Archived' : 'Show Archived'} ({archivedCount})
           </button>
         </div>
       </div>
@@ -784,14 +990,14 @@ export default function FormulationsPage() {
           {/* Formulations WITH Ingredients */}
           {(ingredientFilter === 'all' || ingredientFilter === 'with') && withIngredients.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="formula-section-heading flex items-center gap-2 mb-3">
                 <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas with Ingredients ({withIngredients.length})</h3>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-emerald-50 border-b border-emerald-200">
+                  <table className="w-full min-w-[1120px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle [&_td:not(:first-child)]:whitespace-nowrap">
+                    <thead className="bg-slate-50 border-b border-slate-200 [&_th]:text-slate-600 [&_th]:tracking-normal [&_th]:normal-case">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
                         <th className="px-4 py-3 text-left text-xs font-semibold text-emerald-700 uppercase tracking-wider">Formula</th>
@@ -807,7 +1013,9 @@ export default function FormulationsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {withIngredients.map(f => (
+                      {withIngredients.map(group => {
+                        const f = group.current;
+                        return (
                         <tr 
                           key={f.id}
                           className={`hover:bg-emerald-50 transition-colors ${
@@ -829,7 +1037,7 @@ export default function FormulationsPage() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => compareMode ? toggleCompareSelect(f) : openDetail(f)}
-                              className="flex items-center gap-2 hover:text-emerald-600 transition-colors"
+                              className="flex min-w-48 items-center gap-2 text-left hover:text-emerald-600 transition-colors"
                             >
                               <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
                                 <FlaskConical className="w-4 h-4 text-emerald-600" />
@@ -841,7 +1049,7 @@ export default function FormulationsPage() {
                             <code className="text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">{f.code}</code>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2.5 py-1 text-xs rounded-full inline-block ${catColor[getFormulationCategory(f.name, f.category)] || catColor['Other']}`}>
+                            <span className="text-xs font-medium text-slate-600">
                               {getFormulationCategory(f.name, f.category)}
                             </span>
                           </td>
@@ -851,7 +1059,21 @@ export default function FormulationsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm font-semibold text-slate-700">v{f.version}</span>
+                            <select
+                              value={f.id}
+                              onChange={e => {
+                                const version = group.versions.find(item => item.id === e.target.value);
+                                if (version) openDetail(version);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                              aria-label={`Version history for ${f.name}`}
+                            >
+                              {group.versions.map(version => (
+                                <option key={version.id} value={version.id}>
+                                  v{version.version}{version.id === f.id ? ' · Current' : ''}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
@@ -961,10 +1183,10 @@ export default function FormulationsPage() {
                                         await fetchFormulations();
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-md transition-all shadow-sm active:scale-95 cursor-pointer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-md transition-colors whitespace-nowrap"
                                     title="Set as Finance-Approved Active Formulation for Today"
                                   >
-                                    ✨ Set Active Today
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate
                                   </button>
                                 );
                               })()}
@@ -978,7 +1200,8 @@ export default function FormulationsPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -989,13 +1212,13 @@ export default function FormulationsPage() {
           {/* Formulations WITHOUT Ingredients */}
           {(ingredientFilter === 'all' || ingredientFilter === 'without') && withoutIngredients.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="formula-section-heading flex items-center gap-2 mb-3">
                 <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
                 <h3 className="text-sm font-semibold text-slate-700">Formulas without Ingredients ({withoutIngredients.length})</h3>
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="formula-table-card bg-white rounded-xl border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[1000px] text-sm [&_th]:whitespace-nowrap [&_td]:align-middle">
                     <thead className="bg-amber-50 border-b border-amber-200">
                       <tr>
                         {compareMode && <th className="px-4 py-3 text-left w-12"><input type="checkbox" className="rounded border-slate-300" disabled /></th>}
@@ -1010,7 +1233,9 @@ export default function FormulationsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {withoutIngredients.map(f => (
+                      {withoutIngredients.map(group => {
+                        const f = group.current;
+                        return (
                         <tr 
                           key={f.id}
                           className={`hover:bg-amber-50 transition-colors ${
@@ -1049,7 +1274,21 @@ export default function FormulationsPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm font-semibold text-slate-700">v{f.version}</span>
+                            <select
+                              value={f.id}
+                              onChange={e => {
+                                const version = group.versions.find(item => item.id === e.target.value);
+                                if (version) openDetail(version);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700"
+                              aria-label={`Version history for ${f.name}`}
+                            >
+                              {group.versions.map(version => (
+                                <option key={version.id} value={version.id}>
+                                  v{version.version}{version.id === f.id ? ' · Current' : ''}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-sm text-slate-700">{f.batch_size.toLocaleString()} {f.batch_unit}</span>
@@ -1070,7 +1309,8 @@ export default function FormulationsPage() {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1080,6 +1320,7 @@ export default function FormulationsPage() {
         </div>
       )}
 
+      </>}
       {/* BOM Comparison Modal */}
       <Modal open={compareOpen} onClose={() => setCompareOpen(false)} title="BOM Comparison" size="xl">
         {compareSelected.length === 2 && (
@@ -1156,30 +1397,40 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="xl">
+      <Modal open={detailOpen} onClose={() => { setDetailOpen(false); setBomEditMode(false); }} title={selected?.name || ''} size="2xl" className="max-h-[96vh]">
         {selected && (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {isFinanceUser && (
-              <div className="flex gap-2">
-                <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
-                <button onClick={() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"><Edit2 className="w-3.5 h-3.5" /> {bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM'}</button>
-                <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <span className="font-mono font-bold text-slate-700">{selected.code}</span>
+                  <span className="h-1 w-1 rounded-full bg-slate-300" />
+                  <span>Formula control</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => createVersion(selected)} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"><GitCompare className="w-3.5 h-3.5" /> New Version</button>
+                {selected.status !== 'active' && (
+                  <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
+                )}
+                <button onClick={() => selected.status === 'active' ? createVersion(selected) : (() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); })()} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"><Edit2 className="w-3.5 h-3.5" /> {selected.status === 'active' ? 'Edit BOM in New Version' : (bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM')}</button>
+                <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+                </div>
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[['Code', selected.code], ['Category', selected.category], ['Version', `v${selected.version}`], ['Status', selected.status], ['Batch Size', `${selected.batch_size} ${selected.batch_unit}`], ['Cost/Unit', `$${selected.estimated_cost_per_unit.toFixed(2)}`], ['Protein', `${selected.target_protein}%`], ['Fat', `${selected.target_fat}%`]].map(([l, v]) => (
-                <div key={l as string} className="bg-slate-50 rounded-lg p-3"><p className="text-xs text-slate-400">{l}</p><p className="text-sm font-semibold text-slate-700">{v}</p></div>
+                <div key={l as string} className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{l}</p><p className={`mt-0.5 text-sm font-bold ${l === 'Status' ? (v === 'active' ? 'text-emerald-600' : v === 'draft' ? 'text-amber-600' : 'text-slate-600') : 'text-slate-800'}`}>{v}</p></div>
               ))}
             </div>
-            {selected.description && <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{selected.description}</p>}
+            {selected.description && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="font-bold text-slate-700">Notes:</span> {selected.description}</p>}
             <div>
               {/* Tab switcher */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex gap-1 border-b border-slate-200 w-full pb-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1 w-full">
                   {(['ingredients', 'packaging'] as const).map(t => (
                     <button key={t} onClick={() => { setDetailTab(t); setBomEditMode(false); }}
-                      className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${
-                        detailTab === t ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+                      className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                        detailTab === t ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                       }`}>
                       {t === 'ingredients' ? `Ingredients (${detailIngs.length})` : `Packaging (${detailPkgItems.length})`}
                     </button>
@@ -1191,18 +1442,18 @@ export default function FormulationsPage() {
               </div>
               {detailTab === 'ingredients' && detailIngs.length === 0 && <p className="text-sm text-slate-400">No ingredients added</p>}
               {detailTab === 'ingredients' && detailIngs.length > 0 && (
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                  <table className="w-full text-xs">
+                <div className="overflow-hidden border border-slate-200 rounded-lg">
+                  <table className="w-full text-[11px] leading-tight">
                     <thead><tr className="border-b border-slate-200 text-left bg-slate-50">
-                      <th className="px-3 py-2 font-medium text-slate-600">Material Name</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Type Code</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Qty</th>
-                      <th className="px-3 py-2 font-medium text-slate-600">Unit</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">%</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Unit Cost</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Total Cost</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-right">Stock</th>
-                      <th className="px-3 py-2 font-medium text-slate-600 text-center">Critical</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600">Material Name</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-center">Type</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Qty</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600">Unit</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">%</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Unit Cost</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Total Cost</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-right">Stock</th>
+                      <th className="px-2 py-1.5 font-medium text-slate-600 text-center">Critical</th>
                       {bomEditMode && <th className="px-3 py-2 font-medium text-red-400 text-center">Remove</th>}
                     </tr></thead>
                     <tbody>{(bomEditMode ? bomEditIngs : detailIngs).map((i, idx) => {
@@ -1246,12 +1497,12 @@ export default function FormulationsPage() {
                                 </optgroup>
                               </select>
                             ) : (
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="flex items-center gap-1 whitespace-nowrap">
                                 <span className="text-slate-800 font-bold">{i.raw_materials?.name || 'Unknown'}</span>
-                                <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">({i.raw_materials?.code})</span>
+                                <span className="font-mono text-[9px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded">({i.raw_materials?.code})</span>
                                 {typeInfo.isPremix && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-2 py-0.5 rounded-full shadow-sm">
-                                    ⭐️ {typeInfo.badgeLabel}
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black text-amber-900 bg-amber-200/80 border border-amber-300 px-1.5 py-0.5 rounded-full">
+                                    {typeInfo.badgeLabel}
                                   </span>
                                 )}
                               </div>
@@ -1298,7 +1549,7 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-3 py-2 text-right">
                             {bomEditMode ? (
-                              <input type="number" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], percentage: parseFloat(e.target.value) || 0 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                              <input type="number" min="0" max="100" step="0.1" value={i.percentage} onChange={e => { const u = [...bomEditIngs]; const percentage = parseFloat(e.target.value) || 0; u[idx] = { ...u[idx], percentage, quantity: Math.round((percentage / 100) * Number(selected.batch_size || 0) * 10000) / 10000 }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-teal-200 bg-teal-50/40 rounded text-sm focus:outline-none focus:border-teal-500" title="Enter percentage; quantity recalculates from the formula batch size" />
                             ) : (
                               <span>{i.percentage.toFixed(1)}%</span>
                             )}
@@ -1524,33 +1775,120 @@ export default function FormulationsPage() {
         )}
       </Modal>
 
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? 'Edit Formula' : 'New Formula'} size="xl">
-        <div className="space-y-5">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={editId ? `Formula ${form.code} / Version ${form.version}` : 'Create Formula & BOM'} size="4xl" className="formula-editor" footer={
+        <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <button onClick={() => setEditOpen(false)} className="formula-editor-secondary-action px-3 py-2 text-sm font-medium text-slate-600 rounded-md hover:bg-slate-100">Cancel</button>
+          {formulaStage === 'bom' && <button type="button" onClick={() => setFormulaStage('formula')} className="formula-editor-secondary-action px-3 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-md">Back to Formula</button>}
+          {formulaStage === 'formula' ? (
+            <button type="button" onClick={continueToBom} disabled={saving || !form.name || !form.code} className="formula-editor-primary-action px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{editId ? 'Recalculate BOM from Formula' : 'Generate BOM from Formula'}</button>
+          ) : (
+            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="formula-editor-primary-action px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50">{saving ? 'Saving...' : 'Generate & Save BOM'}</button>
+          )}
+        </div>
+      }>
+        <div className="formula-editor-stepper">
+          <div className="formula-editor-stepper-copy">
+            <p className="formula-editor-stepper-title">{formulaStage === 'formula' ? 'Build the formula specification' : 'Review the generated BOM'}</p>
+            <p className="formula-editor-stepper-subtitle">{formulaStage === 'formula' ? 'Enter the reference-batch quantities from the signed formula sheet.' : 'Confirm the calculated quantities before saving this production BOM.'}</p>
+          </div>
+          <div className="formula-editor-stepper-badges" aria-label="Formula workflow progress">
+            <span className={`formula-editor-step ${formulaStage === 'formula' ? 'active' : 'done'}`}>1&nbsp; Formula Input</span>
+            <span className="formula-editor-step-arrow">›</span>
+            <span className={`formula-editor-step ${formulaStage === 'bom' ? 'active' : ''}`}>2&nbsp; Generated BOM</span>
+          </div>
+        </div>
+        {legacyBomNotice && formulaStage === 'formula' && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wide">Legacy BOM needs formula confirmation</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                This existing BOM totals <strong>{legacyBomNotice.bomTotal.toFixed(2)} kg</strong>, while its reference batch is <strong>{legacyBomNotice.referenceBatch.toFixed(2)} kg</strong>.
+                Review the ingredient ratios above, then use <strong>Recalculate BOM from Formula</strong>. The system will scale those ratios to the reference batch; the existing BOM is not changed until you save the generated result.
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="formula-editor-layout">
+          <aside className="formula-editor-details">
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Unit Size Variants (Required)</h4>
-            <p className="text-xs text-slate-500 mb-3">Define different batch/package sizes for this formula (e.g., 5kg, 10kg, 15kg, 20kg)</p>
+            <h4 className="formula-editor-section-title">Formula details</h4>
+            <p className="formula-editor-section-help">Identify the finished product and define the standard batch used for the formula.</p>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-slate-600 mb-1">Copy ingredients from an existing BOM (optional)</label>
-              <select
-                value=""
-                onChange={e => { const v = e.target.value; e.target.value = ''; prefillFromFormulation(v); }}
+          <div className="grid grid-cols-2 gap-2">
+            {!editId && <div className="col-span-2">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Start a new version from an existing formula (optional)</label>
+              <input
+                list="existing-formula-options"
+                value={sourceFormulaSearch}
+                onChange={e => {
+                  const value = e.target.value;
+                  setSourceFormulaSearch(value);
+                  const selected = allFormulaGroups.map(group => group.current).find(f => {
+                    const label = `${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`;
+                    return label === value;
+                  });
+                  if (selected) handleSourceFormulaChange(selected.id);
+                  else if (!value) handleSourceFormulaChange('');
+                }}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
-                disabled={!!editId}
-                title={editId ? 'Not available in Edit mode' : 'Copies ingredients and technical settings into a new independent draft.'}
+                placeholder="Search and select an existing formula..."
+                aria-label="Search and select an existing formula"
+              />
+              <datalist id="existing-formula-options">
+                <option value="— Start independent formula —" />
+                {allFormulaGroups.map(group => {
+                  const f = group.current;
+                  return (
+                  <option key={f.id} value={`${f.name} (${f.code}) · v${f.version} · ${(formulationIngredientCounts[f.id] || 0)} BOM items · ${f.status}`} />
+                  );
+                })}
+              </datalist>
+              {sourceFormulaId && (() => {
+                const source = formulations.find(f => f.id === sourceFormulaId);
+                const sourceGroup = source && allFormulaGroups.find(group => group.key === (source.code || source.name));
+                if (!sourceGroup || sourceGroup.versions.length < 2) return null;
+                return (
+                  <div className="mt-2">
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">Choose version from history</label>
+                    <select
+                      value={sourceFormulaId}
+                      onChange={e => {
+                        const version = sourceGroup.versions.find(item => item.id === e.target.value);
+                        if (!version) return;
+                        const label = `${version.name} (${version.code}) · v${version.version} · ${(formulationIngredientCounts[version.id] || 0)} BOM items · ${version.status}`;
+                        setSourceFormulaSearch(label);
+                        handleSourceFormulaChange(version.id);
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white"
+                      aria-label="Choose formula version from history"
+                    >
+                      {sourceGroup.versions.map(version => (
+                        <option key={version.id} value={version.id}>
+                          v{version.version}{version.id === sourceGroup.current.id ? ' · Current' : ` · ${version.status}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
+              {/* Keep the independent option explicit and reset the picker to blank. */}
+              <button
+                type="button"
+                onClick={() => handleSourceFormulaChange('')}
+                className="mt-2 text-left text-xs font-semibold text-slate-600 hover:text-teal-700"
               >
-                <option value="">— Start independent formula —</option>
-                {formulations.map(f => (
-                  <option key={f.id} value={f.id}>{f.name} ({f.code})</option>
-                ))}
-              </select>
-              {!editId && copiedBatchSize && (
-                <p className="text-[11px] text-amber-600 mt-1">Copied ingredients are in a new draft. Enter a new name, formula code, and Sage code.</p>
+                Start independent formula
+              </button>
+              {sourceFormulaId && !form.name && (
+                <p className="text-[11px] text-amber-700 mt-1">Loading the selected formula and its ingredient specification...</p>
               )}
-            </div>
-            <div>
+              {!editId && copiedBatchSize && (
+                <p className="text-[11px] text-emerald-700 mt-1">New draft version v{form.version} started from the existing formula. The original version remains unchanged.</p>
+              )}
+            </div>}
+            <div className="col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
               <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., Broiler Grower Crumbs 50kg" />
             </div>
@@ -1564,11 +1902,11 @@ export default function FormulationsPage() {
             </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
               <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Size</label>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
-            <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference Formula Batch Size (kg) *</label>
+            <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference batch (kg) *</label>
               <input type="number" min="0.01" step="0.01" value={form.batch_size} onChange={e => updateReferenceBatchSize(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000.00" />
-              <p className="mt-1 text-xs text-slate-500">Copied BOM quantities scale proportionally when you change this size. Production orders can use any planned quantity and scale automatically.</p></div>
+              </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
                 value={form.category}
@@ -1590,23 +1928,28 @@ export default function FormulationsPage() {
 
           <div>
             <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nutritional Targets</h4>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               {[['Protein %', 'target_protein'], ['Fat %', 'target_fat'], ['Fiber %', 'target_fiber'], ['Moisture %', 'target_moisture']].map(([l, k]) => (
                 <div key={k}><label className="block text-xs font-medium text-slate-600 mb-1">{l}</label>
                   <input type="number" step="0.1" value={(form as any)[k]} onChange={e => setForm({ ...form, [k]: Number(e.target.value) })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
               ))}
             </div>
           </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div><h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ingredients — Standard Usage per Formula Batch</h4><p className="mt-1 text-[11px] text-slate-500">Each quantity is for the approved {form.batch_size || '—'} kg formula batch and will scale proportionally on production orders.</p></div>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs font-medium ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
-                <span className={`text-xs font-medium ${Math.abs(totalPct - 100) < 0.01 ? 'text-emerald-600' : 'text-red-600'}`}>Total: {totalPct.toFixed(1)}%</span>
-                <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add</button>
+          </aside>
+          <section className="formula-editor-ingredients">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div>
+                <h4 className="formula-editor-section-title">{formulaStage === 'formula' ? 'Formula ingredients' : 'Generated BOM'} <span className="ml-1 text-slate-400">({ings.length})</span></h4>
+                <p className="formula-editor-section-help">{formulaStage === 'formula' ? 'Use the full raw-material names from the master list. The initials on the paper sheet are only shorthand.' : 'Review and adjust materials or quantities before saving the production BOM. The mass balance must still equal the reference batch.'}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className={`formula-editor-metric ${formulaBatchSize > 0 && Math.abs(formulaBalanceDifference) <= 0.01 ? 'is-valid' : 'is-warning'}`}>Mass balance: {formulaIngredientTotal.toFixed(2)} / {formulaBatchSize.toFixed(2)} kg</span>
+                <span className={`formula-editor-metric ${Math.abs(totalPct - 100) < 0.01 ? 'is-valid' : 'is-warning'}`}>Total: {totalPct.toFixed(1)}%</span>
+                <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add material</button>
               </div>
             </div>
-            <table className="w-full text-sm">
+            <div className="formula-editor-table">
+            <table className="w-full text-sm table-fixed">
               <thead><tr className="border-b border-slate-200 text-left">
                 <th className="pb-2 font-medium text-slate-500 text-xs">Raw Material</th><th className="pb-2 font-medium text-slate-500 text-xs w-24">Qty</th><th className="pb-2 font-medium text-slate-500 text-xs w-20">Unit</th><th className="pb-2 font-medium text-slate-500 text-xs w-20">%</th><th className="pb-2 font-medium text-slate-500 text-xs w-16">Critical</th><th className="pb-2 w-10"></th>
               </tr></thead>
@@ -1632,19 +1975,16 @@ export default function FormulationsPage() {
                         ))}
                       </optgroup>
                     </select></td>
-                  <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u, formulaBatchSize)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="number" step="0.01" value={ing.percentage.toFixed(2)} disabled className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-100 cursor-not-allowed text-slate-600" title="Auto-calculated from quantity divided by the standard batch size" /></td>
+                  <td className="py-1.5 pr-2"><span className="block rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">{Number(ing.percentage || 0).toFixed(3)}%</span></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
-                  <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button></td>
+                  <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors" title="Remove material"><Trash2 className="w-3.5 h-3.5" /></button></td>
                 </tr>
               ))}</tbody>
             </table>
-          </div>
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
-            <button onClick={() => setEditOpen(false)} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">Cancel</button>
-            <button onClick={handleSave} disabled={saving || !form.name || !form.code} className="px-5 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50">{saving ? 'Saving...' : 'Save Formula'}</button>
-          </div>
+            </div>
+          </section>
         </div>
       </Modal>
     </div>

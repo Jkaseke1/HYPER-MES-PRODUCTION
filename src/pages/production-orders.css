@@ -1,0 +1,82 @@
+.production-orders-page {
+  color: #193247;
+}
+
+.production-order-register {
+  border-color: #d6e5e9;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(11, 45, 64, .07);
+}
+
+.production-order-register > div:first-child {
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #ffffff 0%, #f5fbfb 100%);
+}
+
+.production-order-tabs button {
+  min-height: 38px;
+  border-radius: 999px;
+  font-weight: 750;
+  transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.production-order-tabs button:hover {
+  transform: translateY(-1px);
+}
+
+.production-order-tabs button:first-child {
+  box-shadow: 0 5px 12px rgba(15, 23, 42, .14);
+}
+
+.production-order-search {
+  height: 42px;
+  border-radius: 999px;
+  background: #ffffff;
+  border-color: #cfdee3;
+}
+
+.production-order-table thead tr {
+  background: #eef7f7;
+}
+
+.production-order-table thead th {
+  color: #416475;
+  font-size: 11px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.production-order-row {
+  position: relative;
+}
+
+.production-order-row:hover {
+  background: #f2fbf9;
+  box-shadow: inset 3px 0 0 #00b89f;
+}
+
+.production-order-row td {
+  padding-top: 17px;
+  padding-bottom: 17px;
+  border-color: #edf3f4;
+}
+
+.production-order-row td:first-child > div:first-child {
+  color: #0e3046;
+  letter-spacing: .015em;
+}
+
+.production-order-row td:first-child .text-\[10px\] {
+  color: #718b9b;
+  line-height: 1.55;
+}
+
+.production-order-row button {
+  border-radius: 999px;
+  font-weight: 750;
+}
+
+@media (max-width: 768px) {
+  .production-order-register > div:first-child { padding: 14px; }
+  .production-order-search { min-height: 42px; }
+}

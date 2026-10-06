@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/badge';
 import StatusBadge from '../components/ui/StatusBadge';
 import PackagingDeclaration from '../components/production/PackagingDeclaration';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
+import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 
@@ -38,6 +39,7 @@ interface ConfirmDialogState {
 }
 
 interface SageIssueStatus {
+  id: string;
   status: string;
   message?: string | null;
   sage_response?: any;
@@ -177,6 +179,7 @@ export default function ProductionOrdersPage() {
   });
   const [confirmingAction, setConfirmingAction] = useState(false);
   const [sageIssueStatus, setSageIssueStatus] = useState<SageIssueStatus | null>(null);
+  const [retryingSageIssue, setRetryingSageIssue] = useState(false);
   const [sageCompletionStatus, setSageCompletionStatus] = useState<SageIssueStatus | null>(null);
   const [sageIssueStatuses, setSageIssueStatuses] = useState<SageIssueStatusByOrder>({});
   const [finishedGoodsTransferStatuses, setFinishedGoodsTransferStatuses] = useState<FinishedGoodsTransferStatusByOrder>({});
@@ -475,7 +478,7 @@ export default function ProductionOrdersPage() {
 
     const { data, error } = await supabase
       .from('sync_log')
-      .select('reference_id, status, message, sage_response, error_details, updated_at')
+      .select('id, reference_id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
       .eq('reference_type', 'production_orders')
       .in('reference_id', orderIds)
@@ -535,7 +538,7 @@ export default function ProductionOrdersPage() {
   const loadSageIssueStatus = useCallback(async (orderId: string, notify = false) => {
     const { data, error } = await supabase
       .from('sync_log')
-      .select('status, message, sage_response, error_details, updated_at')
+      .select('id, status, message, sage_response, error_details, updated_at')
       .eq('event_type', 'materials_issued')
       .eq('reference_type', 'production_orders')
       .eq('reference_id', orderId)
@@ -575,6 +578,28 @@ export default function ProductionOrdersPage() {
     const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageIssueStatus]);
+
+  const retrySageMaterialIssue = useCallback(async () => {
+    if (!selected?.id || !sageIssueStatus?.id || sageIssueStatus.status !== 'failed') return;
+
+    setRetryingSageIssue(true);
+    setWorkflowError(null);
+    try {
+      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: sageIssueStatus.id });
+      if (error) throw error;
+
+      showSageNotification(
+        'processing',
+        'Material issue retry queued',
+        'The existing failed Sage event was requeued. MES materials will not be issued again.'
+      );
+      await loadSageIssueStatus(selected.id, true);
+    } catch (error: any) {
+      setWorkflowError(`Could not retry Sage material issue: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setRetryingSageIssue(false);
+    }
+  }, [selected?.id, sageIssueStatus, showSageNotification, loadSageIssueStatus]);
 
   const loadSageCompletionStatus = useCallback(async (orderId: string) => {
     const { data, error } = await supabase
@@ -1817,7 +1842,7 @@ export default function ProductionOrdersPage() {
   const sageCompletionFailed = sageCompletionStatus?.status === 'failed';
 
   return (
-    <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
+    <div className="production-orders-page p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
       <StickyOperationsPanel>
         <section className="overflow-hidden rounded-lg border border-[#0d2036] bg-[#0d2036] text-white shadow-lg shadow-slate-900/20">
           <div className="flex flex-col gap-5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -1849,10 +1874,10 @@ export default function ProductionOrdersPage() {
       </section>
 
       {/* Filter & Search Bar */}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="production-order-register overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 bg-white p-3.5">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+            <div className="production-order-tabs flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -1874,7 +1899,7 @@ export default function ProductionOrdersPage() {
                 placeholder="Search batch number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-sm focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                className="production-order-search w-full rounded-md border border-slate-200 bg-slate-50/50 py-2 pl-9 pr-3 text-sm focus:border-teal-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20"
               />
             </div>
           </div>
@@ -1893,13 +1918,12 @@ export default function ProductionOrdersPage() {
           <div>
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="production-order-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100/70">
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Batch Number</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Formulation</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Production Line</th>
-                    <th className="text-right px-4 py-3.5 font-bold text-slate-700">Planned Qty</th>
                     <th className="text-right px-4 py-3.5 font-bold text-slate-700">Actual Qty</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Status</th>
                     <th className="text-left px-4 py-3.5 font-bold text-slate-700">Sage</th>
@@ -1908,14 +1932,13 @@ export default function ProductionOrdersPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={order.id} className="production-order-row hover:bg-slate-50/80 transition-colors">
                       <td className="px-4 py-3.5">
                         <div className="font-mono font-bold text-slate-900">{order.batch_number}</div>
-                        {order.profiles?.full_name && (
-                          <div className="text-xs text-slate-500 mt-0.5">
-                            Created by <span className="font-medium text-slate-700">{order.profiles.full_name}</span>
-                          </div>
-                        )}
+                        <div className="mt-1 text-[10px] leading-4 text-slate-400">
+                          <div>{order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy HH:mm') : 'Date unavailable'}</div>
+                          <div>By {order.creator?.full_name || order.creator?.email || order.profiles?.full_name || 'Unknown user'}</div>
+                        </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="font-medium text-slate-800">{order.formulations?.name || '-'}</div>
@@ -1923,9 +1946,6 @@ export default function ProductionOrdersPage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="text-slate-700 font-medium">{order.machines?.name || '-'}</div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty.toLocaleString()} kg)</span>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
                         {order.actual_qty ? <>{formatBags(order.actual_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty.toLocaleString()} kg)</span></> : '-'}
@@ -1970,13 +1990,9 @@ export default function ProductionOrdersPage() {
                     <p className="text-xs text-slate-500 mt-0.5">Line: {order.machines?.name || 'Main Plant'}</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
+                  <div className="bg-slate-50 p-2.5 rounded-lg text-xs font-mono">
                     <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Planned</span>
-                      <span className="font-bold text-slate-800">{formatBags(order.planned_qty, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.planned_qty} kg)</span></span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px] uppercase">Actual</span>
+                      <span className="text-slate-400 block text-[10px] uppercase">Actual Qty</span>
                       <span className="font-bold text-slate-800">{formatBags(order.actual_qty || 0, order.unit_size)} bags <span className="text-[10px] text-slate-400">({order.actual_qty || 0} kg)</span></span>
                     </div>
                   </div>
@@ -1988,7 +2004,7 @@ export default function ProductionOrdersPage() {
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                     <span className="text-[11px] text-slate-400">
-                      {order.profiles?.full_name ? `Operator: ${order.profiles.full_name}` : ''}
+                      {order.created_at ? `${format(new Date(order.created_at), 'dd MMM yyyy HH:mm')} · By ${order.creator?.full_name || order.creator?.email || order.profiles?.full_name || 'Unknown user'}` : ''}
                     </span>
                     <button
                       onClick={() => openDetail(order)}
@@ -2330,7 +2346,6 @@ export default function ProductionOrdersPage() {
                         <th className="px-3 py-2 text-left font-medium text-slate-700">Ingredient Name</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">BOM %</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Per Bag (kg)</th>
-                        <th className="px-3 py-2 text-right font-medium text-slate-700">Batch Qty (kg)</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Unit Cost</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Line Total</th>
                       </tr>
@@ -2339,8 +2354,8 @@ export default function ProductionOrdersPage() {
                       {bomPreview.map((ing: any) => {
                         const bagSize = bagSizeKg(form.unit_size, 50);
                         const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSize;
-                        const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                        const lineTotal = qtyRequired * ing.unitCost;
+                        // BOM preview cost is quoted per bag: ingredient kg per bag × unit cost.
+                        const lineTotal = qtyPerBag * ing.unitCost;
                         const isPremix = /premix/i.test(`${ing.code || ''} ${ing.name || ''}`);
                         return (
                           <tr key={ing.index} className={`hover:bg-slate-50 ${isPremix ? 'bg-fuchsia-50/60' : ''}`}>
@@ -2354,7 +2369,6 @@ export default function ProductionOrdersPage() {
                             </td>
                             <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
                             <td className="px-3 py-2 text-right font-medium text-teal-700">{qtyPerBag.toFixed(4)}</td>
-                            <td className="px-3 py-2 text-right text-slate-600">{qtyRequired.toFixed(4)}</td>
                             <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(4)}</td>
                             <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(4)}</td>
                           </tr>
@@ -2363,11 +2377,10 @@ export default function ProductionOrdersPage() {
                       <tr className="bg-teal-50 font-medium">
                         <td colSpan={4} className="px-3 py-2 text-right text-slate-700">Total:</td>
                         <td className="px-3 py-2 text-right text-teal-800">{bagSizeKg(form.unit_size, 50).toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right text-slate-800">{form.planned_qty.toFixed(2)}</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
                           ${bomPreview.reduce((sum: number, ing: any) => {
-                            const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                            return sum + (qtyRequired * ing.unitCost);
+                            const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
+                            return sum + (qtyPerBag * ing.unitCost);
                           }, 0).toFixed(4)}
                         </td>
                       </tr>
@@ -2379,14 +2392,13 @@ export default function ProductionOrdersPage() {
               {/* Summary Stats */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {(() => {
-                  const totalCost = bomPreview.reduce((sum: number, ing: any) => {
-                    const qtyRequired = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * Number(form.planned_qty || 0);
-                    return sum + (qtyRequired * ing.unitCost);
+                  const costPerBag = bomPreview.reduce((sum: number, ing: any) => {
+                    const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
+                    return sum + (qtyPerBag * ing.unitCost);
                   }, 0);
                   const bagSize = parseInt(form.unit_size) || 25;
                   const numBags = Math.ceil(form.planned_qty / bagSize);
-                  const costPerBag = numBags > 0 ? totalCost / numBags : 0;
-                  const costPerKg = form.planned_qty > 0 ? totalCost / form.planned_qty : 0;
+                  const costPerKg = bagSize > 0 ? costPerBag / bagSize : 0;
                   
                   return (
                     <>
@@ -2692,15 +2704,28 @@ export default function ProductionOrdersPage() {
                     </button>
                   )}
                   {selected.status === 'materials_issued' && (
-                    <button
-                      onClick={() => updateStatus('in_progress')}
-                      disabled={saving || !canStartProduction}
-                      title={canStartProduction ? 'Sage material issue posted. Start production.' : 'Production unlocks after Sage posts the material issue successfully.'}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {canStartProduction ? <Play className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                      {canStartProduction ? 'Start Production' : 'Waiting for Sage Issue'}
-                    </button>
+                    <>
+                      {sageIssueStatus?.status === 'failed' && (
+                        <button
+                          onClick={retrySageMaterialIssue}
+                          disabled={saving || retryingSageIssue}
+                          title="Requeue the existing failed Sage material issue. MES materials will not be issued again."
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-amber-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${retryingSageIssue ? 'animate-spin' : ''}`} />
+                          {retryingSageIssue ? 'Requeuing Sage Issue' : 'Retry Sage Material Issue'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => updateStatus('in_progress')}
+                        disabled={saving || !canStartProduction}
+                        title={canStartProduction ? 'Sage material issue posted. Start production.' : 'Production unlocks after Sage posts the material issue successfully.'}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-teal-200 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {canStartProduction ? <Play className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                        {canStartProduction ? 'Start Production' : 'Waiting for Sage Issue'}
+                      </button>
+                    </>
                   )}
                   {selected.status === 'in_progress' && (
                     <button

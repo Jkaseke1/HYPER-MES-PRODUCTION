@@ -84,10 +84,10 @@ async function peekMfpNumber(): Promise<string> {
       .eq('year', 0)
       .maybeSingle();
 
-    return `MFP${String(data?.next_sequence || 1).padStart(6, '0')}`;
+    return `MFP${String(data?.next_sequence || 10403).padStart(6, '0')}`;
   } catch (err) {
     console.error('Error peeking Sage MFP number:', err);
-    return 'MFP000001';
+    return 'MFP010403';
   }
 }
 
@@ -98,7 +98,7 @@ async function generateMfpNumber(): Promise<string> {
     const { data, error } = await supabase.rpc('get_next_batch_sequence', { p_prefix: 'MFP', p_year: 0 });
     if (error || !Number.isInteger(data)) throw error || new Error('MFP sequence did not return a number.');
     const reservedSequence = data - 1;
-    if (reservedSequence < 1) throw new Error('Sage MFP sequence is not initialized.');
+    if (reservedSequence < 10403) throw new Error('Sage MFP sequence is below the verified UAT starting point.');
     return `MFP${String(reservedSequence).padStart(6, '0')}`;
   } catch (err) {
     console.error('Sage MFP number generation failed:', err);

@@ -8,6 +8,7 @@ interface PackagingSKU {
   description: string;
   bag_size_kg: number;
   is_active: boolean;
+  sage_stock_code?: string | null;
 }
 
 interface PackagingLine {
@@ -65,7 +66,11 @@ export default function PackagingDeclaration({
       const { data, error: err } = await supabase
         .from('packaging_skus')
         .select('*')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        // Packaging must be tied to a real Sage stock item. This excludes
+        // legacy finished-product rows that were previously stored here.
+        .not('sage_stock_code', 'is', null)
+        .gt('bag_size_kg', 0);
 
       if (err) throw err;
       
