@@ -298,8 +298,10 @@ export default function GoodsReceivedPage() {
         cacheData('raw_materials', materialsRes.data);
       }
       if (wbRes.data) {
-        setWbTickets(wbRes.data as any);
-        cacheData('weigh_bridge_tickets', wbRes.data);
+        const linkedTicketIds = new Set((grnsRes.data || []).map((grn: any) => grn.weigh_bridge_ticket_id).filter(Boolean));
+        const availableTickets = wbRes.data.filter((ticket: any) => !linkedTicketIds.has(ticket.id));
+        setWbTickets(availableTickets as any);
+        cacheData('weigh_bridge_tickets', availableTickets);
       }
       if (correctionWbRes.data) setCorrectionWbTickets(correctionWbRes.data as any);
 
@@ -474,6 +476,11 @@ export default function GoodsReceivedPage() {
         toast.error('Select an open weighbridge ticket. A linked or cancelled ticket cannot be reused.');
         return;
       }
+      const existingGrn = grns.find((grn: any) => grn.weigh_bridge_ticket_id === weighBridgeTicketId);
+      if (existingGrn) {
+        toast.error(`This weighbridge ticket is already linked to ${existingGrn.grn_number}. Open that GRN instead of creating another one.`);
+        return;
+      }
       if (ticket.supplier_id !== selectedSupplierId) {
         toast.error('The weighbridge ticket supplier must match the GRN supplier.');
         return;
@@ -579,7 +586,12 @@ export default function GoodsReceivedPage() {
       fetchData();
     } catch (error: any) {
       console.error('Error creating GRN:', error);
-      toast.error(`Failed to create GRN: ${error.message}`);
+      if (String(error?.message || '').includes('uq_grn_weighbridge_ticket')) {
+        toast.error('This weighbridge ticket is already linked to a GRN. Refresh the list and open the existing GRN instead.');
+        await fetchData(false);
+      } else {
+        toast.error(`Failed to create GRN: ${error.message}`);
+      }
     } finally {
       setSaving(false);
     }
