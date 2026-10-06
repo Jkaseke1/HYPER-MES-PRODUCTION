@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Scale, Plus, Search, Eye, CheckCircle, X, RefreshCw,
   Truck, Calendar, User, ArrowRight, FileText, CheckCircle2, ShieldAlert, FilePlus, Loader2,
-  Pencil, Trash2
+  Pencil, Trash2, CircleDot
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -81,6 +81,29 @@ const STATUS_STYLES: Record<string, { label: string; bg: string; color: string; 
   in_grn: { label: 'In GRN Workflow', bg: 'bg-blue-50', color: 'text-blue-700', border: 'border-blue-200' },
   linked: { label: 'Linked to GRN', bg: 'bg-emerald-50', color: 'text-emerald-700', border: 'border-emerald-200' },
   cancelled: { label: 'Cancelled', bg: 'bg-slate-100', color: 'text-slate-500', border: 'border-slate-200' },
+};
+
+const GRN_STAGE_STYLES: Record<string, { label: string; icon: typeof CircleDot; className: string }> = {
+  pending_costing: {
+    label: 'GRN costing',
+    icon: FileText,
+    className: 'border-violet-200 bg-violet-50 text-violet-800',
+  },
+  pending_finance: {
+    label: 'Finance review',
+    icon: ShieldAlert,
+    className: 'border-sky-200 bg-sky-50 text-sky-800',
+  },
+  approved: {
+    label: 'Approved',
+    icon: CheckCircle,
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  },
+  rejected: {
+    label: 'GRN rejected',
+    icon: X,
+    className: 'border-rose-200 bg-rose-50 text-rose-800',
+  },
 };
 
 export default function WeighBridgePage() {
@@ -452,15 +475,7 @@ export default function WeighBridgePage() {
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map(t => {
                     const stStyle = STATUS_STYLES[t.status] || STATUS_STYLES.open;
-                    const grnStage = t.grn_status === 'pending_costing'
-                      ? 'Awaiting costing'
-                      : t.grn_status === 'pending_finance'
-                        ? 'Awaiting Finance'
-                        : t.grn_status === 'approved'
-                          ? 'Approved - Sage posting'
-                          : t.grn_status === 'rejected'
-                            ? 'GRN rejected'
-                            : '';
+                    const grnStage = t.grn_status ? GRN_STAGE_STYLES[t.grn_status] : undefined;
 
                     return (
                       <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
@@ -489,26 +504,35 @@ export default function WeighBridgePage() {
                           {t.time_in ? format(new Date(t.time_in), 'dd MMM HH:mm') : '—'}
                         </td>
                         <td className="px-5 py-3.5">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${stStyle.bg} ${stStyle.color} ${stStyle.border}`}>
-                            {t.status === 'linked' ? (
-                              <>
-                                <CheckCircle className="w-3 h-3 text-emerald-600" /> Linked to GRN
-                              </>
-                            ) : t.status === 'in_grn' && t.grn_number ? `${grnStage || 'GRN in progress'} · ${t.grn_number}` : stStyle.label}
-                          </span>
+                          {t.status === 'in_grn' && t.grn_number ? (
+                            <div className={`inline-flex min-w-[132px] items-center gap-2 rounded-lg border px-2.5 py-2 ${grnStage?.className || 'border-blue-200 bg-blue-50 text-blue-800'}`}>
+                              {grnStage ? <grnStage.icon className="h-4 w-4 shrink-0" /> : <Loader2 className="h-4 w-4 shrink-0" />}
+                              <div className="min-w-0 leading-tight">
+                                <p className="text-[11px] font-bold">{grnStage?.label || 'GRN in progress'}</p>
+                                <p className="mt-0.5 font-mono text-[10px] opacity-75">{t.grn_number}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${stStyle.bg} ${stStyle.color} ${stStyle.border}`}>
+                              {t.status === 'linked' ? <CheckCircle className="h-3.5 w-3.5" /> : t.status === 'open' ? <CircleDot className="h-3.5 w-3.5" /> : null}
+                              {stStyle.label}
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => setViewTicket(t)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-colors text-xs font-bold"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm transition-colors hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+                              title="View ticket details"
+                              aria-label={`View ${t.ticket_no}`}
                             >
-                              <Eye className="w-3.5 h-3.5" /> View
+                              <Eye className="h-4 w-4" />
                             </button>
                             {canCorrectTickets && ['open', 'in_grn'].includes(t.status) && (
                               <button
                                 onClick={() => openEditTicket(t)}
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
                                 title="Edit ticket"
                                 aria-label={`Edit ${t.ticket_no}`}
                               >
@@ -518,7 +542,7 @@ export default function WeighBridgePage() {
                             {canCorrectTickets && t.status === 'open' && !t.grn_number && (
                               <button
                                 onClick={() => handleDeleteTicket(t)}
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:ring-offset-2"
                                 title="Delete ticket"
                                 aria-label={`Delete ${t.ticket_no}`}
                               >
