@@ -908,7 +908,7 @@ export default function GoodsReceivedPage() {
     const Icon = detail.icon;
 
     return (
-      <div className={`flex w-[166px] min-h-[56px] items-center gap-2 rounded-lg border px-2.5 py-2 ${detail.className}`}>
+      <div className={`flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border px-2 py-1.5 ${detail.className}`}>
         <Icon className="h-4 w-4 shrink-0" />
         <div className="min-w-0 leading-tight">
           <p className="break-words text-[11px] font-bold">{detail.label}</p>
@@ -922,7 +922,7 @@ export default function GoodsReceivedPage() {
     const rts = rtsByGrnId[grn.id];
     if (rts?.status === 'posted') {
       return (
-        <div className="flex w-[166px] min-h-[56px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-rose-800" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
+        <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-rose-800" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
           <RotateCcw className="h-4 w-4 shrink-0" />
           <div className="leading-tight"><p className="text-[11px] font-bold">RTS completed</p><p className="mt-0.5 text-[10px] opacity-75">Return posted to Sage</p></div>
         </div>
@@ -930,11 +930,11 @@ export default function GoodsReceivedPage() {
     }
 
     if (rts?.status === 'failed') {
-      return <div className="flex w-[166px] min-h-[56px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-rose-800"><AlertCircle className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS failed</p><p className="mt-0.5 text-[10px] opacity-75">Review before retrying</p></div></div>;
+      return <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-rose-800"><AlertCircle className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS failed</p><p className="mt-0.5 text-[10px] opacity-75">Review before retrying</p></div></div>;
     }
 
     if (rts && ['pending_finance', 'approved', 'processing'].includes(rts.status)) {
-      return <div className="flex w-[166px] min-h-[56px] items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-amber-800"><RotateCcw className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS in progress</p><p className="mt-0.5 text-[10px] opacity-75">Supplier return workflow</p></div></div>;
+      return <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-800"><RotateCcw className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS in progress</p><p className="mt-0.5 text-[10px] opacity-75">Supplier return workflow</p></div></div>;
     }
 
     return getStatusBadge(grn.status);
@@ -1011,9 +1011,9 @@ export default function GoodsReceivedPage() {
       const purchaseOrderNumber = getSagePurchaseOrderNumber(sync);
       const documentLabel = [purchaseOrderNumber, grvNumber].filter(Boolean).join(' / ');
       return (
-        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold" title={documentLabel || undefined}>
+        <Badge className="max-w-full bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border border-emerald-200 font-semibold" title={documentLabel || undefined}>
           <CheckCircle className="h-3 w-3 mr-1" />
-          {documentLabel ? `Posted ${documentLabel}` : 'Posted to Sage'}
+          <span className="truncate">{documentLabel ? `Posted ${documentLabel}` : 'Posted to Sage'}</span>
         </Badge>
       );
     }
@@ -1280,18 +1280,18 @@ export default function GoodsReceivedPage() {
         <CardContent className="p-0">
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto">
-            <Table className="table-fixed min-w-[1320px] w-full">
+            <Table className="table-fixed w-full">
               <TableHeader>
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
-                  <TableHead className="w-[135px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
-                  <TableHead className="w-[105px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
-                  <TableHead className="w-[230px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
-                  <TableHead className="w-[105px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Weighbridge</TableHead>
-                  <TableHead className="w-[108px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
-                  <TableHead className="w-[100px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
-                  <TableHead className="w-[190px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN status</TableHead>
-                  <TableHead className="w-[220px] px-3 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
-                  <TableHead className="w-[60px] px-3 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
+                  <TableHead className="w-[120px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN</TableHead>
+                  <TableHead className="w-[92px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Manual GRV</TableHead>
+                  <TableHead className="w-[210px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Supplier</TableHead>
+                  <TableHead className="w-[82px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Weighbridge</TableHead>
+                  <TableHead className="w-[96px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Received</TableHead>
+                  <TableHead className="w-[86px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Tonnage</TableHead>
+                  <TableHead className="w-[160px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">GRN status</TableHead>
+                  <TableHead className="w-[160px] px-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Sage posting</TableHead>
+                  <TableHead className="w-[52px] px-2 text-right text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Open</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1304,7 +1304,7 @@ export default function GoodsReceivedPage() {
                 ) : (
                   filteredGRNs.map((grn) => (
                     <TableRow key={grn.id} className={`transition-colors hover:bg-slate-50/80 ${grn.status === 'approved' ? 'border-l-2 border-l-emerald-400' : grn.status === 'rejected' ? 'border-l-2 border-l-rose-400' : 'border-l-2 border-l-amber-300'}`}>
-                      <TableCell className="px-3 py-3 font-semibold">
+                      <TableCell className="px-2 py-3 font-semibold">
                         <div className="flex items-center gap-2">
                           {grnWeighbridgeLabel(grn) && (
                             <span title="Weigh Bridge data captured"><Scale className="w-4 h-4 text-emerald-600 shrink-0" /></span>
@@ -1315,20 +1315,20 @@ export default function GoodsReceivedPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="w-[105px] max-w-[105px] overflow-hidden px-3 py-3" title={(grn as any).manual_grv_number || 'No manual GRV reference'}>
+                      <TableCell className="w-[92px] max-w-[92px] overflow-hidden px-2 py-3" title={(grn as any).manual_grv_number || 'No manual GRV reference'}>
                         <p className="font-mono text-xs font-bold text-slate-900">{(grn as any).manual_grv_number || '—'}</p>
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Manual reference</p>
                       </TableCell>
-                      <TableCell className="w-[230px] max-w-[230px] overflow-hidden px-3 py-3" title={grnSupplierLabel(grn)}>
+                      <TableCell className="w-[210px] max-w-[210px] overflow-hidden px-2 py-3" title={grnSupplierLabel(grn)}>
                         <p className="line-clamp-2 whitespace-normal break-words font-bold leading-4 text-slate-900">{grnSupplierLabel(grn)}</p>
                         <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-slate-400">Supplier receipt</p>
                       </TableCell>
-                      <TableCell className="px-3 py-3 font-mono text-xs text-slate-600">{grnWeighbridgeLabel(grn) || <span className="text-slate-300">—</span>}</TableCell>
-                      <TableCell className="px-3 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell className="px-3 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
-                      <TableCell className="w-[190px] px-3 py-3 align-middle">{getGrnWorkflowBadge(grn)}</TableCell>
-                      <TableCell className="w-[220px] px-3 py-3 align-middle">{getSageBadge(grn.id)}</TableCell>
-                      <TableCell className="px-3 py-3 text-right">
+                      <TableCell className="w-[82px] px-2 py-3 font-mono text-xs text-slate-600">{grnWeighbridgeLabel(grn) || <span className="text-slate-300">—</span>}</TableCell>
+                      <TableCell className="w-[96px] px-2 py-3 text-xs font-semibold text-slate-700">{format(new Date(grn.received_date), 'MMM d, yyyy')}</TableCell>
+                      <TableCell className="w-[86px] px-2 py-3 text-right text-xs font-bold text-slate-800">{(tonnageByGrnId[grn.id] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} <span className="font-normal text-slate-400">kg</span></TableCell>
+                      <TableCell className="w-[160px] px-2 py-3 align-middle">{getGrnWorkflowBadge(grn)}</TableCell>
+                      <TableCell className="w-[160px] max-w-[160px] overflow-hidden px-2 py-3 align-middle">{getSageBadge(grn.id)}</TableCell>
+                      <TableCell className="w-[52px] px-2 py-3 text-right">
                         <Button
                           variant="outline"
                           size="sm"
