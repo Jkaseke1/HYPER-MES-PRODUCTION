@@ -80,9 +80,12 @@ function materialUnitLabel(material: Partial<RawMaterial> | null | undefined) {
 }
 
 interface ReturnToSupplierStatus {
+  id: string;
   status: string;
   rts_number?: string | null;
   sage_rts_number?: string | null;
+  latest_sync_status?: string | null;
+  latest_sync_message?: string | null;
 }
 
 const RTS_STATUS_DETAILS: Record<string, { label: string; description: string; tone: string }> = {
@@ -431,7 +434,7 @@ export default function GoodsReceivedPage() {
 
     const { data, error } = await supabase
       .from('return_to_supplier_requests')
-      .select('original_grn_id, status, rts_number, sage_rts_number')
+      .select('id, original_grn_id, status, rts_number, sage_rts_number')
       .in('original_grn_id', grnIds);
 
     if (error) {
@@ -441,9 +444,37 @@ export default function GoodsReceivedPage() {
       return;
     }
 
+    const rtsRows = data || [];
+    const rtsIds = rtsRows.map((row: any) => row.id).filter(Boolean);
+    const latestSyncByRtsId: Record<string, { status?: string | null; message?: string | null }> = {};
+
+    if (rtsIds.length > 0) {
+      const { data: syncRows, error: syncError } = await supabase
+        .from('sync_log')
+        .select('reference_id, status, message, updated_at')
+        .eq('event_type', 'return_to_supplier_requested')
+        .in('reference_id', rtsIds)
+        .order('updated_at', { ascending: false });
+
+      if (syncError) {
+        console.warn('Failed to load RTS bridge statuses:', syncError.message);
+      } else {
+        (syncRows || []).forEach((sync: any) => {
+          if (!latestSyncByRtsId[sync.reference_id]) {
+            latestSyncByRtsId[sync.reference_id] = sync;
+          }
+        });
+      }
+    }
+
     const latestByGrn: Record<string, ReturnToSupplierStatus> = {};
-    (data || []).forEach((row: any) => {
-      latestByGrn[row.original_grn_id] = row;
+    rtsRows.forEach((row: any) => {
+      const latestSync = latestSyncByRtsId[row.id];
+      latestByGrn[row.original_grn_id] = {
+        ...row,
+        latest_sync_status: latestSync?.status || null,
+        latest_sync_message: latestSync?.message || null,
+      };
     });
     setRtsByGrnId(latestByGrn);
   }
@@ -920,6 +951,9 @@ export default function GoodsReceivedPage() {
 
   const getGrnWorkflowBadge = (grn: any) => {
     const rts = rtsByGrnId[grn.id];
+    const rtsError = String(rts?.latest_sync_message || '');
+    const hasNegativeStockBlock = /negative stock|negative inventory/i.test(rtsError);
+    const hasFailedRtsSync = rts?.latest_sync_status === 'failed';
     if (rts?.status === 'posted') {
       return (
         <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-rose-800" title={rts.sage_rts_number ? `Sage RTS ${rts.sage_rts_number}` : rts.rts_number || undefined}>
@@ -929,8 +963,12 @@ export default function GoodsReceivedPage() {
       );
     }
 
-    if (rts?.status === 'failed') {
-      return <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-rose-800"><AlertCircle className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS failed</p><p className="mt-0.5 text-[10px] opacity-75">Review before retrying</p></div></div>;
+    if (hasNegativeStockBlock) {
+      return <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-900" title={rtsError}><AlertCircle className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS blocked</p><p className="mt-0.5 text-[10px] opacity-75">Insufficient Sage stock</p></div></div>;
+    }
+
+    if (hasFailedRtsSync || rts?.status === 'failed') {
+      return <div className="flex w-[146px] min-h-[52px] items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-blue-800" title={rtsError || 'Sage posting needs a controlled retry.'}><RefreshCw className="h-4 w-4 shrink-0" /><div className="min-w-0 leading-tight"><p className="text-[11px] font-bold">RTS retry required</p><p className="mt-0.5 text-[10px] opacity-75">Review before retrying</p></div></div>;
     }
 
     if (rts && ['pending_finance', 'approved', 'processing'].includes(rts.status)) {
