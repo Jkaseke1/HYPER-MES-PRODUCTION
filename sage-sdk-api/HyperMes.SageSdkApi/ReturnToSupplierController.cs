@@ -26,31 +26,9 @@ namespace SDK_Test
                     SdkSession.EnsureConnected();
 
                     var firstLine = request.Lines[0];
+                    PrepareReturnToSupplierWithReconnect(request);
                     var item = new InventoryItem(firstLine.ItemCode.Trim().ToUpperInvariant());
                     var warehouse = new Warehouse(firstLine.WarehouseCode.Trim().ToUpperInvariant());
-                    var supplier = new Supplier(request.SupplierCode.Trim());
-                    var transactionDate = request.TransactionDate ?? DateTime.Today;
-
-                    var returnToSupplier = new ReturnToSupplier
-                    {
-                        Supplier = supplier,
-                        InvoiceDate = transactionDate,
-                        OrderDate = transactionDate,
-                        DueDate = transactionDate,
-                        DeliveryDate = transactionDate,
-                        Description = BuildDescription(request),
-                        ExternalOrderNo = Trim(request.ReturnReference, 50),
-                        MessageLine1 = BuildInvoiceReference(request),
-                        MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
-                        MessageLine3 = BuildOrderAndReason(request)
-                    };
-
-                    var detail = returnToSupplier.Detail.Add(item, warehouse.Code, (double)firstLine.Quantity, (double)firstLine.UnitCost);
-
-                    detail.Warehouse = warehouse;
-                    detail.Quantity = (double)firstLine.Quantity;
-                    detail.ToProcess = (double)firstLine.Quantity;
-                    detail.UnitCostPrice = (double)firstLine.UnitCost;
 
                     return Ok(new
                     {
@@ -66,8 +44,8 @@ namespace SDK_Test
                         itemDescription = item.Description,
                         warehouseID = warehouse.ID,
                         warehouseCode = warehouse.Code,
-                        quantity = detail.Quantity,
-                        unitCost = detail.UnitCostPrice,
+                        quantity = firstLine.Quantity,
+                        unitCost = firstLine.UnitCost,
                         originalGrnReference = request.OriginalGrnReference,
                         reason = request.Reason,
                         message = "RTS constructed in memory only. No Sage transaction was created."
@@ -116,32 +94,7 @@ namespace SDK_Test
                         });
                     }
 
-                    var transactionDate = request.TransactionDate ?? DateTime.Today;
-                    var supplier = new Supplier(request.SupplierCode.Trim());
-                    var returnToSupplier = new ReturnToSupplier
-                    {
-                        Supplier = supplier,
-                        InvoiceDate = transactionDate,
-                        OrderDate = transactionDate,
-                        DueDate = transactionDate,
-                        DeliveryDate = transactionDate,
-                        Description = BuildDescription(request),
-                        ExternalOrderNo = Trim(request.ReturnReference, 50),
-                        MessageLine1 = BuildInvoiceReference(request),
-                        MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
-                        MessageLine3 = BuildOrderAndReason(request)
-                    };
-
-                    foreach (var line in request.Lines)
-                    {
-                        var item = new InventoryItem(line.ItemCode.Trim().ToUpperInvariant());
-                        var warehouse = new Warehouse(line.WarehouseCode.Trim().ToUpperInvariant());
-                        var detail = returnToSupplier.Detail.Add(item, warehouse.Code, (double)line.Quantity, (double)line.UnitCost);
-                        detail.Warehouse = warehouse;
-                        detail.Quantity = (double)line.Quantity;
-                        detail.ToProcess = (double)line.Quantity;
-                        detail.UnitCostPrice = (double)line.UnitCost;
-                    }
+                    var returnToSupplier = PrepareReturnToSupplierWithReconnect(request);
 
                     returnToSupplier.Process();
                     // Evolution may not populate the in-memory invoice number for an RTS.
@@ -179,6 +132,53 @@ namespace SDK_Test
             if (string.IsNullOrWhiteSpace(request.OriginalGrnReference)) return "OriginalGrnReference is required.";
             if (string.IsNullOrWhiteSpace(request.Reason)) return "Reason is required.";
             return null;
+        }
+
+        private static ReturnToSupplier PrepareReturnToSupplierWithReconnect(ReturnToSupplierValidationRequest request)
+        {
+            try
+            {
+                return CreateReturnToSupplier(request);
+            }
+            catch (EvolutionException ex) when (SdkSession.IsRecoverableConnectionError(ex))
+            {
+                // Constructing an RTS only reads Sage master data. If Evolution has
+                // lost its static connection, reconnect once before any document is
+                // processed. Posting itself is intentionally never retried here.
+                SdkSession.Reconnect();
+                return CreateReturnToSupplier(request);
+            }
+        }
+
+        private static ReturnToSupplier CreateReturnToSupplier(ReturnToSupplierValidationRequest request)
+        {
+            var transactionDate = request.TransactionDate ?? DateTime.Today;
+            var returnToSupplier = new ReturnToSupplier
+            {
+                Supplier = new Supplier(request.SupplierCode.Trim()),
+                InvoiceDate = transactionDate,
+                OrderDate = transactionDate,
+                DueDate = transactionDate,
+                DeliveryDate = transactionDate,
+                Description = BuildDescription(request),
+                ExternalOrderNo = Trim(request.ReturnReference, 50),
+                MessageLine1 = BuildInvoiceReference(request),
+                MessageLine2 = Trim(request.OriginalSageGrvNumber, 50),
+                MessageLine3 = BuildOrderAndReason(request)
+            };
+
+            foreach (var line in request.Lines)
+            {
+                var item = new InventoryItem(line.ItemCode.Trim().ToUpperInvariant());
+                var warehouse = new Warehouse(line.WarehouseCode.Trim().ToUpperInvariant());
+                var detail = returnToSupplier.Detail.Add(item, warehouse.Code, (double)line.Quantity, (double)line.UnitCost);
+                detail.Warehouse = warehouse;
+                detail.Quantity = (double)line.Quantity;
+                detail.ToProcess = (double)line.Quantity;
+                detail.UnitCostPrice = (double)line.UnitCost;
+            }
+
+            return returnToSupplier;
         }
 
         // ExtOrderNum is stamped with the unique PlantControl RTS reference.
