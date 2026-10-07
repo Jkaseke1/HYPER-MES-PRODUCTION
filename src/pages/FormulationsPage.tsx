@@ -200,13 +200,27 @@ export default function FormulationsPage() {
     
     // Fetch ingredient counts for each formulation
     if (data && data.length > 0) {
-      const { data: ingredientData } = await supabase
-        .from('formulation_ingredients')
-        .select('formulation_id, quantity, is_active');
+      // PostgREST returns at most 1,000 rows by default. A live Sage BOM import
+      // can exceed that easily, so aggregate every page before showing a formula
+      // as having or lacking ingredients.
+      const ingredientData: Array<{ formulation_id: string; quantity: number; is_active: boolean }> = [];
+      const pageSize = 1000;
+      for (let start = 0; ; start += pageSize) {
+        const { data: page, error } = await supabase
+          .from('formulation_ingredients')
+          .select('formulation_id, quantity, is_active')
+          .range(start, start + pageSize - 1);
+        if (error) {
+          console.error('Failed to load formulation ingredients:', error);
+          break;
+        }
+        ingredientData.push(...(page || []));
+        if (!page || page.length < pageSize) break;
+      }
       
       const counts: Record<string, number> = {};
       const totals: Record<string, number> = {};
-      ingredientData?.forEach(ing => {
+      ingredientData.forEach(ing => {
         counts[ing.formulation_id] = (counts[ing.formulation_id] || 0) + 1;
         if (ing.is_active) totals[ing.formulation_id] = (totals[ing.formulation_id] || 0) + (Number(ing.quantity) || 0);
       });
