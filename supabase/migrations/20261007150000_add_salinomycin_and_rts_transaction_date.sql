@@ -1,6 +1,6 @@
--- Add an MES-selectable weighbridge product. Sage code is intentionally NULL
--- until Finance/IT confirms the exact live Sage stock code, so it cannot be
--- accidentally included in a Sage post or stock sync under an invented code.
+-- Add the Sage-verified Sodium Salinomycin stock master to the MES
+-- weighbridge product list. Sage stock code SOD0001 was verified in the
+-- live Hyperfeeds 2024 StkItem master on 2026-10-07.
 INSERT INTO public.raw_materials (
   name, code, sage_code, category, unit, current_stock, reorder_level,
   warehouse_id, description, is_active
@@ -8,13 +8,13 @@ INSERT INTO public.raw_materials (
 SELECT
   'Salinomycin',
   'SALINOMYCIN',
-  NULL,
+  'SOD0001',
   'additive',
   'kg',
   0,
   0,
   w.id,
-  'MES weighbridge product. Sage stock code pending confirmed master-data mapping.',
+  'Sage item SOD0001: Sodium Salinomycin.',
   true
 FROM public.warehouses w
 WHERE upper(w.code) = 'RM'
@@ -22,6 +22,7 @@ WHERE upper(w.code) = 'RM'
 LIMIT 1
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
+    sage_code = EXCLUDED.sage_code,
     category = EXCLUDED.category,
     unit = EXCLUDED.unit,
     warehouse_id = COALESCE(public.raw_materials.warehouse_id, EXCLUDED.warehouse_id),
