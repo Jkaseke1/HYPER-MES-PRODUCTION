@@ -30,7 +30,7 @@ function postJson(urlString, body) {
 
 async function handleReturnToSupplier(event) {
   const { data: rts, error } = await supabase.from('return_to_supplier_requests').select(`
-    id, rts_number, original_grn_id, original_grn_number, supplier_id, warehouse_id, reason, status,
+    id, rts_number, original_grn_id, original_grn_number, supplier_id, warehouse_id, reason, status, sage_transaction_date,
     suppliers (sage_code, code), warehouses (code),
     return_to_supplier_items (quantity, unit_cost, batch_number, raw_materials (sage_code, code))
   `).eq('id', event.reference_id).single();
@@ -51,7 +51,7 @@ async function handleReturnToSupplier(event) {
 
   const { data: originalGrn } = await supabase
     .from('goods_received_notes')
-    .select('supplier_invoice_no, supplier_order_no')
+    .select('supplier_invoice_no, supplier_order_no, received_date')
     .eq('id', rts.original_grn_id)
     .maybeSingle();
 
@@ -63,7 +63,9 @@ async function handleReturnToSupplier(event) {
     supplierInvoiceNo: originalGrn?.supplier_invoice_no || '',
     supplierOrderNo: originalGrn?.supplier_order_no || '',
     reason: rts.reason,
-    transactionDate: new Date().toISOString(),
+    // Finance chooses this when creating the RTS. The original GRV date is a
+    // safe fallback for RTS records created before the date field existed.
+    transactionDate: rts.sage_transaction_date || originalGrn?.received_date || new Date().toISOString().slice(0, 10),
     lines: (rts.return_to_supplier_items || []).map((line) => ({
       itemCode: line.raw_materials?.sage_code || line.raw_materials?.code,
       warehouseCode: rts.warehouses?.code || 'RM',
