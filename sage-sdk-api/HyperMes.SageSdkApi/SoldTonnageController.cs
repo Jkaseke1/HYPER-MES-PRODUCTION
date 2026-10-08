@@ -43,7 +43,7 @@ namespace SDK_Test
                   AND TransactionType IN ('Branch POS', 'HQ Invoiced')
                 ORDER BY InvDate DESC, WarehouseCode, ReportingCategory;";
             List<SoldTonnageEntry> entries = new List<SoldTonnageEntry>();
-            using (SqlConnection connection = new SqlConnection(GetReportingConnectionString()))
+            using (SqlConnection connection = new SqlConnection(GetReportingConnectionString().ConnectionString))
             using (SqlCommand command = new SqlCommand(sql, connection))
             {
                 command.Parameters.Add("@fromDate", SqlDbType.Date).Value = from.Date;
