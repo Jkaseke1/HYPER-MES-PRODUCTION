@@ -10,23 +10,20 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  AlertOctagon,
-  ArrowUpRight,
+  AlertCircle,
+  Building2,
+  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
-  FileText,
   Filter,
-  Landmark,
-  Layers,
-  MapPin,
   Package,
   Printer,
   RefreshCw,
   Search,
-  ShieldCheck,
   Sparkles,
+  Store,
   TrendingUp,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -53,7 +50,7 @@ type CurrencyMode = 'USD' | 'LOCAL';
 type Summary = { label: string; tonnes: number; value: number; rows: number };
 
 const FETCH_SIZE = 1000;
-const DETAIL_SIZE = 30;
+const DETAIL_SIZE = 10;
 const SALE_COLUMNS =
   'id,invoice_date,warehouse_code,warehouse_name,reporting_category,category,sub_category,transaction_type,total_tonnes,total_sales_amount,line_count,imported_at';
 
@@ -104,7 +101,6 @@ export default function SoldTonnagePage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [explorerMode, setExplorerMode] = useState<'branches' | 'categories'>('branches');
 
   const load = async () => {
     setLoading(true);
@@ -231,7 +227,6 @@ export default function SoldTonnagePage() {
     const channels = new Map<string, Summary>();
     const categories = new Map<string, Summary>();
     const branches = new Map<string, Summary>();
-    const mix = new Map<string, Map<string, number>>();
     const trend = new Map<string, { sort: string; label: string; tonnes: number; value: number }>();
     let totalTonnes = 0;
     let totalValue = 0;
@@ -260,10 +255,6 @@ export default function SoldTonnagePage() {
       add(categories, category, rowTonnes, rowValue);
       add(branches, branch, rowTonnes, rowValue);
 
-      const branchMix = mix.get(category) || new Map<string, number>();
-      branchMix.set(branch, (branchMix.get(branch) || 0) + rowTonnes);
-      mix.set(category, branchMix);
-
       const bucket = monthly ? row.invoice_date.slice(0, 7) : row.invoice_date;
       const point = trend.get(bucket) || {
         sort: bucket,
@@ -276,9 +267,6 @@ export default function SoldTonnagePage() {
       trend.set(bucket, point);
     });
 
-    const categoryList = [...categories.values()].sort((a, b) => b.tonnes - a.tonnes);
-    const branchList = [...branches.values()].sort((a, b) => b.tonnes - a.tonnes);
-
     return {
       totalTonnes,
       totalValue,
@@ -286,37 +274,22 @@ export default function SoldTonnagePage() {
       reversalValue,
       latestImport,
       channels: [...channels.values()].sort((a, b) => b.tonnes - a.tonnes),
-      categories: categoryList,
-      branches: branchList,
-      mix,
+      categories: [...categories.values()].sort((a, b) => b.tonnes - a.tonnes),
+      branches: [...branches.values()].sort((a, b) => b.tonnes - a.tonnes),
       trend: [...trend.values()].sort((a, b) => a.sort.localeCompare(b.sort)),
     };
   }, [period, visible]);
 
   const years = [...new Set(rows.map((row) => row.invoice_date.slice(0, 4)))].sort().reverse();
-  const categoryCards = report.categories.slice(0, 8).map((category) => ({
-    ...category,
-    branches: [...(report.mix.get(category.label) || new Map<string, number>()).entries()]
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3),
-  }));
-
   const pageCount = Math.max(1, Math.ceil(visible.length / DETAIL_SIZE));
   const details = visible.slice(detailPage * DETAIL_SIZE, (detailPage + 1) * DETAIL_SIZE);
-  const latestImport = report.latestImport ? new Date(report.latestImport).toLocaleString() : 'Not yet imported';
+  const latestImport = report.latestImport ? new Date(report.latestImport).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Not yet imported';
   const maxBranch = Math.max(...report.branches.map((item) => Math.abs(item.tonnes)), 1);
-  const maxCategory = Math.max(...report.categories.map((item) => Math.abs(item.tonnes)), 1);
 
-  // Financial & Commercial KPI calculations
+  // Financial Metrics
   const avgRealizedPrice = report.totalTonnes > 0 ? report.totalValue / report.totalTonnes : 0;
-  const estMarginPercentage = 23.5; // Benchmark standard gross margin spread for manufactured feeds
-  const estMarginValue = report.totalValue * (estMarginPercentage / 100);
-  const estMarginPerTon = report.totalTonnes > 0 ? estMarginValue / report.totalTonnes : 0;
   const reversalPct = report.totalValue > 0 ? (report.reversalValue / report.totalValue) * 100 : 0;
 
-  const explorerSummary = explorerMode === 'branches' ? report.branches : report.categories;
-
-  // Format currency based on toggle
   const formatMoney = (val: number) => {
     if (currency === 'LOCAL') {
       return `ZWG ${money.format(val * 25)}`;
@@ -325,44 +298,39 @@ export default function SoldTonnagePage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-[#0c1222] text-slate-100 p-4 md:p-6 lg:p-8 font-sans">
-      <div className="mx-auto max-w-[1600px] space-y-6">
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 text-slate-800 p-4 md:p-6 lg:p-7 font-sans">
+      <div className="mx-auto max-w-[1550px] space-y-5">
         
-        {/* TOP EXECUTIVE COMMAND HEADER */}
-        <header className="rounded-2xl border border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 p-6 shadow-2xl">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 font-bold text-slate-950 shadow-lg shadow-teal-500/20">
-                <Landmark className="h-6 w-6 text-slate-950" />
+        {/* HYPERFEEDS EXECUTIVE BANNER (Company Navy & Orange) */}
+        <header className="rounded-xl border border-[#0d1640] bg-[#0c1543] p-5 md:p-6 text-white shadow-md relative overflow-hidden">
+          {/* Subtle Orange Accent Arc matching logo */}
+          <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full border-4 border-[#f26e22]/20 pointer-events-none" />
+          <div className="absolute right-10 bottom-0 h-1.5 w-32 bg-[#f26e22] rounded-full" />
+
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative z-10">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <span className="rounded bg-[#f26e22] px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider text-white shadow-sm">
+                  Hyperfeeds
+                </span>
+                <span className="text-xs text-orange-200/90 font-medium tracking-wide">
+                  Animal Nutrition &bull; Sage 300 Sales Intelligence
+                </span>
+                <span className="text-xs text-slate-400">| Synced: {latestImport}</span>
               </div>
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <span className="rounded bg-teal-500/10 px-2 py-0.5 text-xs font-semibold tracking-wide text-teal-400 border border-teal-500/20 uppercase">
-                    Sage 300 / Power BI Live View
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    SDK Feed Synchronized
-                  </span>
-                  <span className="text-xs text-slate-400">| Last synced: {latestImport}</span>
-                </div>
-                <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-white lg:text-3xl">
-                  Sold Tonnage & Commercial Performance
-                </h1>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Strategic sales throughput, revenue realization, and depot channel analytics.
-                </p>
-              </div>
+              <h1 className="mt-1.5 text-2xl font-black tracking-tight text-white lg:text-3xl">
+                Sold Tonnage & Commercial Performance
+              </h1>
             </div>
 
-            {/* ACTION & CURRENCY CONTROLS */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 p-1 text-xs">
+            {/* ACTION CONTROLS */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center rounded-lg bg-[#070d2b] p-1 border border-white/10 text-xs">
                 <button
                   type="button"
                   onClick={() => setCurrency('USD')}
-                  className={`rounded-md px-3 py-1.5 font-bold transition ${
-                    currency === 'USD' ? 'bg-teal-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  className={`rounded px-3 py-1 font-bold transition ${
+                    currency === 'USD' ? 'bg-[#f26e22] text-white shadow' : 'text-slate-300 hover:text-white'
                   }`}
                 >
                   USD ($)
@@ -370,8 +338,8 @@ export default function SoldTonnagePage() {
                 <button
                   type="button"
                   onClick={() => setCurrency('LOCAL')}
-                  className={`rounded-md px-3 py-1.5 font-bold transition ${
-                    currency === 'LOCAL' ? 'bg-teal-600 text-white shadow' : 'text-slate-400 hover:text-white'
+                  className={`rounded px-3 py-1 font-bold transition ${
+                    currency === 'LOCAL' ? 'bg-[#f26e22] text-white shadow' : 'text-slate-300 hover:text-white'
                   }`}
                 >
                   ZWG / Local
@@ -381,54 +349,49 @@ export default function SoldTonnagePage() {
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/80 px-4 py-2 text-xs font-bold text-slate-200 transition hover:bg-slate-700 hover:text-white"
+                className="flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition"
               >
-                <Printer className="h-4 w-4 text-teal-400" />
-                Boardroom PDF
+                <Printer className="h-3.5 w-3.5 text-[#f26e22]" />
+                Print / PDF
               </button>
 
               <button
                 type="button"
-                title="Refresh Sage Reporting Data"
                 onClick={() => void load()}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-teal-500/20 hover:bg-teal-500 transition disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-[#f26e22] hover:bg-[#e05d12] px-3.5 py-1.5 text-xs font-bold text-white shadow-md transition disabled:opacity-50"
               >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                {loading ? 'Refreshing...' : 'Live Sync'}
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Syncing...' : 'Refresh'}
               </button>
             </div>
           </div>
         </header>
 
         {loadError && (
-          <p
-            role="alert"
-            className="border-l-4 border-amber-500 bg-amber-950/40 p-4 text-sm text-amber-200 rounded-r-lg border border-amber-900/50"
-          >
-            {rows.length
-              ? 'Refresh failed. Showing the last complete dataset; totals may be out of date.'
-              : 'Sales reporting could not be loaded. Use refresh to try again.'}
-          </p>
+          <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>Could not refresh live data. Showing cached totals. Click Refresh to retry.</span>
+          </div>
         )}
 
-        {/* TIME HORIZON & CHANNEL SLICER BAR */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 backdrop-blur-md">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            {/* Period Slicer */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mr-2 flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-teal-400" /> Horizon:
+        {/* TIME & CHANNEL FILTER BAR (Clean Light Slate) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between text-xs">
+            {/* Horizon */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-bold text-slate-500 uppercase tracking-wide mr-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-[#0c1543]" /> Period:
               </span>
               {(['day', 'week', 'month', 'year', 'all', 'custom'] as Period[]).map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setPeriod(item)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition border ${
+                  className={`rounded-md px-3 py-1 font-semibold transition ${
                     period === item
-                      ? 'border-teal-500 bg-teal-600 text-white shadow-sm'
-                      : 'border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-600 hover:text-white'
+                      ? 'bg-[#0c1543] text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   {labels[item]}
@@ -436,25 +399,23 @@ export default function SoldTonnagePage() {
               ))}
             </div>
 
-            {/* Channel Slicer */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1 rounded-lg bg-slate-950 border border-slate-800 p-1">
-                <span className="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wide">Channel:</span>
-                {(['all', 'Branch POS', 'HQ Invoiced'] as Channel[]).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setChannel(item)}
-                    className={`rounded px-3 py-1 text-xs font-semibold transition ${
-                      channel === item
-                        ? 'bg-teal-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {item === 'all' ? 'All Channels' : item}
-                  </button>
-                ))}
-              </div>
+            {/* Channels */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-slate-500 uppercase tracking-wide mr-1">Channel:</span>
+              {(['all', 'Branch POS', 'HQ Invoiced'] as Channel[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setChannel(item)}
+                  className={`rounded-md px-3 py-1 font-semibold transition border ${
+                    channel === item
+                      ? 'border-[#f26e22] bg-[#f26e22] text-white shadow-sm'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {item === 'all' ? 'All Channels' : item}
+                </button>
+              ))}
 
               <PeriodPicker
                 period={period}
@@ -476,229 +437,154 @@ export default function SoldTonnagePage() {
               />
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* 5 EXECUTIVE VALUE LEVERS */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {/* 1. Net Tonnes */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-850 p-5 shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Volume Sold</span>
-              <span className="rounded bg-teal-500/10 px-2 py-0.5 text-xs font-bold text-teal-300 border border-teal-500/20">
-                Live Tonnes
+        {/* 4 CORE EXECUTIVE KPI CARDS */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* 1. Volume Sold */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#f26e22]/50 transition">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold uppercase tracking-wider text-slate-500">Net Volume Sold</span>
+              <span className="rounded bg-orange-50 px-2 py-0.5 font-bold text-[#f26e22] border border-orange-200">
+                Tonnes
               </span>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-white font-mono">
+            <div className="mt-2.5 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#0c1543] font-mono">
                 {rows.length ? tonnes.format(report.totalTonnes) : loading ? '...' : '0'}
               </span>
-              <span className="text-sm font-semibold text-teal-400">Tonnes</span>
+              <span className="text-xs font-bold text-slate-500">t</span>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
-              <span>Coverage</span>
-              <span className="font-bold text-slate-200">{visible.length.toLocaleString()} sales rows</span>
-            </div>
+            <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+              Coverage: <strong className="text-slate-700">{visible.length.toLocaleString()}</strong> sales rows
+            </p>
           </div>
 
           {/* 2. Net Sales Revenue */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-850 p-5 shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Net Sales Value</span>
-              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400 border border-emerald-500/20">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#0c1543]/50 transition">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold uppercase tracking-wider text-slate-500">Net Sales Value</span>
+              <span className="rounded bg-blue-50 px-2 py-0.5 font-bold text-[#0c1543] border border-blue-200">
                 Revenue
               </span>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-white font-mono">
+            <div className="mt-2.5">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#0c1543] font-mono">
                 {rows.length ? formatMoney(report.totalValue) : loading ? '...' : '$0.00'}
               </span>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
-              <span>Currency</span>
-              <span className="font-bold text-emerald-400">{currency}</span>
-            </div>
+            <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+              Billed in <strong className="text-slate-700">{currency}</strong>
+            </p>
           </div>
 
-          {/* 3. Realized Price / Yield per Ton */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-850 p-5 shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Realized Price / t</span>
-              <span className="rounded bg-teal-500/10 px-2 py-0.5 text-xs font-bold text-teal-300 border border-teal-500/20">
-                Commercial Yield
+          {/* 3. Realized Yield / Price per Ton */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#f26e22]/50 transition">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold uppercase tracking-wider text-slate-500">Average Price / Ton</span>
+              <span className="rounded bg-orange-50 px-2 py-0.5 font-bold text-[#f26e22] border border-orange-200">
+                Yield
               </span>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-white font-mono">
+            <div className="mt-2.5 flex items-baseline gap-1.5">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#f26e22] font-mono">
                 {rows.length && report.totalTonnes > 0 ? formatMoney(avgRealizedPrice) : '-'}
               </span>
-              <span className="text-xs font-semibold text-slate-400">/ Ton</span>
+              <span className="text-xs font-bold text-slate-500">/ Ton</span>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
-              <span>Pass-through</span>
-              <span className="font-bold text-teal-400">Active</span>
-            </div>
+            <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+              Realized revenue realization per metric ton
+            </p>
           </div>
 
-          {/* 4. Est Gross Margin Contribution */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-850 p-5 shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Est Gross Margin</span>
-              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400 border border-emerald-500/20">
-                {estMarginPercentage}% Est
-              </span>
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-white font-mono">
-                {rows.length ? formatMoney(estMarginValue) : '-'}
-              </span>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
-              <span>Spread per Ton</span>
-              <span className="font-bold text-emerald-400 font-mono">
-                {report.totalTonnes > 0 ? formatMoney(estMarginPerTon) : '-'} / t
-              </span>
-            </div>
-          </div>
-
-          {/* 5. Commercial Leakage / Credits */}
-          <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-850 p-5 shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Credits & Reversals</span>
+          {/* 4. Commercial Leakage / Reversals */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300 transition">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold uppercase tracking-wider text-slate-500">Credits / Reversals</span>
               <span
-                className={`rounded px-2 py-0.5 text-xs font-bold border ${
-                  reversalPct < 2
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                className={`rounded px-2 py-0.5 font-bold border ${
+                  reversalPct < 2.5
+                    ? 'bg-slate-100 text-slate-700 border-slate-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
                 }`}
               >
                 {report.reversalsCount} Rows
               </span>
             </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tracking-tight text-white font-mono">
+            <div className="mt-2.5 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-slate-800 font-mono">
                 {formatMoney(report.reversalValue)}
               </span>
-              <span className="text-xs font-semibold text-slate-400">({reversalPct.toFixed(2)}%)</span>
+              <span className="text-xs font-semibold text-slate-500">({reversalPct.toFixed(2)}%)</span>
             </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
-              <span>Tolerance Cap: 2.0%</span>
-              <span className="font-bold text-emerald-400">
-                {reversalPct < 2 ? 'Controlled' : 'Attention Needed'}
-              </span>
-            </div>
+            <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+              Status:{' '}
+              <strong className={reversalPct < 2.5 ? 'text-emerald-700' : 'text-rose-700'}>
+                {reversalPct < 2.5 ? 'Normal Tolerance (<2.5%)' : 'Attention Needed'}
+              </strong>
+            </p>
           </div>
         </section>
 
-        {/* AI EXECUTIVE SYNTHESIS BANNER */}
-        <section className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 p-5 shadow-xl">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="rounded-xl bg-teal-500/20 p-2.5 text-teal-400 border border-teal-500/40">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  Executive Commercial Synthesis
-                  <span className="rounded-full bg-teal-500/20 px-2 py-0.5 text-[10px] font-bold text-teal-300">
-                    Calculated from Sage Live View
-                  </span>
-                </h3>
-                <p className="mt-1 text-xs text-slate-300 leading-relaxed">
-                  • <strong class="text-white">Top Volume Driver:</strong>{' '}
-                  <span className="text-teal-300 font-semibold">
-                    {report.categories[0]?.label || 'Pending data'}
-                  </span>{' '}
-                  represents{' '}
-                  <span className="text-emerald-400 font-bold">
-                    {report.totalTonnes > 0 && report.categories[0]
-                      ? `${((report.categories[0].tonnes / report.totalTonnes) * 100).toFixed(1)}%`
-                      : '0%'}
-                  </span>{' '}
-                  of net volume ({tonnes.format(report.categories[0]?.tonnes || 0)} t).
-                  <br />
-                  • <strong class="text-white">Depot Leadership:</strong>{' '}
-                  <span className="text-teal-300 font-semibold">
-                    {report.branches[0]?.label || 'HQ'}
-                  </span>{' '}
-                  leads delivery throughput with{' '}
-                  <span className="text-white font-bold">{tonnes.format(report.branches[0]?.tonnes || 0)} t</span>.
-                  <br />
-                  • <strong class="text-white">Pricing Power:</strong> Average realized price is{' '}
-                  <span className="text-emerald-400 font-bold">{formatMoney(avgRealizedPrice)}/t</span> with{' '}
-                  <span className="text-slate-300">
-                    {report.channels.map((c) => `${c.label} (${tonnes.format(c.tonnes)}t)`).join(', ') || 'all channels active'}.
-                  </span>
-                </p>
-              </div>
+        {/* COMPACT AI EXECUTIVE SUMMARY BANNER */}
+        <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-[#f26e22] p-2 text-white shrink-0">
+              <Sparkles className="h-4 w-4" />
             </div>
-
-            <div className="flex items-center gap-2 self-end lg:self-center">
-              <button
-                type="button"
-                onClick={() => {
-                  const csv = [
-                    'Date,Branch,Category,Channel,Tonnes,SalesValue',
-                    ...visible.map(
-                      (r) =>
-                        `"${r.invoice_date}","${r.warehouse_code}","${r.reporting_category || r.category}","${
-                          r.transaction_type
-                        }",${r.total_tonnes},${r.total_sales_amount}`
-                    ),
-                  ].join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `Sold_Tonnage_${range.from}_to_${range.to}.csv`;
-                  a.click();
-                }}
-                className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
-              >
-                <Download className="w-3.5 h-3.5 text-teal-400" /> Export CSV
-              </button>
+            <div className="text-xs leading-relaxed text-slate-700">
+              <p className="font-bold text-[#0c1543]">
+                Executive Takeaways &bull; {report.categories.length} Categories &bull; {report.branches.length} Depots
+              </p>
+              <p className="mt-1">
+                Top volume line is <strong className="text-[#0c1543]">{report.categories[0]?.label || '-'}</strong> at{' '}
+                <strong className="text-[#f26e22]">{tonnes.format(report.categories[0]?.tonnes || 0)} t</strong> (
+                {report.totalTonnes > 0 && report.categories[0]
+                  ? `${((report.categories[0].tonnes / report.totalTonnes) * 100).toFixed(1)}%`
+                  : '0%'}
+                ). Leading depot throughput is <strong className="text-[#0c1543]">{report.branches[0]?.label || '-'}</strong> with{' '}
+                <strong className="text-[#0c1543]">{tonnes.format(report.branches[0]?.tonnes || 0)} t</strong>.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* VISUAL CHARTS GRID */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Dual Axis Volume & Value Trend */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 lg:col-span-8 flex flex-col justify-between shadow-lg">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        {/* 2-COLUMN SECTION: TRAJECTORY CHART & CHANNEL SPLIT */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          {/* Chart (8 cols) */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-8 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-teal-400" />
-                  Volume & Value Trajectory
+                <h2 className="text-base font-bold text-[#0c1543] flex items-center gap-1.5">
+                  <TrendingUp className="w-4 h-4 text-[#f26e22]" /> Sales Trend Trajectory
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {period === 'all' || period === 'year'
-                    ? 'Monthly net tonnes and gross revenue progression.'
-                    : 'Daily volume and gross value breakdown.'}
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Monthly sold tonnes (Bars) vs sales revenue (Line).
                 </p>
               </div>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <span className="h-2.5 w-2.5 rounded-full bg-teal-500"></span> Sold Tonnes
+              <div className="flex items-center gap-3 text-xs font-semibold">
+                <span className="flex items-center gap-1 text-slate-700">
+                  <span className="h-2.5 w-2.5 rounded bg-[#0c1543]"></span> Sold Tonnes
                 </span>
-                <span className="flex items-center gap-1.5 text-slate-300">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-500"></span> Sales Value
+                <span className="flex items-center gap-1 text-slate-700">
+                  <span className="h-2 w-2 rounded-full bg-[#f26e22]"></span> Sales Value
                 </span>
               </div>
             </div>
 
-            <div className="h-72 w-full">
+            <div className="h-64 w-full">
               {report.trend.length ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={report.trend} margin={{ top: 15, right: 10, left: -10, bottom: 5 }}>
-                    <CartesianGrid vertical={false} stroke="#1e293b" strokeDasharray="3 3" />
+                  <BarChart data={report.trend} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} stroke="#64748b" />
                     <YAxis
                       yAxisId="left"
                       tickLine={false}
                       axisLine={false}
                       fontSize={11}
-                      stroke="#14b8a6"
-                      tickFormatter={(v) => `${tonnes.format(Number(v || 0))} t`}
+                      stroke="#0c1543"
+                      tickFormatter={(v) => `${tonnes.format(Number(v || 0))}t`}
                     />
                     <YAxis
                       yAxisId="right"
@@ -706,25 +592,25 @@ export default function SoldTonnagePage() {
                       tickLine={false}
                       axisLine={false}
                       fontSize={11}
-                      stroke="#60a5fa"
+                      stroke="#f26e22"
                       tickFormatter={(v) => `$${(Number(v || 0) / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '0.75rem' }}
+                      contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '0.5rem', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                       formatter={(val: any, name: any) => {
                         if (name === 'Volume') return [`${tonnes.format(Number(val))} t`, 'Volume'];
                         return [formatMoney(Number(val)), 'Sales Value'];
                       }}
                     />
-                    <Bar yAxisId="left" dataKey="tonnes" name="Volume" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="tonnes" name="Volume" fill="#0c1543" radius={[4, 4, 0, 0]} />
                     <Line
                       yAxisId="right"
                       type="monotone"
                       dataKey="value"
                       name="Value"
-                      stroke="#3b82f6"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: '#3b82f6' }}
+                      stroke="#f26e22"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: '#f26e22' }}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -732,67 +618,38 @@ export default function SoldTonnagePage() {
                 <Empty loading={loading} />
               )}
             </div>
+          </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-3 border-t border-slate-800 pt-3 text-center text-xs">
-              <div>
-                <span className="text-slate-400">Total Data Points</span>
-                <p className="font-mono font-bold text-white text-sm mt-0.5">{report.trend.length} Intervals</p>
-              </div>
-              <div>
-                <span className="text-slate-400">Leading Category</span>
-                <p className="font-mono font-bold text-teal-400 text-sm mt-0.5 truncate">
-                  {report.categories[0]?.label || '-'}
-                </p>
-              </div>
-              <div>
-                <span className="text-slate-400">Leading Branch</span>
-                <p className="font-mono font-bold text-emerald-400 text-sm mt-0.5">
-                  {report.branches[0]?.label || '-'}
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* Channel Share & Yield Card */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 lg:col-span-4 flex flex-col justify-between shadow-lg">
+          {/* Channel Summary (4 cols) */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-4 shadow-sm flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-emerald-400" />
-                  Channel Distribution
-                </h2>
-                <span className="text-[11px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                  {channel === 'all' ? 'All Channels' : channel}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mb-4">Volume mix and realized pricing per distribution route.</p>
+              <h2 className="text-base font-bold text-[#0c1543] mb-1">Channel Distribution</h2>
+              <p className="text-xs text-slate-500 mb-4">Volume split and average realized yield.</p>
 
-              <div className="space-y-3.5">
+              <div className="space-y-3">
                 {report.channels.map((ch, idx) => {
                   const share = report.totalTonnes > 0 ? (ch.tonnes / report.totalTonnes) * 100 : 0;
                   const chYield = ch.tonnes > 0 ? ch.value / ch.tonnes : 0;
                   return (
-                    <div key={ch.label} className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/60">
+                    <div key={ch.label} className="p-3 rounded-lg border border-slate-100 bg-slate-50/60">
                       <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2.5 w-2.5 rounded-full ${idx === 0 ? 'bg-teal-400' : 'bg-blue-400'}`}
-                          ></span>
-                          <span className="font-bold text-white">{ch.label}</span>
-                        </div>
-                        <span className="font-mono font-bold text-white">
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                          {idx === 0 ? <Building2 className="w-3.5 h-3.5 text-[#0c1543]" /> : <Store className="w-3.5 h-3.5 text-[#f26e22]" />}
+                          {ch.label}
+                        </span>
+                        <span className="font-mono font-bold text-slate-800">
                           {tonnes.format(ch.tonnes)} t ({share.toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="mt-2 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div className="mt-2 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
                         <div
-                          className={`h-full ${idx === 0 ? 'bg-teal-500' : 'bg-blue-500'} rounded-full`}
+                          className={`h-full ${idx === 0 ? 'bg-[#0c1543]' : 'bg-[#f26e22]'} rounded-full`}
                           style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
-                        ></div>
+                        />
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
                         <span>Revenue: {formatMoney(ch.value)}</span>
-                        <span className="font-semibold text-teal-300 font-mono">Yield: {formatMoney(chYield)}/t</span>
+                        <span className="font-bold text-[#f26e22]">Yield: {formatMoney(chYield)}/t</span>
                       </div>
                     </div>
                   );
@@ -801,67 +658,60 @@ export default function SoldTonnagePage() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-              <span>Channel Reconciliation:</span>
-              <span className="font-bold text-emerald-400 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" /> 100% Balanced
-              </span>
-            </div>
-          </section>
+            <p className="mt-4 text-[11px] text-slate-400 border-t border-slate-100 pt-2 text-right">
+              Channel Reconciliation Balanced
+            </p>
+          </div>
         </div>
 
-        {/* PRODUCT CATEGORY & BRANCH LEAGUE TABLES */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Product Category Mix & Profitability */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 lg:col-span-7 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
+        {/* 2-COLUMN SECTION: TOP CATEGORIES & DEPOT LEADERBOARD */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+          {/* Top Product Categories (7 cols) */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-7 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Package className="w-4 h-4 text-teal-400" />
-                  Product Category Mix & Profitability Spread
+                <h2 className="text-base font-bold text-[#0c1543] flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-[#f26e22]" /> Product Categories
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Volume concentration, revenue yield ($/t), and mix share by manufactured line.
-                </p>
+                <p className="text-xs text-slate-500 mt-0.5">Top lines by volume and price yield.</p>
               </div>
-              <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-lg border border-teal-500/20">
-                {report.categories.length} Categories
+              <span className="text-xs font-semibold text-slate-500">
+                Top 8 of {report.categories.length}
               </span>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-slate-950/40">
-                    <th className="py-2.5 px-3">Product Category</th>
-                    <th className="py-2.5 px-3 text-right">Volume (t)</th>
-                    <th className="py-2.5 px-3 text-right">Sales Value</th>
-                    <th className="py-2.5 px-3 text-right">Yield ($/t)</th>
-                    <th className="py-2.5 px-3 text-center">Mix %</th>
+                  <tr className="border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500 bg-slate-50">
+                    <th className="py-2.5 px-3">Category</th>
+                    <th className="py-2.5 px-3 text-right">Tonnes</th>
+                    <th className="py-2.5 px-3 text-right">Value</th>
+                    <th className="py-2.5 px-3 text-right">Price/t</th>
+                    <th className="py-2.5 px-3 text-center">Share</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {report.categories.slice(0, 10).map((cat, index) => {
+                <tbody className="divide-y divide-slate-100">
+                  {report.categories.slice(0, 8).map((cat, i) => {
                     const mixPct = report.totalTonnes > 0 ? (cat.tonnes / report.totalTonnes) * 100 : 0;
                     const catYield = cat.tonnes > 0 ? cat.value / cat.tonnes : 0;
                     return (
-                      <tr key={cat.label} className="hover:bg-slate-800/40 transition">
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-white flex items-center gap-2">
-                            <span className="text-[10px] text-slate-500 font-mono">#{index + 1}</span>
-                            {cat.label}
-                          </div>
-                          <div className="text-[10px] text-slate-400">{cat.rows.toLocaleString()} reporting rows</div>
+                      <tr key={cat.label} className="hover:bg-slate-50 transition">
+                        <td className="py-2.5 px-3 font-semibold text-slate-800">
+                          <span className="text-slate-400 mr-1.5 font-normal">#{i + 1}</span>
+                          {cat.label}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
                           {tonnes.format(cat.tonnes)} t
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-200">{formatMoney(cat.value)}</td>
-                        <td className="py-3 px-3 text-right font-mono font-semibold text-teal-300">
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-700">
+                          {formatMoney(cat.value)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-[#f26e22]">
                           {cat.tonnes > 0 ? formatMoney(catYield) : '-'}
                         </td>
-                        <td className="py-3 px-3 text-center">
-                          <span className="bg-slate-800 px-2 py-0.5 rounded font-mono font-bold text-slate-200">
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
                             {mixPct.toFixed(1)}%
                           </span>
                         </td>
@@ -878,161 +728,144 @@ export default function SoldTonnagePage() {
                 </tbody>
               </table>
             </div>
-          </section>
-
-          {/* Depot & Branch Leaderboard */}
-          <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 lg:col-span-5 flex flex-col justify-between shadow-lg">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-teal-400" />
-                  Depot & Branch Quota League Table
-                </h2>
-                <span className="text-xs text-slate-400">{report.branches.length} Depots</span>
-              </div>
-              <p className="text-xs text-slate-400 mb-4">Ranked by net tonnage and realized revenue throughput.</p>
-
-              <div className="space-y-3.5">
-                {report.branches.slice(0, 7).map((br, index) => {
-                  const width = Math.min(100, (Math.abs(br.tonnes) / maxBranch) * 100);
-                  const brYield = br.tonnes > 0 ? br.value / br.tonnes : 0;
-                  return (
-                    <div key={br.label}>
-                      <div className="flex items-baseline justify-between text-xs">
-                        <span className="font-bold text-white flex items-center gap-1.5">
-                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-bold text-teal-300">
-                            {index + 1}
-                          </span>
-                          {br.label}
-                        </span>
-                        <div className="text-right">
-                          <span className="font-mono font-bold text-white">{tonnes.format(br.tonnes)} t</span>
-                        </div>
-                      </div>
-                      <div className="mt-1.5 h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${
-                            index === 0
-                              ? 'bg-gradient-to-r from-teal-500 to-emerald-400'
-                              : 'bg-teal-500'
-                          } rounded-full`}
-                          style={{ width: `${width}%` }}
-                        ></div>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Billed: {formatMoney(br.value)}</span>
-                        <span>Yield: {br.tonnes > 0 ? formatMoney(brYield) : '-'}/t</span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {!report.branches.length && <Empty loading={loading} />}
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span>Leading Warehouse:</span>
-              <span className="font-bold text-teal-300">{report.branches[0]?.label || 'None'}</span>
-            </div>
-          </section>
-        </div>
-
-        {/* SALES DATA EXPLORER & AUDIT TRAIL */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase text-teal-400">Audit & Drilldown</p>
-              <h2 className="mt-1 text-lg font-bold text-white">Sales Data Explorer</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Exact matching records from Sage 300 daily sales view.
-              </p>
-            </div>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <input
-                aria-label="Filter report by branch, category or channel"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Branch, category, or channel"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 md:w-80"
-              />
-            </div>
           </div>
 
+          {/* Depot Leaderboard (5 cols) */}
+          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-base font-bold text-[#0c1543]">Depot Throughput</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Warehouses ranked by volume.</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">{report.branches.length} Depots</span>
+            </div>
+
+            <div className="space-y-2.5">
+              {report.branches.slice(0, 6).map((br, i) => {
+                const width = Math.min(100, (Math.abs(br.tonnes) / maxBranch) * 100);
+                const brYield = br.tonnes > 0 ? br.value / br.tonnes : 0;
+                return (
+                  <div key={br.label} className="p-2 rounded border border-slate-100 bg-slate-50/50">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-800">
+                        <span className="text-slate-400 mr-1.5 font-normal">#{i + 1}</span>
+                        {br.label}
+                      </span>
+                      <span className="font-mono font-bold text-slate-900">{tonnes.format(br.tonnes)} t</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${i === 0 ? 'bg-[#f26e22]' : 'bg-[#0c1543]'} rounded-full`}
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Billed: {formatMoney(br.value)}</span>
+                      <span>Yield: {br.tonnes > 0 ? formatMoney(brYield) : '-'}/t</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {!report.branches.length && <Empty loading={loading} />}
+            </div>
+          </div>
+        </div>
+
+        {/* COLLAPSIBLE SALES DATA EXPLORER (Paginated, 10 per page, Compact) */}
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <button
             type="button"
-            aria-expanded={detailsOpen}
-            onClick={() => setDetailsOpen((open) => !open)}
-            className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-800/40 px-4 py-3 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition"
+            onClick={() => setDetailsOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between p-4 bg-slate-50/80 hover:bg-slate-100 transition text-left"
           >
-            <span>
-              {detailsOpen ? 'Hide transactional rows' : 'View transactional rows'}{' '}
-              <span className="ml-2 font-normal text-slate-400">
-                ({visible.length.toLocaleString()} matching rows)
-              </span>
-            </span>
-            <ChevronDown className={`h-4 w-4 transition ${detailsOpen ? 'rotate-180' : ''}`} />
+            <div>
+              <h2 className="text-sm font-bold text-[#0c1543] flex items-center gap-2">
+                Sales Transaction Ledger
+                <span className="text-xs font-normal text-slate-500">
+                  ({visible.length.toLocaleString()} matching records)
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Click to {detailsOpen ? 'collapse' : 'view compact transactions (10 per page)'}.
+              </p>
+            </div>
+            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {detailsOpen && (
-            <div className="mt-3">
-              <div className="overflow-x-auto rounded-lg border border-slate-800">
-                <table className="w-full min-w-[850px] text-xs">
-                  <thead className="bg-slate-950 text-left text-[11px] uppercase text-slate-400">
+            <div className="p-4 border-t border-slate-200 space-y-3">
+              {/* Filter bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search branch, product or channel..."
+                    className="w-full sm:w-72 rounded-lg border border-slate-300 py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-[#f26e22]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const csv = [
+                      'Date,Branch,Category,Channel,Tonnes,SalesValue',
+                      ...visible.map(
+                        (r) =>
+                          `"${r.invoice_date}","${r.warehouse_code}","${r.reporting_category || r.category}","${
+                            r.transaction_type
+                          }",${r.total_tonnes},${r.total_sales_amount}`
+                      ),
+                    ].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `Hyperfeeds_Sold_Tonnage_${range.from || 'all'}.csv`;
+                    a.click();
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#f26e22]" /> Export CSV
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-left text-[11px] uppercase font-bold text-slate-500">
                     <tr>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Branch / Warehouse</th>
-                      <th className="px-4 py-3">Product Group</th>
-                      <th className="px-4 py-3">Channel</th>
-                      <th className="px-4 py-3 text-right">Tonnes</th>
-                      <th className="px-4 py-3 text-right">Sales Value</th>
+                      <th className="px-3 py-2.5">Date</th>
+                      <th className="px-3 py-2.5">Branch</th>
+                      <th className="px-3 py-2.5">Category</th>
+                      <th className="px-3 py-2.5">Channel</th>
+                      <th className="px-3 py-2.5 text-right">Tonnes</th>
+                      <th className="px-3 py-2.5 text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
+                  <tbody className="divide-y divide-slate-100">
                     {details.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-800/40 transition">
-                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-slate-400">
-                          {row.invoice_date}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <p className="font-semibold text-white">{row.warehouse_code || 'HQ'}</p>
-                          <p className="text-[10px] text-slate-400">{row.warehouse_name}</p>
-                        </td>
-                        <td className="px-4 py-2.5 font-medium text-slate-200">
-                          {row.reporting_category || row.category}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                              row.transaction_type === 'HQ Invoiced'
-                                ? 'bg-teal-500/10 text-teal-300 border border-teal-500/20'
-                                : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
-                            }`}
-                          >
+                      <tr key={row.id} className="hover:bg-slate-50/80">
+                        <td className="px-3 py-2 font-mono text-slate-600">{row.invoice_date}</td>
+                        <td className="px-3 py-2 font-semibold text-slate-800">{row.warehouse_code || 'HQ'}</td>
+                        <td className="px-3 py-2 text-slate-700">{row.reporting_category || row.category}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${row.transaction_type === 'HQ Invoiced' ? 'bg-blue-50 text-[#0c1543]' : 'bg-orange-50 text-[#f26e22]'}`}>
                             {row.transaction_type}
                           </span>
                         </td>
-                        <td
-                          className={`px-4 py-2.5 text-right font-mono font-bold ${
-                            Number(row.total_tonnes) < 0 ? 'text-rose-400' : 'text-white'
-                          }`}
-                        >
+                        <td className={`px-3 py-2 text-right font-mono font-bold ${Number(row.total_tonnes) < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
                           {tonnes.format(Number(row.total_tonnes))} t
                         </td>
-                        <td
-                          className={`px-4 py-2.5 text-right font-mono font-bold ${
-                            Number(row.total_sales_amount) < 0 ? 'text-rose-400' : 'text-emerald-400'
-                          }`}
-                        >
+                        <td className={`px-3 py-2 text-right font-mono font-bold ${Number(row.total_sales_amount) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
                           {formatMoney(Number(row.total_sales_amount))}
                         </td>
                       </tr>
                     ))}
                     {!details.length && (
                       <tr>
-                        <td colSpan={6}>
-                          <Empty loading={loading} />
+                        <td colSpan={6} className="py-6 text-center text-slate-400">
+                          No transactions found.
                         </td>
                       </tr>
                     )}
@@ -1040,36 +873,28 @@ export default function SoldTonnagePage() {
                 </table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 px-2 py-3 text-xs text-slate-400">
-                <p>
-                  {visible.length
-                    ? `Showing ${detailPage * DETAIL_SIZE + 1}-${Math.min(
-                        (detailPage + 1) * DETAIL_SIZE,
-                        visible.length
-                      )} of ${visible.length.toLocaleString()} rows`
-                    : 'No matching rows'}
-                </p>
-                <div className="flex items-center gap-2">
+              {/* Pagination */}
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                <span>
+                  Showing {detailPage * DETAIL_SIZE + 1} - {Math.min((detailPage + 1) * DETAIL_SIZE, visible.length)} of {visible.length.toLocaleString()} rows
+                </span>
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    title="Previous detail page"
-                    onClick={() => setDetailPage((page) => Math.max(0, page - 1))}
+                    onClick={() => setDetailPage((p) => Math.max(0, p - 1))}
                     disabled={detailPage === 0}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-700 bg-slate-800 disabled:opacity-40"
+                    className="p-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-50"
                   >
-                    <ChevronLeft className="h-4 w-4 text-white" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
-                  <span className="min-w-20 text-center text-xs font-semibold text-white">
-                    Page {detailPage + 1} / {pageCount}
-                  </span>
+                  <span className="font-semibold text-slate-700">Page {detailPage + 1} / {pageCount}</span>
                   <button
                     type="button"
-                    title="Next detail page"
-                    onClick={() => setDetailPage((page) => Math.min(pageCount - 1, page + 1))}
+                    onClick={() => setDetailPage((p) => Math.min(pageCount - 1, p + 1))}
                     disabled={detailPage >= pageCount - 1}
-                    className="grid h-8 w-8 place-items-center rounded-lg border border-slate-700 bg-slate-800 disabled:opacity-40"
+                    className="p-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-50"
                   >
-                    <ChevronRight className="h-4 w-4 text-white" />
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>
               </div>
@@ -1099,102 +924,39 @@ function PeriodPicker(props: {
   toDate: string;
   setToDate: (value: string) => void;
 }) {
-  const common =
-    'rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500';
+  const common = 'rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700';
   if (props.period === 'day')
     return (
-      <Picker label="Select day">
-        <input
-          type="date"
-          value={props.day}
-          min={props.sourceStart}
-          max={props.sourceEnd}
-          onChange={(event) => props.setDay(event.target.value)}
-          className={common}
-        />
-      </Picker>
+      <label className="flex items-center gap-1 text-slate-500">
+        Day: <input type="date" value={props.day} min={props.sourceStart} max={props.sourceEnd} onChange={(e) => props.setDay(e.target.value)} className={common} />
+      </label>
     );
   if (props.period === 'week')
     return (
-      <Picker label="Week ending">
-        <input
-          type="date"
-          value={props.weekEnding}
-          min={props.sourceStart}
-          max={props.sourceEnd}
-          onChange={(event) => props.setWeekEnding(event.target.value)}
-          className={common}
-        />
-      </Picker>
+      <label className="flex items-center gap-1 text-slate-500">
+        Week End: <input type="date" value={props.weekEnding} min={props.sourceStart} max={props.sourceEnd} onChange={(e) => props.setWeekEnding(e.target.value)} className={common} />
+      </label>
     );
   if (props.period === 'month')
     return (
-      <Picker label="Select month">
-        <input
-          type="month"
-          value={props.month}
-          min={props.sourceStart.slice(0, 7)}
-          max={props.sourceEnd.slice(0, 7)}
-          onChange={(event) => props.setMonth(event.target.value)}
-          className={common}
-        />
-      </Picker>
+      <label className="flex items-center gap-1 text-slate-500">
+        Month: <input type="month" value={props.month} min={props.sourceStart.slice(0, 7)} max={props.sourceEnd.slice(0, 7)} onChange={(e) => props.setMonth(e.target.value)} className={common} />
+      </label>
     );
   if (props.period === 'year')
     return (
-      <Picker label="Select year">
-        <select
-          value={props.year}
-          onChange={(event) => props.setYear(event.target.value)}
-          className={common}
-        >
-          {props.years.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </Picker>
+      <label className="flex items-center gap-1 text-slate-500">
+        Year: <select value={props.year} onChange={(e) => props.setYear(e.target.value)} className={common}>{props.years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
+      </label>
     );
   if (props.period === 'custom')
     return (
-      <div className="flex flex-wrap gap-2">
-        <Picker label="From">
-          <input
-            type="date"
-            value={props.fromDate}
-            min={props.sourceStart}
-            max={props.sourceEnd}
-            onChange={(event) => props.setFromDate(event.target.value)}
-            className={common}
-          />
-        </Picker>
-        <Picker label="To">
-          <input
-            type="date"
-            value={props.toDate}
-            min={props.fromDate || props.sourceStart}
-            max={props.sourceEnd}
-            onChange={(event) => props.setToDate(event.target.value)}
-            className={common}
-          />
-        </Picker>
+      <div className="flex items-center gap-1 text-slate-500">
+        From: <input type="date" value={props.fromDate} min={props.sourceStart} max={props.sourceEnd} onChange={(e) => props.setFromDate(e.target.value)} className={common} />
+        To: <input type="date" value={props.toDate} min={props.fromDate || props.sourceStart} max={props.sourceEnd} onChange={(e) => props.setToDate(e.target.value)} className={common} />
       </div>
     );
-  return (
-    <p className="text-xs text-slate-400">
-      Available: {props.sourceStart || '-'} to {props.sourceEnd || '-'}
-    </p>
-  );
-}
-
-function Picker({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
+  return null;
 }
 
 function add(map: Map<string, Summary>, label: string, rowTonnes: number, rowValue: number) {
@@ -1207,8 +969,8 @@ function add(map: Map<string, Summary>, label: string, rowTonnes: number, rowVal
 
 function Empty({ loading }: { loading: boolean }) {
   return (
-    <div className="grid min-h-32 place-items-center text-xs text-slate-400">
-      {loading ? 'Loading Sage reporting data...' : 'No Sage reporting rows match this view.'}
+    <div className="grid min-h-28 place-items-center text-xs text-slate-400">
+      {loading ? 'Loading Sage reporting data...' : 'No sales records match this view.'}
     </div>
   );
 }
