@@ -14,16 +14,16 @@ import {
   Building2,
   Calendar,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Download,
   Filter,
+  Grid,
   Package,
   Printer,
   RefreshCw,
   Search,
   Sparkles,
   Store,
+  Table,
   TrendingUp,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -47,10 +47,10 @@ type Sale = {
 type Period = 'all' | 'day' | 'week' | 'month' | 'year' | 'custom';
 type Channel = 'all' | 'Branch POS' | 'HQ Invoiced';
 type CurrencyMode = 'USD' | 'LOCAL';
+type MatrixViewMode = 'tonnes' | 'value';
 type Summary = { label: string; tonnes: number; value: number; rows: number };
 
 const FETCH_SIZE = 1000;
-const DETAIL_SIZE = 10;
 const SALE_COLUMNS =
   'id,invoice_date,warehouse_code,warehouse_name,reporting_category,category,sub_category,transaction_type,total_tonnes,total_sales_amount,line_count,imported_at';
 
@@ -61,7 +61,7 @@ supabase.auth.onAuthStateChange((_event, session) => {
 });
 
 const money = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const tonnes = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+const tonnesFmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const labels: Record<Period, string> = {
   all: 'All time',
   day: 'Day',
@@ -90,15 +90,14 @@ export default function SoldTonnagePage() {
   const [period, setPeriod] = useState<Period>('all');
   const [channel, setChannel] = useState<Channel>('all');
   const [currency, setCurrency] = useState<CurrencyMode>('USD');
+  const [matrixMetric, setMatrixMetric] = useState<MatrixViewMode>('tonnes');
+  const [matrixSearch, setMatrixSearch] = useState('');
   const [day, setDay] = useState('');
   const [weekEnding, setWeekEnding] = useState('');
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [search, setSearch] = useState('');
-  const [detailPage, setDetailPage] = useState(0);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -197,32 +196,15 @@ export default function SoldTonnagePage() {
   }, [day, fromDate, month, period, sourceEnd, sourceStart, toDate, weekEnding, year]);
 
   const visible = useMemo(() => {
-    const query = search.trim().toLowerCase();
     return rows.filter((row) => {
       if (range.from && row.invoice_date < range.from) return false;
       if (range.to && row.invoice_date > range.to) return false;
       if (channel !== 'all' && row.transaction_type !== channel) return false;
-      return (
-        !query ||
-        [
-          row.warehouse_code,
-          row.warehouse_name,
-          row.reporting_category,
-          row.category,
-          row.sub_category,
-          row.transaction_type,
-        ]
-          .join(' ')
-          .toLowerCase()
-          .includes(query)
-      );
+      return true;
     });
-  }, [channel, range, rows, search]);
+  }, [channel, range, rows]);
 
-  useEffect(() => {
-    setDetailPage(0);
-  }, [channel, range.from, range.to, search]);
-
+  // Overall Report Metrics
   const report = useMemo(() => {
     const channels = new Map<string, Summary>();
     const categories = new Map<string, Summary>();
@@ -239,7 +221,7 @@ export default function SoldTonnagePage() {
       const rowTonnes = Number(row.total_tonnes || 0);
       const rowValue = Number(row.total_sales_amount || 0);
       const category = row.reporting_category || row.category || 'Unclassified';
-      const branch = row.warehouse_code || 'HQ';
+      const branch = (row.warehouse_code || 'HQ').trim().toUpperCase();
 
       totalTonnes += rowTonnes;
       totalValue += rowValue;
@@ -280,11 +262,70 @@ export default function SoldTonnagePage() {
     };
   }, [period, visible]);
 
+  // Power BI Style Cross-Tab Matrix: Category vs Branch
+  const matrix = useMemo(() => {
+    const branchTotalsTonnes = new Map<string, number>();
+    const branchTotalsValue = new Map<string, number>();
+    const catTotalsTonnes = new Map<string, number>();
+    const catTotalsValue = new Map<string, number>();
+    const cellMapTonnes = new Map<string, Map<string, number>>();
+    const cellMapValue = new Map<string, Map<string, number>>();
+    const allBranchesSet = new Set<string>();
+    const allCatsSet = new Set<string>();
+
+    visible.forEach((row) => {
+      const cat = (row.reporting_category || row.category || 'Unclassified').trim();
+      const branch = (row.warehouse_code || 'HQ').trim().toUpperCase();
+      const t = Number(row.total_tonnes || 0);
+      const v = Number(row.total_sales_amount || 0);
+
+      allCatsSet.add(cat);
+      allBranchesSet.add(branch);
+
+      // Cell Tonnes
+      if (!cellMapTonnes.has(cat)) cellMapTonnes.set(cat, new Map<string, number>());
+      const rowT = cellMapTonnes.get(cat)!;
+      rowT.set(branch, (rowT.get(branch) || 0) + t);
+
+      // Cell Value
+      if (!cellMapValue.has(cat)) cellMapValue.set(cat, new Map<string, number>());
+      const rowV = cellMapValue.get(cat)!;
+      rowV.set(branch, (rowV.get(branch) || 0) + v);
+
+      // Category Totals
+      catTotalsTonnes.set(cat, (catTotalsTonnes.get(cat) || 0) + t);
+      catTotalsValue.set(cat, (catTotalsValue.get(cat) || 0) + v);
+
+      // Branch Totals
+      branchTotalsTonnes.set(branch, (branchTotalsTonnes.get(branch) || 0) + t);
+      branchTotalsValue.set(branch, (branchTotalsValue.get(branch) || 0) + v);
+    });
+
+    const branches = [...allBranchesSet].sort();
+    let categories = [...allCatsSet].sort((a, b) => {
+      // Sort alphabetically, similar to Power BI view
+      return a.localeCompare(b);
+    });
+
+    if (matrixSearch.trim()) {
+      const q = matrixSearch.trim().toLowerCase();
+      categories = categories.filter((c) => c.toLowerCase().includes(q));
+    }
+
+    return {
+      branches,
+      categories,
+      cellMapTonnes,
+      cellMapValue,
+      catTotalsTonnes,
+      catTotalsValue,
+      branchTotalsTonnes,
+      branchTotalsValue,
+    };
+  }, [matrixSearch, visible]);
+
   const years = [...new Set(rows.map((row) => row.invoice_date.slice(0, 4)))].sort().reverse();
-  const pageCount = Math.max(1, Math.ceil(visible.length / DETAIL_SIZE));
-  const details = visible.slice(detailPage * DETAIL_SIZE, (detailPage + 1) * DETAIL_SIZE);
   const latestImport = report.latestImport ? new Date(report.latestImport).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Not yet imported';
-  const maxBranch = Math.max(...report.branches.map((item) => Math.abs(item.tonnes)), 1);
 
   // Financial Metrics
   const avgRealizedPrice = report.totalTonnes > 0 ? report.totalValue / report.totalTonnes : 0;
@@ -299,11 +340,10 @@ export default function SoldTonnagePage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50 text-slate-800 p-4 md:p-6 lg:p-7 font-sans">
-      <div className="mx-auto max-w-[1550px] space-y-5">
+      <div className="mx-auto max-w-[1600px] space-y-5">
         
         {/* HYPERFEEDS EXECUTIVE BANNER (Company Navy & Orange) */}
         <header className="rounded-xl border border-[#0d1640] bg-[#0c1543] p-5 md:p-6 text-white shadow-md relative overflow-hidden">
-          {/* Subtle Orange Accent Arc matching logo */}
           <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full border-4 border-[#f26e22]/20 pointer-events-none" />
           <div className="absolute right-10 bottom-0 h-1.5 w-32 bg-[#f26e22] rounded-full" />
 
@@ -314,7 +354,7 @@ export default function SoldTonnagePage() {
                   Hyperfeeds
                 </span>
                 <span className="text-xs text-orange-200/90 font-medium tracking-wide">
-                  Animal Nutrition &bull; Sage 300 Sales Intelligence
+                  Animal Nutrition &bull; Sage 300 / Power BI Live Data
                 </span>
                 <span className="text-xs text-slate-400">| Synced: {latestImport}</span>
               </div>
@@ -451,7 +491,7 @@ export default function SoldTonnagePage() {
             </div>
             <div className="mt-2.5 flex items-baseline gap-2">
               <span className="text-2xl lg:text-3xl font-extrabold text-[#0c1543] font-mono">
-                {rows.length ? tonnes.format(report.totalTonnes) : loading ? '...' : '0'}
+                {rows.length ? tonnesFmt.format(report.totalTonnes) : loading ? '...' : '0.00'}
               </span>
               <span className="text-xs font-bold text-slate-500">t</span>
             </div>
@@ -493,7 +533,7 @@ export default function SoldTonnagePage() {
               <span className="text-xs font-bold text-slate-500">/ Ton</span>
             </div>
             <p className="mt-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
-              Realized revenue realization per metric ton
+              Realized revenue per metric ton
             </p>
           </div>
 
@@ -526,29 +566,6 @@ export default function SoldTonnagePage() {
           </div>
         </section>
 
-        {/* COMPACT AI EXECUTIVE SUMMARY BANNER */}
-        <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-[#f26e22] p-2 text-white shrink-0">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <div className="text-xs leading-relaxed text-slate-700">
-              <p className="font-bold text-[#0c1543]">
-                Executive Takeaways &bull; {report.categories.length} Categories &bull; {report.branches.length} Depots
-              </p>
-              <p className="mt-1">
-                Top volume line is <strong className="text-[#0c1543]">{report.categories[0]?.label || '-'}</strong> at{' '}
-                <strong className="text-[#f26e22]">{tonnes.format(report.categories[0]?.tonnes || 0)} t</strong> (
-                {report.totalTonnes > 0 && report.categories[0]
-                  ? `${((report.categories[0].tonnes / report.totalTonnes) * 100).toFixed(1)}%`
-                  : '0%'}
-                ). Leading depot throughput is <strong className="text-[#0c1543]">{report.branches[0]?.label || '-'}</strong> with{' '}
-                <strong className="text-[#0c1543]">{tonnes.format(report.branches[0]?.tonnes || 0)} t</strong>.
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* 2-COLUMN SECTION: TRAJECTORY CHART & CHANNEL SPLIT */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
           {/* Chart (8 cols) */}
@@ -559,7 +576,7 @@ export default function SoldTonnagePage() {
                   <TrendingUp className="w-4 h-4 text-[#f26e22]" /> Sales Trend Trajectory
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Monthly sold tonnes (Bars) vs sales revenue (Line).
+                  Monthly sold tonnes (Navy Bars) vs sales revenue (Orange Line).
                 </p>
               </div>
               <div className="flex items-center gap-3 text-xs font-semibold">
@@ -572,7 +589,7 @@ export default function SoldTonnagePage() {
               </div>
             </div>
 
-            <div className="h-64 w-full">
+            <div className="h-56 w-full">
               {report.trend.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={report.trend} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
@@ -584,7 +601,7 @@ export default function SoldTonnagePage() {
                       axisLine={false}
                       fontSize={11}
                       stroke="#0c1543"
-                      tickFormatter={(v) => `${tonnes.format(Number(v || 0))}t`}
+                      tickFormatter={(v) => `${tonnesFmt.format(Number(v || 0))}t`}
                     />
                     <YAxis
                       yAxisId="right"
@@ -598,7 +615,7 @@ export default function SoldTonnagePage() {
                     <Tooltip
                       contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '0.5rem', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                       formatter={(val: any, name: any) => {
-                        if (name === 'Volume') return [`${tonnes.format(Number(val))} t`, 'Volume'];
+                        if (name === 'Volume') return [`${tonnesFmt.format(Number(val))} t`, 'Volume'];
                         return [formatMoney(Number(val)), 'Sales Value'];
                       }}
                     />
@@ -624,7 +641,7 @@ export default function SoldTonnagePage() {
           <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-4 shadow-sm flex flex-col justify-between">
             <div>
               <h2 className="text-base font-bold text-[#0c1543] mb-1">Channel Distribution</h2>
-              <p className="text-xs text-slate-500 mb-4">Volume split and average realized yield.</p>
+              <p className="text-xs text-slate-500 mb-4">Volume mix and realized pricing per route.</p>
 
               <div className="space-y-3">
                 {report.channels.map((ch, idx) => {
@@ -638,7 +655,7 @@ export default function SoldTonnagePage() {
                           {ch.label}
                         </span>
                         <span className="font-mono font-bold text-slate-800">
-                          {tonnes.format(ch.tonnes)} t ({share.toFixed(1)}%)
+                          {tonnesFmt.format(ch.tonnes)} t ({share.toFixed(1)}%)
                         </span>
                       </div>
                       <div className="mt-2 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
@@ -658,249 +675,229 @@ export default function SoldTonnagePage() {
               </div>
             </div>
 
-            <p className="mt-4 text-[11px] text-slate-400 border-t border-slate-100 pt-2 text-right">
+            <p className="mt-3 text-[11px] text-slate-400 border-t border-slate-100 pt-2 text-right">
               Channel Reconciliation Balanced
             </p>
           </div>
         </div>
 
-        {/* 2-COLUMN SECTION: TOP CATEGORIES & DEPOT LEADERBOARD */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-          {/* Top Product Categories (7 cols) */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-7 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-base font-bold text-[#0c1543] flex items-center gap-1.5">
-                  <Package className="w-4 h-4 text-[#f26e22]" /> Product Categories
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Top lines by volume and price yield.</p>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                Top 8 of {report.categories.length}
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-[11px] font-bold uppercase text-slate-500 bg-slate-50">
-                    <th className="py-2.5 px-3">Category</th>
-                    <th className="py-2.5 px-3 text-right">Tonnes</th>
-                    <th className="py-2.5 px-3 text-right">Value</th>
-                    <th className="py-2.5 px-3 text-right">Price/t</th>
-                    <th className="py-2.5 px-3 text-center">Share</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {report.categories.slice(0, 8).map((cat, i) => {
-                    const mixPct = report.totalTonnes > 0 ? (cat.tonnes / report.totalTonnes) * 100 : 0;
-                    const catYield = cat.tonnes > 0 ? cat.value / cat.tonnes : 0;
-                    return (
-                      <tr key={cat.label} className="hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-semibold text-slate-800">
-                          <span className="text-slate-400 mr-1.5 font-normal">#{i + 1}</span>
-                          {cat.label}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
-                          {tonnes.format(cat.tonnes)} t
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-700">
-                          {formatMoney(cat.value)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-[#f26e22]">
-                          {cat.tonnes > 0 ? formatMoney(catYield) : '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
-                            {mixPct.toFixed(1)}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!report.categories.length && (
-                    <tr>
-                      <td colSpan={5}>
-                        <Empty loading={loading} />
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Depot Leaderboard (5 cols) */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h2 className="text-base font-bold text-[#0c1543]">Depot Throughput</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Warehouses ranked by volume.</p>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">{report.branches.length} Depots</span>
-            </div>
-
-            <div className="space-y-2.5">
-              {report.branches.slice(0, 6).map((br, i) => {
-                const width = Math.min(100, (Math.abs(br.tonnes) / maxBranch) * 100);
-                const brYield = br.tonnes > 0 ? br.value / br.tonnes : 0;
-                return (
-                  <div key={br.label} className="p-2 rounded border border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-slate-800">
-                        <span className="text-slate-400 mr-1.5 font-normal">#{i + 1}</span>
-                        {br.label}
-                      </span>
-                      <span className="font-mono font-bold text-slate-900">{tonnes.format(br.tonnes)} t</span>
-                    </div>
-                    <div className="mt-1.5 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${i === 0 ? 'bg-[#f26e22]' : 'bg-[#0c1543]'} rounded-full`}
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">
-                      <span>Billed: {formatMoney(br.value)}</span>
-                      <span>Yield: {br.tonnes > 0 ? formatMoney(brYield) : '-'}/t</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {!report.branches.length && <Empty loading={loading} />}
-            </div>
-          </div>
-        </div>
-
-        {/* COLLAPSIBLE SALES DATA EXPLORER (Paginated, 10 per page, Compact) */}
+        {/* TONNAGE BY CATEGORY & BRANCH (POWER BI PIVOT MATRIX) */}
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((prev) => !prev)}
-            className="w-full flex items-center justify-between p-4 bg-slate-50/80 hover:bg-slate-100 transition text-left"
-          >
+          {/* Header Bar */}
+          <div className="p-4 border-b border-slate-200 bg-white flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-[#0c1543] flex items-center gap-2">
-                Sales Transaction Ledger
-                <span className="text-xs font-normal text-slate-500">
-                  ({visible.length.toLocaleString()} matching records)
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#0c1543] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                  Power BI Matrix
                 </span>
-              </h2>
+                <h2 className="text-sm md:text-base font-bold text-[#0c1543] uppercase tracking-wide">
+                  Tonnage by Category & Branch
+                </h2>
+              </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Click to {detailsOpen ? 'collapse' : 'view compact transactions (10 per page)'}.
+                Cross-tabulation of {matrix.categories.length} product categories across {matrix.branches.length} branches.
               </p>
             </div>
-            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} />
-          </button>
 
-          {detailsOpen && (
-            <div className="p-4 border-t border-slate-200 space-y-3">
-              {/* Filter bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search branch, product or channel..."
-                    className="w-full sm:w-72 rounded-lg border border-slate-300 py-1.5 pl-8 pr-3 text-xs focus:outline-none focus:border-[#f26e22]"
-                  />
-                </div>
+            {/* Controls */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Metric Toggle */}
+              <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200">
                 <button
                   type="button"
-                  onClick={() => {
-                    const csv = [
-                      'Date,Branch,Category,Channel,Tonnes,SalesValue',
-                      ...visible.map(
-                        (r) =>
-                          `"${r.invoice_date}","${r.warehouse_code}","${r.reporting_category || r.category}","${
-                            r.transaction_type
-                          }",${r.total_tonnes},${r.total_sales_amount}`
-                      ),
-                    ].join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Hyperfeeds_Sold_Tonnage_${range.from || 'all'}.csv`;
-                    a.click();
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  onClick={() => setMatrixMetric('tonnes')}
+                  className={`rounded px-2.5 py-1 font-semibold transition ${
+                    matrixMetric === 'tonnes' ? 'bg-[#0c1543] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <Download className="w-3.5 h-3.5 text-[#f26e22]" /> Export CSV
+                  Tonnes (t)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMatrixMetric('value')}
+                  className={`rounded px-2.5 py-1 font-semibold transition ${
+                    matrixMetric === 'value' ? 'bg-[#0c1543] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Value ($)
                 </button>
               </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 text-left text-[11px] uppercase font-bold text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2.5">Date</th>
-                      <th className="px-3 py-2.5">Branch</th>
-                      <th className="px-3 py-2.5">Category</th>
-                      <th className="px-3 py-2.5">Channel</th>
-                      <th className="px-3 py-2.5 text-right">Tonnes</th>
-                      <th className="px-3 py-2.5 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {details.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50/80">
-                        <td className="px-3 py-2 font-mono text-slate-600">{row.invoice_date}</td>
-                        <td className="px-3 py-2 font-semibold text-slate-800">{row.warehouse_code || 'HQ'}</td>
-                        <td className="px-3 py-2 text-slate-700">{row.reporting_category || row.category}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${row.transaction_type === 'HQ Invoiced' ? 'bg-blue-50 text-[#0c1543]' : 'bg-orange-50 text-[#f26e22]'}`}>
-                            {row.transaction_type}
-                          </span>
-                        </td>
-                        <td className={`px-3 py-2 text-right font-mono font-bold ${Number(row.total_tonnes) < 0 ? 'text-rose-600' : 'text-slate-800'}`}>
-                          {tonnes.format(Number(row.total_tonnes))} t
-                        </td>
-                        <td className={`px-3 py-2 text-right font-mono font-bold ${Number(row.total_sales_amount) < 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                          {formatMoney(Number(row.total_sales_amount))}
-                        </td>
-                      </tr>
-                    ))}
-                    {!details.length && (
-                      <tr>
-                        <td colSpan={6} className="py-6 text-center text-slate-400">
-                          No transactions found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Search Category */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+                <input
+                  value={matrixSearch}
+                  onChange={(e) => setMatrixSearch(e.target.value)}
+                  placeholder="Filter category..."
+                  className="rounded-lg border border-slate-300 py-1 pl-8 pr-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#f26e22] w-40"
+                />
               </div>
 
-              {/* Pagination */}
-              <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                <span>
-                  Showing {detailPage * DETAIL_SIZE + 1} - {Math.min((detailPage + 1) * DETAIL_SIZE, visible.length)} of {visible.length.toLocaleString()} rows
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setDetailPage((p) => Math.max(0, p - 1))}
-                    disabled={detailPage === 0}
-                    className="p-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-50"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="font-semibold text-slate-700">Page {detailPage + 1} / {pageCount}</span>
-                  <button
-                    type="button"
-                    onClick={() => setDetailPage((p) => Math.min(pageCount - 1, p + 1))}
-                    disabled={detailPage >= pageCount - 1}
-                    className="p-1 rounded border border-slate-200 disabled:opacity-40 hover:bg-slate-50"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+              {/* Export Matrix */}
+              <button
+                type="button"
+                onClick={() => {
+                  const headerRow = ['ReportingCategory', ...matrix.branches, 'Total'].join(',');
+                  const rowsCsv = matrix.categories.map((cat) => {
+                    const rowVals = matrix.branches.map((br) => {
+                      const val =
+                        matrixMetric === 'tonnes'
+                          ? matrix.cellMapTonnes.get(cat)?.get(br) || 0
+                          : matrix.cellMapValue.get(cat)?.get(br) || 0;
+                      return val.toFixed(2);
+                    });
+                    const rowTotal =
+                      matrixMetric === 'tonnes'
+                        ? matrix.catTotalsTonnes.get(cat) || 0
+                        : matrix.catTotalsValue.get(cat) || 0;
+                    return [`"${cat}"`, ...rowVals, rowTotal.toFixed(2)].join(',');
+                  });
+                  const totalRow = [
+                    'Total',
+                    ...matrix.branches.map((br) => {
+                      const brVal =
+                        matrixMetric === 'tonnes'
+                          ? matrix.branchTotalsTonnes.get(br) || 0
+                          : matrix.branchTotalsValue.get(br) || 0;
+                      return brVal.toFixed(2);
+                    }),
+                    (matrixMetric === 'tonnes' ? report.totalTonnes : report.totalValue).toFixed(2),
+                  ].join(',');
+
+                  const csv = [headerRow, ...rowsCsv, totalRow].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Tonnage_By_Category_And_Branch_${matrixMetric}.csv`;
+                  a.click();
+                }}
+                className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                <Download className="w-3.5 h-3.5 text-[#f26e22]" /> CSV
+              </button>
             </div>
-          )}
+          </div>
+
+          {/* Matrix Grid with Sticky Header & First Column */}
+          <div className="overflow-x-auto max-h-[520px] custom-scrollbar">
+            <table className="w-full min-w-[1100px] text-xs border-collapse">
+              <thead className="sticky top-0 z-20 bg-[#f8fafc] text-slate-700 shadow-sm border-b border-slate-300">
+                <tr>
+                  <th className="sticky left-0 z-30 bg-[#f8fafc] px-3.5 py-2.5 text-left font-bold border-r border-slate-300 text-slate-800 min-w-[160px]">
+                    ReportingCategory
+                  </th>
+                  {matrix.branches.map((branch) => (
+                    <th key={branch} className="px-2 py-2.5 text-right font-bold text-[11px] text-slate-700 whitespace-nowrap min-w-[56px]">
+                      {branch}
+                    </th>
+                  ))}
+                  <th className="sticky right-0 z-30 bg-[#f1f5f9] px-3 py-2.5 text-right font-black border-l border-slate-300 text-[#0c1543] min-w-[72px]">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                {matrix.categories.map((cat, idx) => {
+                  const catTotal =
+                    matrixMetric === 'tonnes'
+                      ? matrix.catTotalsTonnes.get(cat) || 0
+                      : matrix.catTotalsValue.get(cat) || 0;
+
+                  return (
+                    <tr key={cat} className={idx % 2 === 0 ? 'bg-white hover:bg-orange-50/40 transition' : 'bg-slate-50/50 hover:bg-orange-50/40 transition'}>
+                      {/* Sticky Category Column */}
+                      <td className={`sticky left-0 z-10 px-3.5 py-2 font-sans font-semibold border-r border-slate-200 text-slate-900 whitespace-nowrap ${
+                        idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+                      }`}>
+                        {cat}
+                      </td>
+
+                      {/* Branch Cells */}
+                      {matrix.branches.map((branch) => {
+                        const val =
+                          matrixMetric === 'tonnes'
+                            ? matrix.cellMapTonnes.get(cat)?.get(branch)
+                            : matrix.cellMapValue.get(cat)?.get(branch);
+
+                        if (val === undefined || val === 0) {
+                          return (
+                            <td key={branch} className="px-2 py-2 text-right text-slate-300 font-sans">
+                              -
+                            </td>
+                          );
+                        }
+
+                        return (
+                          <td
+                            key={branch}
+                            className={`px-2 py-2 text-right whitespace-nowrap ${
+                              val < 0 ? 'text-rose-600 font-bold' : 'text-slate-800'
+                            }`}
+                          >
+                            {matrixMetric === 'tonnes' ? tonnesFmt.format(val) : money.format(val)}
+                          </td>
+                        );
+                      })}
+
+                      {/* Row Total (Sticky Right) */}
+                      <td className="sticky right-0 z-10 bg-slate-50 px-3 py-2 text-right font-bold border-l border-slate-200 text-[#0c1543] whitespace-nowrap">
+                        {matrixMetric === 'tonnes' ? tonnesFmt.format(catTotal) : money.format(catTotal)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {!matrix.categories.length && (
+                  <tr>
+                    <td colSpan={matrix.branches.length + 2} className="py-8 text-center text-slate-400 font-sans">
+                      {loading ? 'Loading Sage reporting data...' : 'No matching categories in this view.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+
+              {/* Total Bottom Row */}
+              {matrix.categories.length > 0 && (
+                <tfoot className="sticky bottom-0 z-20 bg-[#eef2f6] border-t-2 border-slate-300 font-mono text-[11px] font-bold text-slate-900 shadow-md">
+                  <tr>
+                    <td className="sticky left-0 z-30 bg-[#eef2f6] px-3.5 py-2.5 font-sans font-black border-r border-slate-300 text-[#0c1543]">
+                      Total
+                    </td>
+                    {matrix.branches.map((branch) => {
+                      const brTotal =
+                        matrixMetric === 'tonnes'
+                          ? matrix.branchTotalsTonnes.get(branch) || 0
+                          : matrix.branchTotalsValue.get(branch) || 0;
+
+                      return (
+                        <td key={branch} className="px-2 py-2.5 text-right whitespace-nowrap">
+                          {matrixMetric === 'tonnes' ? tonnesFmt.format(brTotal) : money.format(brTotal)}
+                        </td>
+                      );
+                    })}
+                    <td className="sticky right-0 z-30 bg-[#dfe7ef] px-3 py-2.5 text-right font-black border-l border-slate-300 text-[#f26e22] text-xs whitespace-nowrap">
+                      {matrixMetric === 'tonnes'
+                        ? tonnesFmt.format(report.totalTonnes)
+                        : formatMoney(report.totalValue)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          <div className="p-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span>
+              Values shown in: <strong className="text-slate-800">{matrixMetric === 'tonnes' ? 'Metric Tonnes (t)' : `Sales Amount (${currency})`}</strong> &bull; Reversals highlighted in red.
+            </span>
+            <span>
+              Grand Total: <strong className="text-[#0c1543] font-mono">{tonnesFmt.format(report.totalTonnes)} t</strong> | <strong className="text-[#f26e22] font-mono">{formatMoney(report.totalValue)}</strong>
+            </span>
+          </div>
         </section>
+
       </div>
     </div>
   );
