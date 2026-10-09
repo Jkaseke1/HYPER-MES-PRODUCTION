@@ -101,14 +101,21 @@ export default function SoldTonnagePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
-  const load = async () => {
+  const load = async (force = false) => {
     setLoading(true);
     setLoadError(false);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user.id;
       if (!userId) throw new Error('Please sign in to view sales reporting.');
-      if (cachedSales?.userId === userId) setRows(cachedSales.rows);
+
+      // Prevent redundant network egress and database query log spam:
+      // If data is already cached in memory for this session, use it unless user clicked Refresh.
+      if (!force && cachedSales?.userId === userId && cachedSales.rows.length > 0) {
+        setRows(cachedSales.rows);
+        setLoading(false);
+        return;
+      }
 
       const query = (from: number, count = false) =>
         supabase
@@ -158,7 +165,7 @@ export default function SoldTonnagePage() {
   };
 
   useEffect(() => {
-    void load();
+    void load(false);
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') setRows([]);
     });
@@ -397,7 +404,7 @@ export default function SoldTonnagePage() {
 
               <button
                 type="button"
-                onClick={() => void load()}
+                onClick={() => void load(true)}
                 disabled={loading}
                 className="flex items-center gap-1.5 rounded-lg bg-[#f26e22] hover:bg-[#e05d12] px-3.5 py-1.5 text-xs font-bold text-white shadow-md transition disabled:opacity-50"
               >
