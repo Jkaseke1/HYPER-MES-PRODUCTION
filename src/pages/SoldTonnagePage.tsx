@@ -366,7 +366,7 @@ export default function SoldTonnagePage() {
                 <span className="text-xs text-slate-400">| Synced: {latestImport}</span>
               </div>
               <h1 className="mt-1.5 text-2xl font-black tracking-tight text-white lg:text-3xl">
-                Sold Tonnage & Commercial Performance
+                Sold Tonnage
               </h1>
             </div>
 
