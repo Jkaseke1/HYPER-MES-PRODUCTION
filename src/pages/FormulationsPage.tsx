@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import './formula-editor.css';
 import './formulations-page.css';
 import StatusBadge from '../components/ui/StatusBadge';
+import { formulaMassFactor, isCountedBomLine, normalizeFormulaBom } from '../lib/formulaUnits';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
@@ -161,6 +162,7 @@ export default function FormulationsPage() {
   const [detailIngs, setDetailIngs] = useState<FormulationIngredient[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [ings, setIngs] = useState<IngRow[]>([emptyIng()]);
+  const [countedBomLines, setCountedBomLines] = useState<IngRow[]>([]);
   const [editingIngredientQuantity, setEditingIngredientQuantity] = useState<number | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [sourceFormulaId, setSourceFormulaId] = useState('');
@@ -329,6 +331,7 @@ export default function FormulationsPage() {
   }
 
   function openNew() {
+    setCountedBomLines([]);
     setEditId(null);
     setSourceFormulaId('');
     setSourceFormulaSearch('');
@@ -344,6 +347,7 @@ export default function FormulationsPage() {
   // identity and version history are carried forward, but ingredients/BOM
   // lines are intentionally not copied into the new formulation workspace.
   async function prefillFromFormulation(sourceId: string) {
+    setCountedBomLines([]);
     setSourceFormulaId(sourceId);
     if (!sourceId) {
       // Reset to blank
@@ -373,7 +377,7 @@ export default function FormulationsPage() {
       category: src.category || '',
       description: src.description || '',
       batch_size: String(STANDARD_FORMULA_BATCH_KG),
-      batch_unit: src.batch_unit,
+      batch_unit: 'kg',
       unit_size_variants: copiedVariants,
       target_protein: src.target_protein.toString(),
       target_fat: src.target_fat.toString(),
@@ -411,7 +415,7 @@ export default function FormulationsPage() {
       category: f.category,
       description: f.description,
       batch_size: f.batch_size.toString(),
-      batch_unit: f.batch_unit,
+      batch_unit: 'kg',
       unit_size_variants: Array.isArray(variants) ? variants : [],
       target_protein: f.target_protein.toString(),
       target_fat: f.target_fat.toString(),
@@ -420,33 +424,36 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: f.estimated_cost_per_unit,
       status: f.status,
     });
+    setCountedBomLines([]);
     const [specRes, bomRes] = await Promise.all([
       supabase.from('formula_specs').select('id, reference_batch_size').eq('formulation_id', f.id).maybeSingle(),
-      supabase.from('formulation_ingredients').select('*').eq('formulation_id', f.id).order('sort_order'),
+      supabase.from('formulation_ingredients').select('*, raw_materials(name, category, unit)').eq('formulation_id', f.id).order('sort_order'),
     ]);
     let formulaLines: any[] = [];
     if (!specRes.error && specRes.data?.id) {
       const { data: specLines } = await supabase
         .from('formula_spec_lines')
-        .select('raw_material_id, quantity, unit')
+        .select('raw_material_id, quantity, unit, raw_materials(name, category, unit)')
         .eq('formula_spec_id', specRes.data.id)
         .order('sort_order');
       formulaLines = specLines || [];
     }
     const sourceLines = formulaLines.length > 0 ? formulaLines : (bomRes.data || []);
-    const bomTotal = sourceLines.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0);
     const standardBatch = STANDARD_FORMULA_BATCH_KG;
-    const scaleToStandardBatch = bomTotal > 0 && Math.abs(bomTotal - standardBatch) > 0.01;
-    const normalizedLines = scaleToStandardBatch
-      ? sourceLines.map(line => ({
-          ...line,
-          quantity: Math.round(((Number(line.quantity) || 0) / bomTotal) * standardBatch * 10000) / 10000,
-        }))
-      : sourceLines;
+    let normalizedLines: any[];
+    try {
+      if (bomRes.error) throw bomRes.error;
+      normalizedLines = normalizeFormulaBom(sourceLines, materials, standardBatch).mass;
+      const counted = (bomRes.data || []).length
+        ? normalizeFormulaBom(bomRes.data || [], materials, standardBatch).counted
+        : [];
+      setCountedBomLines(counted.map(line => ({ ...line, percentage: 0, is_critical: !!line.is_critical })));
+    } catch (error: any) {
+      alert(`Could not prepare formula: ${error.message || error}`);
+      return;
+    }
 
-    // All production formulas are maintained against the standard 1,000 kg
-    // batch. Older records may carry a 50 kg reference or a BOM whose total
-    // is already 1,000 kg; normalize both cases before calculating % values.
+    // Editing uses a 1,000 kg reference after mass-unit conversion.
     setForm(current => ({
       ...current,
       batch_size: String(standardBatch),
@@ -460,7 +467,7 @@ export default function FormulationsPage() {
     const loadedIngredients = normalizedLines.map(i => ({
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
-      unit: i.unit || 'kg',
+      unit: 'kg',
       percentage: standardBatch > 0 ? Math.round(((Number(i.quantity) || 0) / standardBatch) * 1000000) / 10000 : 0,
       is_critical: !!i.is_critical,
     }));
@@ -485,6 +492,10 @@ export default function FormulationsPage() {
   }
 
   async function handleSave() {
+    if (ings.some(i => i.raw_material_id && i.unit !== 'kg')) {
+      alert('Formula mass ingredients must be entered in kg. Reopen the formula to convert imported units.');
+      return;
+    }
     if (!form.name.trim() || !form.code.trim()) {
       alert('Name and Code are required.');
       return;
@@ -527,6 +538,7 @@ export default function FormulationsPage() {
       
       const payload = {
         ...form,
+        batch_unit: 'kg',
         unit_size_variants: validVariants.length > 0 ? validVariants : null,
         batch_size: resolvedBatchSize,
         target_protein: Number(form.target_protein) || 0,
@@ -558,7 +570,7 @@ export default function FormulationsPage() {
         .upsert({
           formulation_id: fId,
           reference_batch_size: resolvedBatchSize,
-          batch_unit: form.batch_unit,
+          batch_unit: 'kg',
           status: 'generated',
           generated_bom_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -577,21 +589,22 @@ export default function FormulationsPage() {
         formula_spec_id: formulaSpec.id,
         raw_material_id: i.raw_material_id,
         quantity: i.quantity,
-        unit: i.unit,
+        unit: 'kg',
         notes: '',
         sort_order: idx,
       }));
       const { error: formulaLinesInsertError } = await supabase.from('formula_spec_lines').insert(formulaRows);
       if (formulaLinesInsertError) throw formulaLinesInsertError;
 
-      const rows = ings
+      const batchScale = resolvedBatchSize / STANDARD_FORMULA_BATCH_KG;
+      const rows = [...ings, ...countedBomLines.map(line => ({ ...line, quantity: line.quantity * batchScale }))]
         .filter(i => i.raw_material_id)
         .map((i, idx) => ({
           formulation_id: fId!,
           raw_material_id: i.raw_material_id,
           quantity: i.quantity,
           unit: i.unit,
-          percentage: Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000,
+          percentage: i.unit === 'kg' && !countedBomLines.some(line => line.raw_material_id === i.raw_material_id) ? Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000 : 0,
           is_critical: i.is_critical,
           notes: '',
           sort_order: idx,
@@ -614,6 +627,8 @@ export default function FormulationsPage() {
         alert(`A formulation with code "${form.code}" already exists. Use a different code, or open the existing one and click Edit.`);
       } else if (error?.code === '23505') {
         alert(`Duplicate value: ${error.details || error.message}`);
+      } else if (error?.code === 'PGRST204' && /unit_size_variants/.test(error?.message || '')) {
+        alert('LIVE needs the formula metadata migration (20261009090000_add_formulation_unit_size_variants.sql). No formula was saved. Apply it in the LIVE Supabase SQL Editor, then refresh this page.');
       } else {
         alert(`Failed to save formulation: ${error.message || error}`);
       }
@@ -635,12 +650,16 @@ export default function FormulationsPage() {
     setSaving(true);
     try {
       // Filter valid ingredients and auto-normalize percentages to exact 100%
-      const validIngs = bomEditIngs.filter(i => i.raw_material_id);
-      const totalWeight = validIngs.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+      const normalized = normalizeFormulaBom(bomEditIngs.filter(i => i.raw_material_id), materials);
+      const validIngs = [...normalized.mass, ...normalized.counted.map(line => ({ ...line, percentage: 0 }))];
+      const totalWeight = normalized.totalKg;
+      if (validIngs.some(line => !(line.quantity > 0)) || !(totalWeight > 0)) {
+        throw new Error('Enter positive quantities for every BOM line and at least one mass ingredient.');
+      }
 
       if (validIngs.length > 0 && totalWeight > 0) {
         let sumPct = 0;
-        validIngs.forEach(i => {
+        normalized.mass.forEach(i => {
           const rawPct = (Number(i.quantity) / totalWeight) * 100;
           i.percentage = Math.round(rawPct * 1000) / 1000;
           sumPct += i.percentage;
@@ -648,16 +667,16 @@ export default function FormulationsPage() {
 
         // Adjust rounding on largest ingredient to ensure exact 100% total
         const diff = Math.round((100 - sumPct) * 1000) / 1000;
-        if (Math.abs(diff) > 0 && validIngs.length > 0) {
+        if (Math.abs(diff) > 0 && normalized.mass.length > 0) {
           let maxIdx = 0;
           let maxQty = -1;
-          validIngs.forEach((ing, idx) => {
+          normalized.mass.forEach((ing, idx) => {
             if (Number(ing.quantity) > maxQty) {
               maxQty = Number(ing.quantity);
               maxIdx = idx;
             }
           });
-          validIngs[maxIdx].percentage = Math.round((validIngs[maxIdx].percentage + diff) * 1000) / 1000;
+          normalized.mass[maxIdx].percentage = Math.round((normalized.mass[maxIdx].percentage + diff) * 1000) / 1000;
         }
       }
 
@@ -750,6 +769,18 @@ export default function FormulationsPage() {
   };
 
   const totalPct = ings.reduce((s, i) => s + (Number(i.percentage) || 0), 0);
+  const formulaMaterials = materials.filter(material => formulaMassFactor(material.unit) !== null
+    && !isCountedBomLine({ raw_material_id: material.id, quantity: 0, unit: material.unit }, material));
+  const toggleBomEdit = () => {
+    if (bomEditMode) { setBomEditMode(false); return; }
+    try {
+      const normalized = normalizeFormulaBom(detailIngs, materials);
+      setBomEditIngs([...normalized.mass, ...normalized.counted.map(line => ({ ...line, percentage: 0 }))]);
+      setBomEditMode(true);
+    } catch (error: any) {
+      alert(`Could not prepare BOM: ${error.message || error}`);
+    }
+  };
   const formulaIngredientTotal = ings.filter((ingredient) => ingredient.raw_material_id).reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
   const formulaBatchSize = Number(form.batch_size) || Number(form.unit_size_variants?.[0]?.batch_size) || 0;
   const formulaBalanceDifference = formulaIngredientTotal - formulaBatchSize;
@@ -1426,7 +1457,7 @@ export default function FormulationsPage() {
                 {selected.status !== 'active' && (
                   <button onClick={() => openEdit(selected)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"><Edit2 className="w-3.5 h-3.5" /> Edit Formula</button>
                 )}
-                <button onClick={() => selected.status === 'active' ? createVersion(selected) : (() => { setBomEditMode(!bomEditMode); setBomEditIngs([...detailIngs]); })()} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"><Edit2 className="w-3.5 h-3.5" /> {selected.status === 'active' ? 'Edit BOM in New Version' : (bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM')}</button>
+                <button onClick={() => selected.status === 'active' ? createVersion(selected) : toggleBomEdit()} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"><Edit2 className="w-3.5 h-3.5" /> {selected.status === 'active' ? 'Edit BOM in New Version' : (bomEditMode ? 'Cancel BOM Edit' : 'Edit BOM')}</button>
                 <button onClick={() => handleDelete(selected.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
                 </div>
               </div>
@@ -1556,7 +1587,7 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-3 py-2">
                             {bomEditMode ? (
-                              <input type="text" value={i.unit} onChange={e => { const u = [...bomEditIngs]; u[idx] = { ...u[idx], unit: e.target.value }; setBomEditIngs(u); }} className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
+                              <input type="text" value={i.unit} readOnly className="w-16 px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:border-blue-500" />
                             ) : (
                               <span>{i.unit}</span>
                             )}
@@ -1915,7 +1946,7 @@ export default function FormulationsPage() {
               <input type="text" value={form.sage_code} onChange={e => setForm({ ...form, sage_code: e.target.value.toUpperCase() })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., BGC50" />
             </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Batch Unit</label>
-              <input type="text" value={form.batch_unit} onChange={e => setForm({ ...form, batch_unit: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
+              <input type="text" aria-label="Batch unit" value="kg" readOnly className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference batch (kg) *</label>
@@ -1962,6 +1993,10 @@ export default function FormulationsPage() {
                 <button onClick={() => setIngs([...ings, emptyIng()])} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"><Plus className="w-3.5 h-3.5" /> Add material</button>
               </div>
             </div>
+            {countedBomLines.length > 0 && <div className="mb-3 border-l-2 border-teal-400 bg-teal-50 px-3 py-2 text-xs text-slate-700">
+              <p className="font-semibold">Packaging / counted BOM lines</p>
+              {countedBomLines.map((line, index) => <p key={`${line.raw_material_id}-${index}`} className="mt-1">{materials.find(material => material.id === line.raw_material_id)?.name || line.raw_material_id}: {(line.quantity * (formulaBatchSize / STANDARD_FORMULA_BATCH_KG)).toLocaleString()} {line.unit}</p>)}
+            </div>}
             <div className="formula-editor-table">
             <table className="w-full text-sm table-fixed">
               <thead><tr className="border-b border-slate-200 text-left">
@@ -1970,27 +2005,27 @@ export default function FormulationsPage() {
               <tbody>{ings.map((ing, idx) => (
                 <tr key={idx} className="border-b border-slate-50">
                   <td className="py-1.5 pr-2">
-                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; const mat = materials.find(m => m.id === e.target.value); u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: mat?.unit || ing.unit }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
+                    <select value={ing.raw_material_id} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], raw_material_id: e.target.value, unit: 'kg' }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:border-teal-500 font-medium">
                       <option value="">Select component / material...</option>
                       {draftFormulaMaterialIds.size > 0 && <optgroup label="✓ Materials already in this formula / BOM (shown first)">
-                        {materials.filter(m => draftFormulaMaterialIds.has(m.id)).map(m => (
+                        {formulaMaterials.filter(m => draftFormulaMaterialIds.has(m.id)).map(m => (
                           <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                         ))}
                       </optgroup>
                       }
                       <optgroup label="🌾 All other raw materials">
-                        {materials.filter(m => !draftFormulaMaterialIds.has(m.id) && !isMacropackMaterial(m)).map(m => (
+                        {formulaMaterials.filter(m => !draftFormulaMaterialIds.has(m.id) && !isMacropackMaterial(m)).map(m => (
                           <option key={m.id} value={m.id}>{m.code} — {m.name}</option>
                         ))}
                       </optgroup>
                       <optgroup label="📦 Other premixes / manufactured materials">
-                        {materials.filter(m => !draftFormulaMaterialIds.has(m.id) && isMacropackMaterial(m)).map(m => (
+                        {formulaMaterials.filter(m => !draftFormulaMaterialIds.has(m.id) && isMacropackMaterial(m)).map(m => (
                           <option key={m.id} value={m.id}>📦 {m.code} — {m.name}</option>
                         ))}
                       </optgroup>
                     </select></td>
                   <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" value={editingIngredientQuantity === idx ? String(ing.quantity ?? '') : Number(ing.quantity || 0).toFixed(2)} onFocus={() => setEditingIngredientQuantity(idx)} onBlur={() => setEditingIngredientQuantity(null)} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], quantity: Number(e.target.value) }; setIngs(recalculatePercentages(u, formulaBatchSize)); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
-                  <td className="py-1.5 pr-2"><input type="text" value={ing.unit} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], unit: e.target.value }; setIngs(u); }} className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
+                  <td className="py-1.5 pr-2"><input type="text" aria-label="Ingredient unit" value="kg" readOnly className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:border-teal-500" /></td>
                   <td className="py-1.5 pr-2"><span className="block rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">{Number(ing.percentage || 0).toFixed(3)}%</span></td>
                   <td className="py-1.5 pr-2 text-center"><input type="checkbox" checked={ing.is_critical} onChange={e => { const u = [...ings]; u[idx] = { ...u[idx], is_critical: e.target.checked }; setIngs(u); }} className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
                   <td className="py-1.5"><button onClick={() => setIngs(ings.filter((_, i) => i !== idx))} className="p-1 text-slate-400 hover:text-red-600 transition-colors" title="Remove material"><Trash2 className="w-3.5 h-3.5" /></button></td>
