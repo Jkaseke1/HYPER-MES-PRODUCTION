@@ -343,8 +343,8 @@ export default function DashboardPage() {
                 <Icon className="h-3.5 w-3.5" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold text-slate-900">{label}</span>
-                <span className="block truncate text-[11px] text-slate-400">{hint}</span>
+                <span className="block text-[13px] font-semibold leading-tight text-slate-900">{label}</span>
+                <span className="block text-[11px] leading-tight text-slate-400">{hint}</span>
               </span>
             </Link>
           ))}
