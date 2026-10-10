@@ -284,72 +284,67 @@ export default function DashboardPage() {
   return (
     <div className="-mx-4 -mt-4 bg-[#e8eef3] sm:-mx-6 sm:-mt-6">
       <section className="relative overflow-hidden bg-[#07111f] text-white">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-400/20 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl" />
-        <div className="relative px-4 pb-6 pt-6 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-teal-300">PlantControl</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-[28px]">Operations floor</h1>
-              <p className="mt-1 text-sm text-slate-300">{todayLabel}</p>
+        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-teal-400/15 blur-3xl" />
+        <div className="relative px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 shrink-0">
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-teal-300">PlantControl · {todayLabel}</p>
+              <h1 className="text-lg font-semibold tracking-tight">Operations floor</h1>
+            </div>
+            <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4 xl:max-w-3xl">
+              {[
+                { label: 'Active orders', value: stats.activeOrders.toLocaleString(), note: stats.activeOrders > 0 ? 'In the queue' : 'No active runs', icon: Activity },
+                { label: 'Production', value: stats.totalProduction.toLocaleString(), note: 'Completed tonnes', icon: Scale },
+                { label: 'Dispatch', value: stats.pendingDispatches.toLocaleString(), note: stats.pendingDispatches > 0 ? 'Trips waiting' : 'All dispatched', icon: Truck },
+                { label: 'Efficiency', value: `${stats.efficiency}%`, note: 'Target 85%', icon: Gauge },
+              ].map(({ label, value, note, icon: Icon }) => (
+                <div key={label} className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">{label}</span>
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-teal-300" />
+                  </div>
+                  <p className="mt-1 text-xl font-semibold tabular-nums leading-none tracking-tight">{value}</p>
+                  <p className="mt-1 truncate text-[11px] text-slate-400">{note}</p>
+                </div>
+              ))}
             </div>
             <button
               onClick={() => { fetchLiveOrders(); fetchDashboardData(false); }}
-              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-medium text-white backdrop-blur transition hover:bg-white/15"
+              className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/15"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               Refresh · {format(lastUpdated, 'HH:mm')}
             </button>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[
-              { label: 'Active orders', value: stats.activeOrders.toLocaleString(), note: stats.activeOrders > 0 ? 'In the queue' : 'No active runs', icon: Activity },
-              { label: 'Production', value: stats.totalProduction.toLocaleString(), note: 'Completed tonnes', icon: Scale },
-              { label: 'Dispatch', value: stats.pendingDispatches.toLocaleString(), note: stats.pendingDispatches > 0 ? 'Trips waiting' : 'All dispatched', icon: Truck },
-              { label: 'Efficiency', value: `${stats.efficiency}%`, note: 'Target 85%', icon: Gauge },
-            ].map(({ label, value, note, icon: Icon }) => (
-              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 backdrop-blur-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">{label}</span>
-                  <Icon className="h-4 w-4 text-teal-300" />
-                </div>
-                <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
-                <p className="mt-1 text-xs text-slate-400">{note}</p>
-              </div>
-            ))}
-          </div>
-
           {filteredLowStock.length > 0 && (
-            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-                <p className="text-sm text-amber-50">
+            <div className="mt-2.5 flex flex-col gap-2 rounded-lg border border-amber-300/25 bg-amber-400/10 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="flex items-center gap-2 text-xs text-amber-50">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+                <span>
                   <span className="font-semibold">{filteredLowStock.length} material{filteredLowStock.length === 1 ? '' : 's'} below reorder.</span>{' '}
-                  <span className="text-amber-100/80">
-                    {filteredLowStock.slice(0, 3).map(({ item }) => item.name).join(', ')}
-                    {filteredLowStock.length > 3 ? ` and ${filteredLowStock.length - 3} more` : ''}
-                  </span>
-                </p>
-              </div>
-              <Link to="/raw-materials" className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-900">
-                Review materials <ArrowRight className="h-3.5 w-3.5" />
+                  {filteredLowStock.slice(0, 3).map(({ item }) => item.name).join(', ')}
+                  {filteredLowStock.length > 3 ? ` and ${filteredLowStock.length - 3} more` : ''}
+                </span>
+              </p>
+              <Link to="/raw-materials" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-900">
+                Review materials <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
           )}
         </div>
       </section>
 
-      <div className="space-y-5 px-4 py-5 sm:px-6">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="space-y-3 px-4 py-3 sm:px-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
           {shortcuts.map(({ to, label, hint, icon: Icon, tint }) => (
-            <Link key={to} to={to} className="group flex items-center gap-3 rounded-2xl border border-white bg-white px-3.5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white ${tint}`}>
-                <Icon className="h-4 w-4" />
+            <Link key={to} to={to} className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:border-slate-300">
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white ${tint}`}>
+                <Icon className="h-3.5 w-3.5" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-slate-900">{label}</span>
-                <span className="block truncate text-xs text-slate-400">{hint}</span>
+                <span className="block truncate text-[13px] font-semibold text-slate-900">{label}</span>
+                <span className="block truncate text-[11px] text-slate-400">{hint}</span>
               </span>
             </Link>
           ))}
@@ -377,7 +372,7 @@ export default function DashboardPage() {
 
         return (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
                   <Factory className="h-5 w-5" />
@@ -401,9 +396,9 @@ export default function DashboardPage() {
                 { label: 'Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()} kg` },
                 { label: 'Lines running', value: String(runningLines) },
               ].map(({ label, value }) => (
-                <div key={label} className="px-5 py-4">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">{label}</p>
-                  <p className="mt-1.5 text-lg font-semibold tabular-nums tracking-tight text-slate-900">{value}</p>
+                <div key={label} className="px-4 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                  <p className="mt-0.5 text-sm font-semibold tabular-nums tracking-tight text-slate-900">{value}</p>
                 </div>
               ))}
             </div>
@@ -413,34 +408,25 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
-          <div className="rounded-2xl border border-white bg-white p-5 shadow-sm">
-            <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="mb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold tracking-tight text-slate-900">Twelve-month movement</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Tonnes produced, consumed, and dispatched</p>
+                <h2 className="text-sm font-semibold tracking-tight text-slate-900">Twelve-month movement</h2>
+                <p className="text-[11px] text-slate-500">Tonnes produced, consumed, and dispatched</p>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                {latestTrend && (
+                  <span className="font-medium text-slate-700">
+                    {latestTrend.month}: {Number(latestTrend.production).toLocaleString()} produced · {Number(latestTrend.consumption).toLocaleString()} consumed · {Number(latestTrend.dispatch).toLocaleString()} dispatched
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-teal-600" /> Production</span>
                 <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-sky-300" /> Consumption</span>
                 <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full bg-amber-500" /> Dispatch</span>
               </div>
             </div>
-            {latestTrend && (
-              <div className="mb-3 grid grid-cols-3 gap-2">
-                {[
-                  { label: latestTrend.month, k: 'Produced', v: latestTrend.production },
-                  { label: 'Same month', k: 'Consumed', v: latestTrend.consumption },
-                  { label: 'Same month', k: 'Dispatched', v: latestTrend.dispatch },
-                ].map((item) => (
-                  <div key={item.k} className="rounded-xl bg-slate-50 px-3 py-2">
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">{item.k}</p>
-                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{Number(item.v).toLocaleString()} <span className="text-xs font-medium text-slate-400">t</span></p>
-                  </div>
-                ))}
-              </div>
-            )}
             <div className="-mx-1">
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={168}>
                 <ComposedChart data={trendChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="prodFill" x1="0" y1="0" x2="0" y2="1">
@@ -462,78 +448,9 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
           </div>
-
-          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
-                  <Truck className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-semibold tracking-tight text-slate-900">Dispatch</h2>
-                  <p className="mt-0.5 text-xs text-slate-500">Outgoing shipments, delivery notes, and Sage posting</p>
-                </div>
-              </div>
-              <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                {stats.pendingDispatches} pending
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b border-slate-100 text-left">
-                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Reference</th>
-                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Destination</th>
-                    <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Weight</th>
-                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Status</th>
-                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Sage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentDispatches.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">No recent dispatches</td>
-                    </tr>
-                  ) : (
-                    recentDispatches.map((d) => (
-                      <tr key={d.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/70">
-                        <td className="px-5 py-3.5">
-                          <p className="font-medium tabular-nums text-slate-900">{d.dispatch_number}</p>
-                          {d.physical_dnote_number && (
-                            <p className="mt-0.5 text-xs text-slate-400">D-note {d.physical_dnote_number}</p>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          <p className="text-slate-800">
-                            {d.dispatch_type === 'customer_direct' ? (d.customer_name || 'Direct customer') : ((d.branches as any)?.name || 'Branch transfer')}
-                          </p>
-                          <p className="mt-0.5 text-xs capitalize text-slate-400">{String(d.dispatch_type || '').replace(/_/g, ' ')}</p>
-                        </td>
-                        <td className="px-5 py-3.5 text-right tabular-nums text-slate-800">
-                          {d.total_weight.toLocaleString()} <span className="text-xs text-slate-400">kg</span>
-                        </td>
-                        <td className="px-5 py-3.5"><StatusBadge status={d.status} /></td>
-                        <td className="px-5 py-3.5">
-                          {d.accounts_posting_status === 'approved' ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700">
-                              <Sparkles className="h-3 w-3" /> Posted
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
-                              <Clock className="h-3 w-3" /> Pending
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {varianceAlerts.length > 0 && (
             <div className="rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
@@ -568,7 +485,7 @@ export default function DashboardPage() {
                 <p className="mt-2 text-sm font-medium text-slate-800">Stock is within reorder limits</p>
               </div>
             ) : (
-              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+              <div className="max-h-[220px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                 {filteredLowStock.map(({ item, alertInfo }) => (
                   <div
                     key={item.id}
@@ -617,10 +534,57 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+        <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2.5">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-slate-900">Dispatch</h2>
+              <p className="text-[11px] text-slate-500">Shipments, delivery notes, and Sage posting</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{stats.pendingDispatches} pending</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 text-left">
+                  <th className="px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Reference</th>
+                  <th className="px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Destination</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Weight</th>
+                  <th className="px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Status</th>
+                  <th className="px-4 py-2 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Sage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentDispatches.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">No recent dispatches</td></tr>
+                ) : recentDispatches.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/70">
+                    <td className="px-4 py-2">
+                      <p className="font-medium tabular-nums text-slate-900">{d.dispatch_number}</p>
+                      {d.physical_dnote_number && <p className="text-[11px] text-slate-400">D-note {d.physical_dnote_number}</p>}
+                    </td>
+                    <td className="px-4 py-2 text-slate-800">
+                      {d.dispatch_type === 'customer_direct' ? (d.customer_name || 'Direct customer') : ((d.branches as any)?.name || 'Branch transfer')}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-800">{d.total_weight.toLocaleString()} <span className="text-xs text-slate-400">kg</span></td>
+                    <td className="px-4 py-2"><StatusBadge status={d.status} /></td>
+                    <td className="px-4 py-2">
+                      {d.accounts_posting_status === 'approved' ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700"><Sparkles className="h-3 w-3" /> Posted</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700"><Clock className="h-3 w-3" /> Pending</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
-        <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
               <Layers className="h-4 w-4" />
             </div>
             <div>
@@ -679,6 +643,7 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
       </div>
     </div>
