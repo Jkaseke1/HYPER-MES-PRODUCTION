@@ -68,6 +68,7 @@ const MacropackReconciliationReportPage = lazy(() => import('./pages/MacropackRe
 const InboundTransportPage = lazy(() => import('./pages/InboundTransportPage'));
 const MaintenanceProcurementPage = lazy(() => import('./pages/MaintenanceProcurementPage'));
 const SoldTonnagePage = lazy(() => import('./pages/SoldTonnagePage'));
+const IntakeMovementReportPage = lazy(() => import('./pages/IntakeMovementReportPage'));
 import { canAccessPath, defaultPathForRole } from './lib/roleAccess';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -174,6 +175,7 @@ export default function App() {
               <Route path="inbound-transport" element={<InboundTransportPage />} />
               <Route path="maintenance-procurement" element={<MaintenanceProcurementPage />} />
               <Route path="reports/sold-tonnage" element={<SoldTonnagePage />} />
+              <Route path="reports/intake-movement" element={<IntakeMovementReportPage />} />
               <Route path="finished-goods" element={<FinishedGoodsPage />} />
               <Route path="production-warehouse" element={<ProductionWarehousePage />} />
               <Route path="chick" element={<ChickHubPage />} />

@@ -31,6 +31,7 @@ const pageTitles: Record<string, string> = {
   '/chick-bookings': 'Chick Bookings',
   '/chick-distribution': 'Chick Distribution',
   '/reports': 'Reports & Analytics',
+  '/reports/intake-movement': 'Intake & Movement',
   '/maintenance-work-orders': 'Maintenance Work Orders',
   '/maintenance-schedules': 'PM Schedules',
   '/spare-parts': 'Spare Parts',

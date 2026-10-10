@@ -130,6 +130,7 @@ const navGroups: NavGroup[] = [
       { to: '/reports/macropack-reconciliation', icon: ClipboardCheck, label: 'Macropack Reconciliation' },
       { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
+      { to: '/reports/intake-movement', icon: Scale, label: 'Intake & Movement' },
       // Reconciliation
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },

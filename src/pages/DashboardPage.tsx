@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import {
-  Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, ComposedChart,
+  Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, ComposedChart,
 } from 'recharts';
 import {
-  TrendingUp, TrendingDown, AlertTriangle, RefreshCw, Circle, Play, Activity, Gauge, Users, Zap,
-  Layers, Scale, Sparkles, ShieldCheck, Factory, Truck, Database, CheckCircle2, ArrowRight
+  AlertTriangle, RefreshCw, Activity, Gauge,
+  Layers, Scale, Sparkles, ShieldCheck, Factory, Truck, Database,
+  Clock, ArrowRight, Package, ClipboardList, FlaskConical
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow, DispatchOrder } from '../types/database';
@@ -256,45 +257,103 @@ export default function DashboardPage() {
     dispatch: Number(row.dispatch_t || 0),
   }));
 
+  const todayLabel = format(new Date(), 'EEEE, d MMMM yyyy');
+  const latestTrend = trendChartData[trendChartData.length - 1];
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 text-slate-500">
-        <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-500 rounded-full animate-spin mb-3" />
-        <p className="text-sm font-semibold text-slate-700">Loading Operations Command Center...</p>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-slate-500">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-teal-600" />
+        </div>
+        <p className="mt-4 text-sm font-medium text-slate-700">Loading plant overview</p>
+        <p className="mt-1 text-xs text-slate-400">MES and Sage balances</p>
       </div>
     );
   }
 
+  const shortcuts = [
+    { to: '/production-orders', label: 'Production orders', hint: 'Batches and runs', icon: ClipboardList, tint: 'bg-teal-500' },
+    { to: '/formulations', label: 'Formulations', hint: 'Active recipes', icon: FlaskConical, tint: 'bg-sky-500' },
+    { to: '/raw-materials', label: 'Raw materials', hint: 'Stock and reorder', icon: Package, tint: 'bg-amber-500' },
+    { to: '/dispatch', label: 'Dispatch', hint: 'Loads leaving site', icon: Truck, tint: 'bg-violet-500' },
+    { to: '/goods-received', label: 'Goods received', hint: 'Inbound deliveries', icon: Scale, tint: 'bg-emerald-600' },
+    { to: '/production-control', label: 'Control centre', hint: 'Floor status', icon: Factory, tint: 'bg-slate-700' },
+  ];
+
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-slate-50/60 min-h-screen">
-      {/* Inventory attention summary */}
-      {filteredLowStock.length > 0 && (
-        <div className="bg-white border border-amber-200 rounded-lg shadow-sm overflow-hidden">
-          <div className="flex flex-col md:flex-row md:items-center gap-4 px-4 py-3.5 border-l-4 border-amber-500">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
+    <div className="-mx-4 -mt-4 bg-[#e8eef3] sm:-mx-6 sm:-mt-6">
+      <section className="relative overflow-hidden bg-[#07111f] text-white">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="relative px-4 pb-6 pt-6 sm:px-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-teal-300">PlantControl</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-[28px]">Operations floor</h1>
+              <p className="mt-1 text-sm text-slate-300">{todayLabel}</p>
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h2 className="text-sm font-bold text-slate-900">Inventory attention required</h2>
-                <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                  {filteredLowStock.length} {filteredLowStock.length === 1 ? 'material' : 'materials'} below reorder level
-                </span>
-              </div>
-              <p className="mt-1 text-xs text-slate-500 truncate">
-                Review current quantities and reorder targets for {filteredLowStock.slice(0, 3).map(({ item }) => item.name).join(', ')}{filteredLowStock.length > 3 ? ', and others' : ''}.
-              </p>
-            </div>
-            <Link
-              to="/raw-materials"
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-teal-700 shrink-0"
+            <button
+              onClick={() => { fetchLiveOrders(); fetchDashboardData(false); }}
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-medium text-white backdrop-blur transition hover:bg-white/15"
             >
-              Review materials
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh · {format(lastUpdated, 'HH:mm')}
+            </button>
           </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              { label: 'Active orders', value: stats.activeOrders.toLocaleString(), note: stats.activeOrders > 0 ? 'In the queue' : 'No active runs', icon: Activity },
+              { label: 'Production', value: stats.totalProduction.toLocaleString(), note: 'Completed tonnes', icon: Scale },
+              { label: 'Dispatch', value: stats.pendingDispatches.toLocaleString(), note: stats.pendingDispatches > 0 ? 'Trips waiting' : 'All dispatched', icon: Truck },
+              { label: 'Efficiency', value: `${stats.efficiency}%`, note: 'Target 85%', icon: Gauge },
+            ].map(({ label, value, note, icon: Icon }) => (
+              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">{label}</span>
+                  <Icon className="h-4 w-4 text-teal-300" />
+                </div>
+                <p className="mt-3 text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
+                <p className="mt-1 text-xs text-slate-400">{note}</p>
+              </div>
+            ))}
+          </div>
+
+          {filteredLowStock.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <p className="text-sm text-amber-50">
+                  <span className="font-semibold">{filteredLowStock.length} material{filteredLowStock.length === 1 ? '' : 's'} below reorder.</span>{' '}
+                  <span className="text-amber-100/80">
+                    {filteredLowStock.slice(0, 3).map(({ item }) => item.name).join(', ')}
+                    {filteredLowStock.length > 3 ? ` and ${filteredLowStock.length - 3} more` : ''}
+                  </span>
+                </p>
+              </div>
+              <Link to="/raw-materials" className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-900">
+                Review materials <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </section>
+
+      <div className="space-y-5 px-4 py-5 sm:px-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {shortcuts.map(({ to, label, hint, icon: Icon, tint }) => (
+            <Link key={to} to={to} className="group flex items-center gap-3 rounded-2xl border border-white bg-white px-3.5 py-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white ${tint}`}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-slate-900">{label}</span>
+                <span className="block truncate text-xs text-slate-400">{hint}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
 
       {/* Hero Live Production Banner */}
       {(() => {
@@ -314,212 +373,154 @@ export default function DashboardPage() {
         const throughputVal = Math.round((((heroOrder.actual_qty || 0) / elapsedHours) * 100)) / 100;
         const unitStr = (heroOrder as any).unit || 'kg';
 
+        const runningLines = liveOrders.filter((o) => o.status === 'in_progress').length;
+
         return (
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-700/60">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Factory className="w-5 h-5" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                  <Factory className="h-5 w-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      Live Feed
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.14em] text-teal-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+                      Live batch
                     </span>
-                    <span className="text-xs text-slate-400">Updated {format(lastUpdated, 'HH:mm:ss')}</span>
                   </div>
-                  <h2 className="text-lg font-extrabold tracking-tight mt-0.5">
-                    Active Batch: <span className="font-mono text-emerald-400">{heroOrder.batch_number}</span> — {(heroOrder.formulations as any)?.name}
-                  </h2>
+                  <p className="mt-0.5 text-base font-semibold tracking-tight text-slate-900">{heroOrder.batch_number}</p>
+                  <p className="text-sm text-slate-500">{(heroOrder.formulations as any)?.name || 'Formulation pending'}</p>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { fetchLiveOrders(); fetchDashboardData(false); }}
-                  className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                </button>
               </div>
             </div>
-
-            {heroOrder && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: 'Throughput', value: `${throughputVal.toLocaleString()} ${unitStr}/hr`, pct: Math.min(100, throughputVal / 10), color: '#10b981', icon: Zap },
-                    { label: 'Yield Rate', value: `${yieldPct}%`, pct: yieldPct, color: '#3b82f6', icon: Gauge },
-                    { label: 'Batch Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()} kg`, pct: yieldPct, color: '#f59e0b', icon: Activity },
-                    { label: 'Active Lines', value: `${liveOrders.filter(o => o.status === 'in_progress').length} Line Running`, pct: Math.min(100, liveOrders.filter(o => o.status === 'in_progress').length * 50), color: '#a855f7', icon: Users },
-                  ].map(({ label, value, pct, color, icon: Icon }) => (
-                    <div key={label} className="bg-slate-800/80 p-3.5 rounded-xl border border-slate-700">
-                      <div className="flex items-center gap-1.5 mb-1 text-slate-400">
-                        <Icon className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
-                      </div>
-                      <p className="text-base font-extrabold text-white mb-2">{value}</p>
-                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
-                      </div>
-                    </div>
-                  ))}
+            <div className="grid grid-cols-2 divide-slate-100 md:grid-cols-4 md:divide-x">
+              {[
+                { label: 'Throughput', value: `${throughputVal.toLocaleString()} ${unitStr}/hr` },
+                { label: 'Yield', value: `${yieldPct}%` },
+                { label: 'Progress', value: `${(heroOrder.actual_qty || 0).toLocaleString()} / ${heroOrder.planned_qty.toLocaleString()} kg` },
+                { label: 'Lines running', value: String(runningLines) },
+              ].map(({ label, value }) => (
+                <div key={label} className="px-5 py-4">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                  <p className="mt-1.5 text-lg font-semibold tabular-nums tracking-tight text-slate-900">{value}</p>
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         );
       })()}
 
-      {/* KPI Stat Cards Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Orders</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Activity className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mt-2">
-            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{String(stats.activeOrders).padStart(2, '0')}</h3>
-            {stats.activeOrders > 0 && <TrendingUp className="w-4 h-4 text-emerald-500" />}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">{stats.activeOrders > 0 ? 'Batches in active queue' : 'No active runs'}</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Production</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Scale className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1 mt-2">
-            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{stats.totalProduction.toLocaleString()}</h3>
-            <span className="text-xs font-bold text-slate-400">tonnes</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Cumulative plant output</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Dispatch</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Truck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mt-2">
-            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{String(stats.pendingDispatches).padStart(2, '0')}</h3>
-            <span className="text-xs font-bold text-purple-600">trips</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">{stats.pendingDispatches > 0 ? 'Shipments queueing' : 'All dispatched'}</p>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Plant Efficiency</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Gauge className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2 mt-2">
-            <h3 className="text-3xl font-extrabold text-slate-900 font-mono">{stats.efficiency}%</h3>
-            {stats.efficiency >= 85 ? <TrendingUp className="w-4 h-4 text-emerald-500" /> : <TrendingDown className="w-4 h-4 text-amber-500" />}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">Target OEE: &gt;85%</p>
-        </div>
-      </div>
-
-      {/* Analytics Charts & Dual-Source Stock Alerts */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        
-        {/* Left Main Column: Operations Trends Chart + Live Dispatch & Logistics Activity Hub */}
-        <div className="xl:col-span-2 space-y-5">
-          {/* Operations Trends Chart */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="space-y-4 xl:col-span-2">
+          <div className="rounded-2xl border border-white bg-white p-5 shadow-sm">
+            <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">12-Month Operations Trends & Analytics</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Production Output (t) vs RM Consumption vs Branch Dispatches</p>
+                <h2 className="text-base font-semibold tracking-tight text-slate-900">Twelve-month movement</h2>
+                <p className="mt-0.5 text-xs text-slate-500">Tonnes produced, consumed, and dispatched</p>
               </div>
-              <div className="flex items-center gap-4 text-xs font-semibold">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded" /> Production</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-blue-500 rounded" /> Consumption</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-slate-400 border-t border-dashed" /> Dispatch</span>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-teal-600" /> Production</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-sky-300" /> Consumption</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full bg-amber-500" /> Dispatch</span>
               </div>
             </div>
-
-            <ResponsiveContainer width="100%" height={290}>
-              <ComposedChart data={trendChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
-                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={{ stroke: '#e2e8f0' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '12px', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-                <Bar dataKey="production" fill="#10b981" radius={[6, 6, 0, 0]} name="Production (t)" />
-                <Bar dataKey="consumption" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Consumption (t)" />
-                <Line type="monotone" dataKey="dispatch" stroke="#64748b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Dispatch (t)" />
-              </ComposedChart>
-            </ResponsiveContainer>
+            {latestTrend && (
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                {[
+                  { label: latestTrend.month, k: 'Produced', v: latestTrend.production },
+                  { label: 'Same month', k: 'Consumed', v: latestTrend.consumption },
+                  { label: 'Same month', k: 'Dispatched', v: latestTrend.dispatch },
+                ].map((item) => (
+                  <div key={item.k} className="rounded-xl bg-slate-50 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-slate-400">{item.k}</p>
+                    <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{Number(item.v).toLocaleString()} <span className="text-xs font-medium text-slate-400">t</span></p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="-mx-1">
+              <ResponsiveContainer width="100%" height={280}>
+                <ComposedChart data={trendChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="prodFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0f766e" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#0f766e" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#eef2f6" vertical={false} />
+                  <XAxis dataKey="month" stroke="#e2e8f0" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#e2e8f0" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '12px', padding: '10px 12px' }}
+                    cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
+                  />
+                  <Area type="monotone" dataKey="production" stroke="#0f766e" fill="url(#prodFill)" strokeWidth={2.5} name="Production (t)" />
+                  <Bar dataKey="consumption" fill="#7dd3fc" radius={[4, 4, 0, 0]} name="Consumption (t)" barSize={12} />
+                  <Line type="monotone" dataKey="dispatch" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} name="Dispatch (t)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
-          {/* Live Dispatch & Logistics Activity Hub */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Truck className="w-4 h-4 text-purple-600" />
+          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
+                  <Truck className="h-4 w-4" />
+                </div>
                 <div>
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Live Dispatch & Logistics Activity</h3>
-                  <p className="text-[11px] text-slate-400">Real-time status of outgoing shipments, D-Notes & Sage posting</p>
+                  <h2 className="text-sm font-semibold tracking-tight text-slate-900">Dispatch</h2>
+                  <p className="mt-0.5 text-xs text-slate-500">Outgoing shipments, delivery notes, and Sage posting</p>
                 </div>
               </div>
-              <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-                {stats.pendingDispatches} Pending Dispatches
+              <span className="inline-flex w-fit items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {stats.pendingDispatches} pending
               </span>
             </div>
-
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Dispatch Ref</th>
-                    <th className="px-4 py-3 text-left">Destination / Type</th>
-                    <th className="px-4 py-3 text-right">Weight (kg)</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left">Sage Posting</th>
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left">
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Reference</th>
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Destination</th>
+                    <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Weight</th>
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Status</th>
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Sage</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody>
                   {recentDispatches.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No recent dispatch activity</td>
+                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">No recent dispatches</td>
                     </tr>
                   ) : (
                     recentDispatches.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
-                          {d.dispatch_number}
+                      <tr key={d.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/70">
+                        <td className="px-5 py-3.5">
+                          <p className="font-medium tabular-nums text-slate-900">{d.dispatch_number}</p>
                           {d.physical_dnote_number && (
-                            <span className="ml-2 text-[9px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded font-mono">D-Note #{d.physical_dnote_number}</span>
+                            <p className="mt-0.5 text-xs text-slate-400">D-note {d.physical_dnote_number}</p>
                           )}
                         </td>
-                        <td className="px-4 py-3 font-bold text-slate-800">
-                          {d.dispatch_type === 'customer_direct' ? (d.customer_name || 'Direct Customer') : ((d.branches as any)?.name || 'Branch Transfer')}
+                        <td className="px-5 py-3.5">
+                          <p className="text-slate-800">
+                            {d.dispatch_type === 'customer_direct' ? (d.customer_name || 'Direct customer') : ((d.branches as any)?.name || 'Branch transfer')}
+                          </p>
+                          <p className="mt-0.5 text-xs capitalize text-slate-400">{String(d.dispatch_type || '').replace(/_/g, ' ')}</p>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-extrabold text-slate-900">
-                          {d.total_weight.toLocaleString()} <span className="font-normal text-slate-400">kg</span>
+                        <td className="px-5 py-3.5 text-right tabular-nums text-slate-800">
+                          {d.total_weight.toLocaleString()} <span className="text-xs text-slate-400">kg</span>
                         </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={d.status} />
-                        </td>
-                        <td className="px-4 py-3">
+                        <td className="px-5 py-3.5"><StatusBadge status={d.status} /></td>
+                        <td className="px-5 py-3.5">
                           {d.accounts_posting_status === 'approved' ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
-                              <Sparkles className="w-3 h-3 text-purple-600" /> Posted to Sage
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700">
+                              <Sparkles className="h-3 w-3" /> Posted
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                              Pending
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+                              <Clock className="h-3 w-3" /> Pending
                             </span>
                           )}
                         </td>
@@ -532,92 +533,75 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Right Sidebar Widgets */}
-        <div className="space-y-5">
-          {/* RM Variance Alert Banner */}
+        <div className="space-y-4">
           {varianceAlerts.length > 0 && (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600" />
-                  <h3 className="text-xs font-bold text-rose-900 uppercase tracking-wider">Raw Material Variance Alert</h3>
-                </div>
-                <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">{varianceAlerts.length} Alerts</span>
+            <div className="rounded-xl border border-rose-200 bg-white p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-slate-900">Stock variance</h2>
+                <span className="text-xs text-rose-700">{varianceAlerts.length}</span>
               </div>
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-2">
                 {varianceAlerts.map((v) => (
-                  <div key={v.raw_material_name} className="flex items-center justify-between text-xs bg-white p-2 rounded-xl border border-rose-100 shadow-sm">
-                    <span className="font-semibold text-rose-900">{v.raw_material_name}</span>
-                    <span className="font-mono font-extrabold text-rose-700">+{v.stock_variance.toFixed(3)} kg</span>
+                  <div key={v.raw_material_name} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate text-slate-700">{v.raw_material_name}</span>
+                    <span className="shrink-0 tabular-nums text-rose-700">+{v.stock_variance.toFixed(3)} kg</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* DUAL-SOURCE STOCK & REORDER ALERTS WIDGET (MES + SAGE DB) */}
-          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <div>
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Stock & Reorder Alerts</h3>
-                  <p className="text-[10px] text-slate-400">Monitoring both MES & Sage DB stock levels</p>
-                </div>
+          <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight text-slate-900">Reorder alerts</h2>
+                <p className="mt-0.5 text-xs text-slate-500">MES and Sage on-hand</p>
               </div>
-              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                {filteredLowStock.length} Alerts
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                {filteredLowStock.length}
               </span>
             </div>
 
             {filteredLowStock.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 space-y-1">
-                <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto mb-1" />
-                <p className="text-xs font-bold text-slate-700">All MES & Sage DB stock levels healthy</p>
-                <p className="text-[10px] text-slate-400">No raw materials are currently below reorder levels in MES or Sage DB.</p>
+              <div className="rounded-lg bg-teal-50/60 px-4 py-8 text-center">
+                <ShieldCheck className="mx-auto h-5 w-5 text-teal-700" />
+                <p className="mt-2 text-sm font-medium text-slate-800">Stock is within reorder limits</p>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1 pt-1 pb-1">
+              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                 {filteredLowStock.map(({ item, alertInfo }) => (
-                  <div key={item.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 hover:bg-slate-100 transition-colors space-y-2">
+                  <div
+                    key={item.id}
+                    className={`rounded-lg border border-slate-100 border-l-[3px] bg-slate-50/40 px-3 py-3 ${
+                      alertInfo.severity === 'critical' ? 'border-l-rose-500' : 'border-l-amber-400'
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${alertInfo.severity === 'critical' ? 'bg-rose-500 animate-ping' : 'bg-amber-500'}`} />
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                            <span className="font-mono font-bold text-blue-700">{item.code}</span>
-                            <span>• Reorder: <strong className="font-mono">{item.reorder_level.toLocaleString()} {item.unit}</strong></span>
-                          </div>
-                        </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">{item.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {item.code} · reorder {item.reorder_level.toLocaleString()} {item.unit}
+                        </p>
                       </div>
-
-                      <span className={`text-[9px] uppercase font-black px-2 py-0.5 rounded shrink-0 ${
-                        alertInfo.severity === 'critical' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
-                      }`}>
+                      <span className={`shrink-0 text-[11px] font-medium ${alertInfo.severity === 'critical' ? 'text-rose-700' : 'text-amber-700'}`}>
                         {alertInfo.alertReason || alertInfo.severity}
                       </span>
                     </div>
-
-                    {/* MES vs SAGE DUAL-SOURCE STOCK COMPARISON BADGES */}
-                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-200/60 text-[10px]">
-                      <div className="bg-white px-2 py-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
-                        <span className="text-slate-500 font-bold shrink-0 text-[10px]">MES Stock:</span>
-                        <span className={`font-mono font-extrabold whitespace-nowrap ml-1 ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
+                    <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <p className="text-slate-400">MES</p>
+                        <p className={`mt-0.5 tabular-nums font-medium ${alertInfo.mesStock <= item.reorder_level ? 'text-amber-700' : 'text-slate-900'}`}>
                           {alertInfo.mesStock.toLocaleString()} {item.unit}
-                        </span>
+                        </p>
                       </div>
-
-                      <div className="bg-white px-2 py-1.5 rounded-xl border border-slate-200 flex items-center justify-between min-w-0">
-                        <span className="text-slate-500 font-bold flex items-center gap-1 shrink-0 text-[10px]">
-                          <Database className="w-3 h-3 text-indigo-500 shrink-0" /> Sage DB:
-                        </span>
+                      <div>
+                        <p className="inline-flex items-center gap-1 text-slate-400"><Database className="h-3 w-3" /> Sage</p>
                         {alertInfo.sageStock !== null ? (
-                          <span className={`font-mono font-extrabold whitespace-nowrap ml-1 ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700 font-black' : 'text-slate-900'}`}>
+                          <p className={`mt-0.5 tabular-nums font-medium ${alertInfo.sageStock <= item.reorder_level ? 'text-rose-700' : 'text-slate-900'}`}>
                             {alertInfo.sageStock.toLocaleString()} {item.unit}
-                          </span>
+                          </p>
                         ) : (
-                          <span className="font-bold text-slate-400 italic text-[10px] whitespace-nowrap">Not Synced</span>
+                          <p className="mt-0.5 text-slate-400">Not synced</p>
                         )}
                       </div>
                     </div>
@@ -627,54 +611,75 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Pending Approvals */}
-          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
             <PendingApprovalsWidget limit={5} compact />
           </div>
         </div>
       </div>
 
-      {/* Recent Production Orders Table */}
-      <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-emerald-600" />
-            <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Recent Production Orders</h2>
+      <div className="overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-sm">
+        <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-600">
+              <Layers className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-slate-900">Recent production</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Latest batches recorded in PlantControl</p>
+            </div>
           </div>
-          <span className="text-xs font-bold text-slate-500">{recentOrders.length} Recent Batches</span>
+          <span className="text-xs text-slate-400">{recentOrders.length} batches</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-slate-900 text-white uppercase tracking-wider font-semibold">
-              <tr>
-                <th className="px-5 py-3.5 text-left">Batch Number</th>
-                <th className="px-5 py-3.5 text-left">Product Formulation</th>
-                <th className="px-5 py-3.5 text-right">Planned (kg)</th>
-                <th className="px-5 py-3.5 text-right">Actual (kg)</th>
-                <th className="px-5 py-3.5 text-left">Status</th>
-                <th className="px-5 py-3.5 text-left">Date</th>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-slate-100 text-left">
+                <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Batch</th>
+                <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Formulation</th>
+                <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Planned</th>
+                <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Actual</th>
+                <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Status</th>
+                <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-[0.12em] text-slate-400">Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {recentOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-slate-400">No production orders found</td>
+                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-400">No production orders yet</td>
                 </tr>
               ) : (
-                recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-5 py-3.5 font-mono font-bold text-slate-900">{order.batch_number}</td>
-                    <td className="px-5 py-3.5 font-bold text-slate-800">{order.formulations?.name || '-'}</td>
-                    <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-700">{order.planned_qty?.toLocaleString()}</td>
-                    <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-700">{order.actual_qty?.toLocaleString()}</td>
-                    <td className="px-5 py-3.5"><StatusBadge status={order.status} /></td>
-                    <td className="px-5 py-3.5 text-slate-500">{format(new Date(order.created_at), 'dd MMM yyyy')}</td>
-                  </tr>
-                ))
+                recentOrders.map((order) => {
+                  const yieldRate = order.planned_qty > 0 ? Math.round(((order.actual_qty || 0) / order.planned_qty) * 100) : 0;
+                  const yieldColor = yieldRate >= 90 ? 'text-teal-700' : yieldRate >= 70 ? 'text-amber-700' : 'text-rose-700';
+                  return (
+                    <tr key={order.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/70">
+                      <td className="px-5 py-3.5 font-medium tabular-nums text-slate-900">{order.batch_number}</td>
+                      <td className="px-5 py-3.5">
+                        <p className="text-slate-800">{order.formulations?.name || '—'}</p>
+                        {order.formulations?.code && (
+                          <p className="mt-0.5 text-xs text-slate-400">{order.formulations.code}</p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-700">
+                        {order.planned_qty?.toLocaleString()} <span className="text-xs text-slate-400">kg</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <p className="tabular-nums text-slate-900">{order.actual_qty?.toLocaleString()} <span className="text-xs text-slate-400">kg</span></p>
+                        <p className={`mt-0.5 text-xs ${yieldColor}`}>{yieldRate}% yield</p>
+                      </td>
+                      <td className="px-5 py-3.5"><StatusBadge status={order.status} /></td>
+                      <td className="px-5 py-3.5 text-slate-600">
+                        {format(new Date(order.created_at), 'dd MMM yyyy')}
+                        <span className="ml-2 text-xs text-slate-400">{format(new Date(order.created_at), 'HH:mm')}</span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );
