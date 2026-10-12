@@ -138,6 +138,7 @@ export default function ProductionWarehousePage() {
   const [loading, setLoading] = useState(true);
   const [pageView, setPageView] = useState<'receiving' | 'stock' | 'sage'>('receiving');
   const [incomingFilter, setIncomingFilter] = useState<'all' | 'awaiting' | 'processed'>('all');
+  const [incomingSearch, setIncomingSearch] = useState('');
   const [sageActivityFilter, setSageActivityFilter] = useState<'all' | 'attention' | 'processed'>('all');
   const [expandedSageIst, setExpandedSageIst] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -434,10 +435,15 @@ export default function ProductionWarehousePage() {
     }));
   }, [incomingTransfers]);
   const visibleIncomingBundles = useMemo(() => incomingBundles.filter((bundle) => {
-    if (incomingFilter === 'awaiting') return bundle.pendingTransfers.length > 0;
-    if (incomingFilter === 'processed') return bundle.pendingTransfers.length === 0;
-    return true;
-  }), [incomingBundles, incomingFilter]);
+    if (incomingFilter === 'awaiting' && bundle.pendingTransfers.length === 0) return false;
+    if (incomingFilter === 'processed' && bundle.pendingTransfers.length > 0) return false;
+    const query = incomingSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [bundle.purpose, ...bundle.transfers.flatMap((transfer) => [
+      transfer.transfer_number,
+      incomingReversalsByTransferId[transfer.id]?.sage_reference || '',
+    ])].some((reference) => reference.toLowerCase().includes(query));
+  }), [incomingBundles, incomingFilter, incomingSearch, incomingReversalsByTransferId]);
   const expandedIncomingBundleData = useMemo(
     () => incomingBundles.find((bundle) => bundle.key === expandedIncomingBundle) || null,
     [incomingBundles, expandedIncomingBundle],
@@ -726,7 +732,12 @@ export default function ProductionWarehousePage() {
               <span className="font-bold text-slate-800">Incoming ISTs</span>
               <span className="border border-teal-200 bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-700">{pendingAcceptanceTransfers.length} ready</span>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="relative w-full sm:w-64">
+                <label htmlFor="incoming-ist-search" className="sr-only">Search loaded ISTs by Sage IST or line reference</label>
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input id="incoming-ist-search" type="search" value={incomingSearch} onChange={(event) => setIncomingSearch(event.target.value)} placeholder="Search Sage IST number..." className="w-full rounded-md border border-teal-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+              </div>
               <div className="flex items-center gap-2">
                 <label htmlFor="incoming-status-filter" className="sr-only">Show incoming ISTs</label>
                 <select id="incoming-status-filter" value={incomingFilter} onChange={(event) => setIncomingFilter(event.target.value as typeof incomingFilter)} className="border border-teal-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:border-teal-500 focus:outline-none">
@@ -820,7 +831,7 @@ export default function ProductionWarehousePage() {
           {visibleIncomingBundles.length === 0 && (
             <div className="border-t border-teal-100 px-5 py-10 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-              <p className="mt-2 text-sm font-bold text-slate-800">No ISTs in this view</p>
+              <p className="mt-2 text-sm font-bold text-slate-800">{incomingSearch.trim() ? 'No matching ISTs in the loaded records' : 'No ISTs in this view'}</p>
             </div>
           )}
         </section>
