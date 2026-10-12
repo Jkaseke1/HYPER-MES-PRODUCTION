@@ -15,6 +15,7 @@
     "test-material-transfer-sdk": "node materialTransferSdkAuto.js",
     "sync-suppliers": "node syncSuppliersFromSage.js",
     "sync-master-data": "node syncMasterData.js",
+    "sync-crm-customers": "node syncCrmCustomersFromSage.js",
     "test": "jest",
     "lint": "eslint .",
     "setup": "npm install && node setup.js"

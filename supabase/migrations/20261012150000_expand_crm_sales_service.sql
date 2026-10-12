@@ -1,6 +1,8 @@
 -- HYPERFEEDS CRM: pipeline, tasks, service issues and customer health
 
 ALTER TABLE crm_customers
+  ADD COLUMN IF NOT EXISTS sage_rep_code text,
+  ADD COLUMN IF NOT EXISTS sage_rep_name text,
   ADD COLUMN IF NOT EXISTS health_status text NOT NULL DEFAULT 'healthy'
     CHECK (health_status IN ('healthy', 'growing', 'dormant', 'at_risk', 'reactivation_ready')),
   ADD COLUMN IF NOT EXISTS next_contact_at timestamptz,
