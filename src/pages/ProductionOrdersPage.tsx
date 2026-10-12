@@ -908,12 +908,12 @@ export default function ProductionOrdersPage() {
       // Finance control: a work order must be based on an approved formula whose
       // standard ingredient quantities reconcile to its declared batch size.
       const [{ data: formulation, error: formulationError }, { data: ingredients, error: ingredientsError }] = await Promise.all([
-        supabase.from('formulations').select('batch_size, batch_unit, status').eq('id', form.formulation_id).single(),
+        supabase.from('formulations').select('batch_size, batch_unit, status, approved_by, is_daily_active').eq('id', form.formulation_id).single(),
         supabase.from('formulation_ingredients').select('raw_material_id, quantity, unit, is_active, raw_materials(name, category, unit)').eq('formulation_id', form.formulation_id),
       ]);
       if (formulationError) throw formulationError;
       if (ingredientsError) throw ingredientsError;
-      if (formulation.status !== 'active') {
+      if (formulation.status !== 'active' || !formulation.approved_by || !formulation.is_daily_active) {
         throw new Error('This formulation is awaiting Finance approval and cannot be used for a work order yet.');
       }
       const batchSize = Number(formulation.batch_size || 0);
@@ -2137,9 +2137,8 @@ export default function ProductionOrdersPage() {
               <div>
                 <label className={labelCls}>Product Formulation * (Finance Activated Only)</label>
                 {(() => {
-                  const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
                   const dailyActiveFormulations = formulations.filter(
-                    f => activeIds.includes(f.id) || (f as any).is_daily_active === true
+                    f => f.status === 'active' && !!f.approved_by && (f as any).is_daily_active === true
                   );
 
                   return (

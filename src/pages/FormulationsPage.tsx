@@ -475,7 +475,7 @@ export default function FormulationsPage() {
       quantity: Number(i.quantity) || 0,
       unit: 'kg',
       percentage: standardBatch > 0 ? Math.round(((Number(i.quantity) || 0) / standardBatch) * 1000000) / 10000 : 0,
-      is_critical: !!i.is_critical,
+      is_critical: !!(bomRes.data || []).find(line => line.raw_material_id === i.raw_material_id)?.is_critical,
     }));
     setIngs(loadedIngredients);
     setFormulaStage('formula');
@@ -560,75 +560,29 @@ export default function FormulationsPage() {
       
       console.log('Saving formulation with variants:', payload.unit_size_variants);
 
-      let fId = editId;
-      if (editId) {
-        // Draft edits stay on the same version. New versions are created only
-        // through the explicit Create New Version action, preserving history.
-        const { error } = await supabase.from('formulations').update(payload).eq('id', editId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('formulations').insert(payload).select('id').single();
-        if (error) throw error;
-        fId = data?.id || null;
-      }
-
-      if (!fId) throw new Error('Formulation ID missing after save.');
-
-      // Persist the entered formula separately from the generated production BOM.
-      const { data: formulaSpec, error: formulaSpecError } = await supabase
-        .from('formula_specs')
-        .upsert({
-          formulation_id: fId,
-          reference_batch_size: resolvedBatchSize,
-          batch_unit: 'kg',
-          status: 'generated',
-          generated_bom_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'formulation_id' })
-        .select('id')
-        .single();
-      if (formulaSpecError || !formulaSpec) throw formulaSpecError || new Error('Formula specification could not be saved.');
-
-      const { error: formulaLinesDeleteError } = await supabase
-        .from('formula_spec_lines')
-        .delete()
-        .eq('formula_spec_id', formulaSpec.id);
-      if (formulaLinesDeleteError) throw formulaLinesDeleteError;
-
-      const formulaRows = ings.filter(i => i.raw_material_id).map((i, idx) => ({
-        formula_spec_id: formulaSpec.id,
-        raw_material_id: i.raw_material_id,
-        quantity: i.quantity,
-        unit: 'kg',
-        notes: '',
-        sort_order: idx,
-      }));
-      const { error: formulaLinesInsertError } = await supabase.from('formula_spec_lines').insert(formulaRows);
-      if (formulaLinesInsertError) throw formulaLinesInsertError;
-
       const batchScale = resolvedBatchSize / STANDARD_FORMULA_BATCH_KG;
       const rows = [...ings, ...countedBomLines.map(line => ({ ...line, quantity: line.quantity * batchScale }))]
         .filter(i => i.raw_material_id)
         .map((i, idx) => ({
-          formulation_id: fId!,
           raw_material_id: i.raw_material_id,
           quantity: i.quantity,
           unit: i.unit,
-          percentage: i.unit === 'kg' && !countedBomLines.some(line => line.raw_material_id === i.raw_material_id) ? Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000 : 0,
+          percentage: countedBomLines.some(line => line.raw_material_id === i.raw_material_id) ? 0 : Math.round((i.quantity / resolvedBatchSize) * 100000000) / 1000000,
           is_critical: i.is_critical,
           notes: '',
           sort_order: idx,
         }));
-
-      const { error: deleteError } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', fId);
-      if (deleteError) throw deleteError;
-      if (rows.length) {
-        const { error } = await supabase.from('formulation_ingredients').insert(rows);
-        if (error) throw error;
-      }
+      const { data: saved, error } = await supabase.rpc('save_formula_revision', {
+        p_source_id: editId || sourceFormulaId || null,
+        p_formula: payload,
+        p_bom: rows,
+      });
+      if (error) throw error;
+      const savedFormula = (Array.isArray(saved) ? saved[0] : saved) as Formulation;
+      if (!savedFormula?.id) throw new Error('Formula revision was not returned after save.');
 
       setEditOpen(false);
-      setToastMessage(`Formula ${form.code} v${form.version} saved and BOM generated from the formula.`);
+      setToastMessage(savedFormula.id === editId ? `Formula ${form.code} is unchanged; v${savedFormula.version} preserved.` : `Formula ${form.code} v${savedFormula.version} saved as a new draft. Finance activation is required.`);
       fetchFormulations();
     } catch (error: any) {
       console.error('Error saving formulation:', error);
@@ -637,6 +591,8 @@ export default function FormulationsPage() {
         alert(`A formulation with code "${form.code}" already exists. Use a different code, or open the existing one and click Edit.`);
       } else if (error?.code === '23505') {
         alert(`Duplicate value: ${error.details || error.message}`);
+      } else if (error?.code === 'PGRST202') {
+        alert('Apply the formula revision migration (20261012120000_atomic_formula_versions.sql) in LIVE Supabase, then refresh. No existing formula was overwritten.');
       } else if (error?.code === 'PGRST204' && /unit_size_variants/.test(error?.message || '')) {
         alert('LIVE needs the formula metadata migration (20261009090000_add_formulation_unit_size_variants.sql). No formula was saved. Apply it in the LIVE Supabase SQL Editor, then refresh this page.');
       } else {
@@ -693,28 +649,36 @@ export default function FormulationsPage() {
         }
       }
 
-      // Delete all existing ingredients then re-insert (handles replace + delete cleanly)
-      const { error: delErr } = await supabase.from('formulation_ingredients').delete().eq('formulation_id', selected.id);
-      if (delErr) throw delErr;
+      if (Math.abs(totalWeight - STANDARD_FORMULA_BATCH_KG) > 0.01) {
+        throw new Error('BOM ingredient mass must total 1,000 kg, excluding packaging.');
+      }
       const rows = validIngs.map((i, idx) => ({
-        formulation_id: selected.id,
         raw_material_id: i.raw_material_id,
         quantity: i.quantity,
         unit: i.unit,
         percentage: i.percentage,
-        is_critical: i.is_critical,
-        notes: '',
+        is_critical: !!i.is_critical,
+        notes: i.notes || '',
         sort_order: idx,
       }));
-      if (rows.length > 0) {
-        const { error: insErr } = await supabase.from('formulation_ingredients').insert(rows);
-        if (insErr) throw insErr;
-      }
-
+      const { data: saved, error } = await supabase.rpc('save_formula_revision', {
+        p_source_id: selected.id,
+        p_formula: {
+          name: selected.name, code: selected.code, sage_code: (selected as any).sage_code || '',
+          category: selected.category, description: selected.description,
+          batch_size: 1000, batch_unit: 'kg', unit_size_variants: (selected as any).unit_size_variants || null,
+          target_protein: selected.target_protein, target_fat: selected.target_fat,
+          target_fiber: selected.target_fiber, target_moisture: selected.target_moisture,
+          estimated_cost_per_unit: selected.estimated_cost_per_unit,
+        },
+        p_bom: rows,
+      });
+      if (error) throw error;
+      const revision = (Array.isArray(saved) ? saved[0] : saved) as Formulation;
+      if (!revision?.id) throw new Error('Formula revision was not returned after save.');
       setBomEditMode(false);
-      const { data } = await supabase.from('formulation_ingredients').select('*, raw_materials(*)').eq('formulation_id', selected.id).order('sort_order');
-      setDetailIngs(data || []);
-      setToastMessage(`BOM updated on draft v${selected.version}. Total formulation percentage normalized to 100%.`);
+      await openDetail(revision);
+      setToastMessage(revision.id === selected.id ? `BOM unchanged; v${revision.version} preserved.` : `BOM saved as draft v${revision.version}. Finance activation is required.`);
       setTimeout(() => setToastMessage(null), 4000);
       fetchFormulations();
     } catch (error: any) {
@@ -1119,8 +1083,7 @@ export default function FormulationsPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             {(() => {
-                              const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
-                              const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
+                              const isActiveToday = f.status === 'active' && !!f.approved_by && (f as any).is_daily_active === true;
 
                               if (isActiveToday) {
                                 return (
@@ -1143,7 +1106,7 @@ export default function FormulationsPage() {
                             <div className="flex items-center justify-center gap-1">
                               {isFinanceUser && (() => {
                                 const activeIds: string[] = JSON.parse(localStorage.getItem('daily_active_formulations') || '[]');
-                                const isActiveToday = activeIds.includes(f.id) || (f as any).is_daily_active;
+                                const isActiveToday = f.status === 'active' && !!f.approved_by && (f as any).is_daily_active === true;
 
                                 if (isActiveToday) {
                                   return (
@@ -1151,18 +1114,19 @@ export default function FormulationsPage() {
                                       onClick={async () => {
                                         try {
                                           const updatedActiveIds = activeIds.filter(id => id !== f.id);
-                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
-                                          
-                                          await supabase
+                                          const { error } = await supabase
                                             .from('formulations')
-                                            .update({ status: 'draft', updated_at: new Date().toISOString() })
+                                            .update({ status: 'draft', is_daily_active: false, updated_at: new Date().toISOString() })
                                             .eq('id', f.id);
+                                          if (error) throw error;
+                                          localStorage.setItem('daily_active_formulations', JSON.stringify(updatedActiveIds));
 
                                           setToastMessage(`Formulation "${f.name}" deactivated.`);
                                           setTimeout(() => setToastMessage(null), 3000);
                                           await fetchFormulations();
                                         } catch (err: any) {
                                           console.error('Deactivate error:', err);
+                                          alert(`Could not deactivate formula: ${err.message || err}`);
                                         }
                                       }}
                                       className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-extrabold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md transition-colors"
@@ -1181,27 +1145,8 @@ export default function FormulationsPage() {
                                           alert('Only Finance can approve a formula for production.');
                                           return;
                                         }
-                                        const readiness = formulaReadiness[f.id];
-                                        if (!readiness?.isBalanced) {
-                                          alert(`Cannot activate this formula. Active BOM total is ${(readiness?.ingredientTotalKg || 0).toFixed(2)} kg; reference batch is ${Number(f.batch_size || 0).toFixed(2)} kg.`);
-                                          await openEdit(f);
-                                          return;
-                                        }
-                                        const { data: { user } } = await supabase.auth.getUser();
-
-                                        // Update status and approved_by in Supabase
-                                        const { error: updateErr } = await supabase
-                                          .from('formulations')
-                                          .update({
-                                            status: 'active',
-                                            approved_by: user?.id || null,
-                                            updated_at: new Date().toISOString(),
-                                          })
-                                          .eq('id', f.id);
-
-                                        if (updateErr) {
-                                          console.warn('Formulation status update warning:', updateErr);
-                                        }
+                                        const { error: updateErr } = await supabase.rpc('activate_formula_revision', { p_id: f.id });
+                                        if (updateErr) throw updateErr;
 
                                         // Track daily active formulation in storage
                                         if (!activeIds.includes(f.id)) {
@@ -1214,8 +1159,7 @@ export default function FormulationsPage() {
                                         await fetchFormulations();
                                       } catch (err: any) {
                                         console.error('Set active error:', err);
-                                        setToastMessage(`✨ "${f.name} (v${f.version})" set as Active for Today.`);
-                                        setTimeout(() => setToastMessage(null), 4000);
+                                        alert(`Could not activate formula: ${err.message || err}`);
                                         await fetchFormulations();
                                       }
                                     }}
