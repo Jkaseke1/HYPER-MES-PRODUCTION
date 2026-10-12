@@ -2135,7 +2135,7 @@ export default function ProductionOrdersPage() {
               </div>
 
               <div>
-                <label className={labelCls}>Product Formulation * (Finance Activated Only)</label>
+                <label className={labelCls}>Production Formula *</label>
                 {(() => {
                   const dailyActiveFormulations = formulations.filter(
                     f => f.status === 'active' && !!f.approved_by && (f as any).is_daily_active === true
@@ -2149,10 +2149,10 @@ export default function ProductionOrdersPage() {
                         className={`${inputCls} font-bold text-slate-900 focus:ring-2 focus:ring-teal-500`}
                         required
                       >
-                        <option value="">Select Finance-Activated formulation for today's run...</option>
+                        <option value="">Select formula...</option>
                         {dailyActiveFormulations.map((f) => (
                           <option key={f.id} value={f.id}>
-                            ✨ {f.code} — {f.name} (v{f.version}) [Finance Active Today]
+                            {f.code} - {f.name} (v{f.version})
                           </option>
                         ))}
                       </select>
