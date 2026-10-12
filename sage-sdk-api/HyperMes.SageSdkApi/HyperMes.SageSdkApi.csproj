@@ -74,6 +74,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiKeyMiddleware.cs" />
+    <Compile Include="CrmCustomerController.cs" />
     <Compile Include="GoodsReceiptController.cs" />
     <Compile Include="GoodsReceiptRequest.cs" />
     <Compile Include="FinishedGoodsReceiptController.cs" />

@@ -17,6 +17,7 @@ const { syncSageStock, syncFinishedGoodsStock } = require('./sageStockSync');
 const { syncSageTransportCosts } = require('./sageTransportCostSync');
 const { syncSageSoldTonnage } = require('./sageSoldTonnageSync');
 const { syncRawMaterials } = require('./syncMasterData');
+const { syncCrmCustomersFromSage } = require('./syncCrmCustomersFromSage');
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const MINIMUM_POLL_INTERVAL_MS = 2000;
@@ -53,6 +54,11 @@ const configuredSoldTonnageSyncInterval = Number(process.env.SAGE_SOLD_TONNAGE_S
 const SOLD_TONNAGE_SYNC_INTERVAL_MS = Number.isFinite(configuredSoldTonnageSyncInterval)
   ? Math.max(configuredSoldTonnageSyncInterval, 15 * 60 * 1000)
   : 60 * 60 * 1000;
+const CRM_CUSTOMER_SYNC_ENABLED = process.env.SAGE_CRM_CUSTOMER_SYNC_ENABLED === 'true';
+const configuredCrmCustomerSyncInterval = Number(process.env.SAGE_CRM_CUSTOMER_SYNC_INTERVAL_MS);
+const CRM_CUSTOMER_SYNC_INTERVAL_MS = Number.isFinite(configuredCrmCustomerSyncInterval)
+  ? Math.max(configuredCrmCustomerSyncInterval, 60 * 60 * 1000)
+  : 6 * 60 * 60 * 1000;
 const ENFORCE_GRN_ONLY = process.env.BRIDGE_ENFORCE_GRN_ONLY === 'true';
 const ENFORCE_SAGE_IDENTITY = process.env.BRIDGE_ENFORCE_SAGE_IDENTITY === 'true';
 // A targeted stock refresh is read-only in Sage. It is always allowed through
@@ -281,6 +287,15 @@ async function refreshSageSoldTonnage(reason) {
   } catch (error) {
     console.error(`  Sage sold-tonnage sync failed (${reason}): ${error.message}`);
     return { failed: true, message: error.message };
+  }
+}
+
+async function refreshCrmCustomers(reason) {
+  try {
+    const result = await syncCrmCustomersFromSage();
+    console.log(`  Sage CRM customer sync (${reason}): ${result.synced}/${result.read} customer record(s) refreshed.`);
+  } catch (error) {
+    console.error(`  Sage CRM customer sync failed (${reason}): ${error.message}`);
   }
 }
 
@@ -592,6 +607,7 @@ async function startWorker() {
   console.log(` Sage transporter-cost sync: ${TRANSPORT_COST_SYNC_ENABLED ? `ENABLED (${TRANSPORT_COST_SYNC_INTERVAL_MS / (60 * 1000)}m)` : 'DISABLED'}`);
   console.log(` Sage sold-tonnage sync: ${SOLD_TONNAGE_SYNC_ENABLED ? `ENABLED (${SOLD_TONNAGE_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h)` : 'DISABLED'}`);
   console.log(` Sage master sync: ${MASTER_SYNC_ENABLED ? `ENABLED (${MASTER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h; scope=${MASTER_SYNC_SCOPE_CONFIGURED ? 'configured' : 'missing, safe no-op'})` : 'DISABLED'}`);
+  console.log(` Sage CRM customer sync: ${CRM_CUSTOMER_SYNC_ENABLED ? `ENABLED (${CRM_CUSTOMER_SYNC_INTERVAL_MS / (60 * 60 * 1000)}h; read-only)` : 'DISABLED'}`);
   console.log('==============================================\n');
   console.log('Watching sync_log for pending events...');
   console.log('Idempotency check: ENABLED — no duplicate processing\n');
@@ -619,6 +635,9 @@ async function startWorker() {
   if (MASTER_SYNC_ENABLED && !DRY_RUN) {
     void refreshSageMasterData('startup catalogue refresh');
   }
+  if (CRM_CUSTOMER_SYNC_ENABLED && !DRY_RUN) {
+    void refreshCrmCustomers('startup refresh');
+  }
 
   await processPendingEvents();
   setInterval(processPendingEvents, POLL_INTERVAL_MS);
@@ -633,6 +652,9 @@ async function startWorker() {
   }
   if (MASTER_SYNC_ENABLED && !DRY_RUN) {
     setInterval(() => { refreshSageMasterData('scheduled catalogue refresh'); }, MASTER_SYNC_INTERVAL_MS);
+  }
+  if (CRM_CUSTOMER_SYNC_ENABLED && !DRY_RUN) {
+    setInterval(() => { refreshCrmCustomers('scheduled refresh'); }, CRM_CUSTOMER_SYNC_INTERVAL_MS);
   }
 }
 
