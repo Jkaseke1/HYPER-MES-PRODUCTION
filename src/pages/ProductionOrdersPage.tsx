@@ -13,6 +13,7 @@ import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
+import { isCountedBomLine, normalizeFormulaBom } from '../lib/formulaUnits';
 
 interface OrderMaterial {
   id: string; 
@@ -907,18 +908,23 @@ export default function ProductionOrdersPage() {
       // Finance control: a work order must be based on an approved formula whose
       // standard ingredient quantities reconcile to its declared batch size.
       const [{ data: formulation, error: formulationError }, { data: ingredients, error: ingredientsError }] = await Promise.all([
-        supabase.from('formulations').select('batch_size, status').eq('id', form.formulation_id).single(),
-        supabase.from('formulation_ingredients').select('quantity, is_active').eq('formulation_id', form.formulation_id),
+        supabase.from('formulations').select('batch_size, batch_unit, status').eq('id', form.formulation_id).single(),
+        supabase.from('formulation_ingredients').select('raw_material_id, quantity, unit, is_active, raw_materials(name, category, unit)').eq('formulation_id', form.formulation_id),
       ]);
       if (formulationError) throw formulationError;
       if (ingredientsError) throw ingredientsError;
       if (formulation.status !== 'active') {
         throw new Error('This formulation is awaiting Finance approval and cannot be used for a work order yet.');
       }
-      const ingredientTotal = (ingredients || [])
-        .filter((ingredient) => ingredient.is_active !== false)
-        .reduce((sum, ingredient) => sum + Number(ingredient.quantity || 0), 0);
       const batchSize = Number(formulation.batch_size || 0);
+      if (batchSize !== 1000 || formulation.batch_unit !== 'kg') {
+        throw new Error('Production requires a Finance-approved 1,000 kg reference formula. Ask Finance to prepare and approve the standard formula first.');
+      }
+      const activeIngredients = (ingredients || []).filter(ingredient => ingredient.is_active !== false);
+      if (activeIngredients.some(ingredient => !isCountedBomLine(ingredient) && ingredient.unit !== 'kg')) {
+        throw new Error('Formula mass ingredients must be saved in kg before creating a production order. Ask Finance to review the formula units.');
+      }
+      const ingredientTotal = normalizeFormulaBom(activeIngredients).totalKg;
       if (ingredientTotal <= 0 || Math.abs(ingredientTotal - batchSize) > 0.01) {
         throw new Error(`Formula mass balance is invalid: BOM ingredients total ${ingredientTotal.toFixed(4)} kg but the approved batch is ${batchSize.toFixed(4)} kg. Ask Finance to review the formula before creating this order.`);
       }

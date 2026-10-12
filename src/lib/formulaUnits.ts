@@ -1,5 +1,5 @@
 type Material = { name?: string; category?: string; unit?: string };
-type BomLine = { raw_material_id: string; quantity: number; unit?: string; raw_materials?: Material };
+type BomLine = { raw_material_id: string; quantity: number; unit?: string; raw_materials?: Material | Material[] };
 
 export function formulaMassFactor(unit?: string): number | null {
   const key = (unit || 'kg').trim().toLowerCase().replace(/[.\s]/g, '');
@@ -11,7 +11,7 @@ export function formulaMassFactor(unit?: string): number | null {
 }
 
 export function isCountedBomLine(line: BomLine, material?: Material): boolean {
-  const source = material || line.raw_materials;
+  const source = material || (Array.isArray(line.raw_materials) ? line.raw_materials[0] : line.raw_materials);
   // A feed ingredient measured per bag/each needs a verified pack weight;
   // do not silently exclude it from the recipe as if it were packaging.
   return /packaging/i.test(`${source?.name || ''} ${source?.category || ''}`);
@@ -22,7 +22,8 @@ export function normalizeFormulaBom<T extends BomLine>(lines: T[], materials: (M
   const mass: (T & { unit: string })[] = [];
   const counted: (T & { unit: string })[] = [];
   for (const line of lines) {
-    const material = materials.find((item) => item.id === line.raw_material_id) || line.raw_materials;
+    const material = materials.find((item) => item.id === line.raw_material_id)
+      || (Array.isArray(line.raw_materials) ? line.raw_materials[0] : line.raw_materials);
     const unit = line.unit?.trim() || material?.unit || 'kg';
     if (!Number.isFinite(Number(line.quantity)) || Number(line.quantity) < 0) throw new Error('BOM quantities must be finite and non-negative.');
     if (isCountedBomLine({ ...line, unit }, material)) {

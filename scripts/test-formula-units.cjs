@@ -28,6 +28,9 @@ assert.equal(result.mass.reduce((sum, line) => sum + line.quantity, 0), 1000);
 assert(result.mass.every(line => line.unit === 'kg'));
 assert.equal(result.counted[0].quantity, 20);
 assert.equal(result.counted[0].unit, 'each');
+const joinedPackaging = normalizeFormulaBom([{ raw_material_id: 'bag', quantity: 20, unit: 'each', raw_materials: [{ name: 'PACKAGING', unit: 'each' }] }]);
+assert.equal(joinedPackaging.counted[0].quantity, 20);
+assert.equal(joinedPackaging.totalKg, 0);
 assert.equal(sourceLines[0].unit, 'g', 'source rows are not mutated');
 
 const scaled = normalizeFormulaBom([
