@@ -68,6 +68,7 @@ const MacropackReconciliationReportPage = lazy(() => import('./pages/MacropackRe
 const InboundTransportPage = lazy(() => import('./pages/InboundTransportPage'));
 const MaintenanceProcurementPage = lazy(() => import('./pages/MaintenanceProcurementPage'));
 const SoldTonnagePage = lazy(() => import('./pages/SoldTonnagePage'));
+const CRMPage = lazy(() => import('./pages/CRMPage'));
 const IntakeMovementReportPage = lazy(() => import('./pages/IntakeMovementReportPage'));
 import { canAccessPath, defaultPathForRole } from './lib/roleAccess';
 
@@ -138,6 +139,7 @@ export default function App() {
             >
               <Route index element={<DashboardPage />} />
               <Route path="sales-orders" element={<Navigate to="/" replace />} />
+              <Route path="crm" element={<CRMPage />} />
               <Route path="formulations" element={<FormulationsPage />} />
               <Route path="production-planning" element={<ProductionPlanningPage />} />
               <Route path="raw-materials" element={<RawMaterialsPage />} />
@@ -163,6 +165,8 @@ export default function App() {
               <Route path="reports/gross-margin" element={<GrossMarginReportPage />} />
               <Route path="reports/process-loss" element={<ProcessLossReportPage />} />
               <Route path="reports/macropack-reconciliation" element={<MacropackReconciliationReportPage />} />
+              <Route path="reports/sold-tonnage" element={<SoldTonnagePage />} />
+              <Route path="reports/intake-movement" element={<IntakeMovementReportPage />} />
               <Route path="rm-stock-dashboard" element={<RMStockDashboardPage />} />
               <Route path="rm-receipts-matrix" element={<RMReceiptsMatrixPage />} />
               <Route path="rm-issues-matrix" element={<RMIssuesMatrixPage />} />
@@ -174,8 +178,6 @@ export default function App() {
               <Route path="weigh-bridge" element={<WeighBridgePage />} />
               <Route path="inbound-transport" element={<InboundTransportPage />} />
               <Route path="maintenance-procurement" element={<MaintenanceProcurementPage />} />
-              <Route path="reports/sold-tonnage" element={<SoldTonnagePage />} />
-              <Route path="reports/intake-movement" element={<IntakeMovementReportPage />} />
               <Route path="finished-goods" element={<FinishedGoodsPage />} />
               <Route path="production-warehouse" element={<ProductionWarehousePage />} />
               <Route path="chick" element={<ChickHubPage />} />

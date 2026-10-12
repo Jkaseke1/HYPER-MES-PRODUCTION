@@ -118,6 +118,13 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Customer Management',
+    icon: Users,
+    items: [
+      { to: '/crm', icon: Users, label: 'CRM & Customers' },
+    ],
+  },
+  {
     label: 'Reports',
     icon: BarChart3Icon,
     items: [
