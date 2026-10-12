@@ -832,13 +832,13 @@ export default function ProductionOrdersPage() {
       const m = sel.name.match(/(\d+)\s*kg/i);
       if (m) inferredSize = m[1];
     }
-    if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize! }));
+    if (inferredSize) setForm(f => ({ ...f, unit_size: inferredSize!, planned_qty: kgFromBags(f.planned_bags, inferredSize), unit: 'kg' }));
 
     // Check if BOM exists for this formulation
     const [bomResult, packagingResult] = await Promise.all([
       supabase
         .from('formulation_ingredients')
-        .select('*, raw_materials(name, code, cost_per_unit, current_stock)')
+        .select('*, raw_materials(name, code, category, unit, cost_per_unit, current_stock)')
         .eq('formulation_id', fid)
         .eq('is_active', true),
       supabase
@@ -878,7 +878,9 @@ export default function ProductionOrdersPage() {
       index: idx + 1,
       code: ing.raw_materials?.code || '-',
       name: ing.raw_materials?.name || '-',
-      bomPercent: Number(ing.percentage) || Math.round((ing.quantity / sel.batch_size) * 10000) / 100,
+      isPackaging: isCountedBomLine(ing),
+      unit: ing.unit || 'kg',
+      bomPercent: isCountedBomLine(ing) ? 0 : Math.round((ing.quantity / sel.batch_size) * 10000) / 100,
       quantity: ing.quantity,
       unitCost: ing.raw_materials?.cost_per_unit || 0,
     }));
@@ -2097,7 +2099,7 @@ export default function ProductionOrdersPage() {
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-wider text-purple-800">BOM Ingredients</p>
                 <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
-                  {bomPreview.length} <span className="text-xs font-semibold text-purple-700">Raw Items</span>
+                  {bomPreview.filter(ing => !ing.isPackaging).length} <span className="text-xs font-semibold text-purple-700">Raw Items</span>
                 </p>
                 <p className="text-[11px] font-medium text-slate-500">Auto-scaled to batch size</p>
               </div>
@@ -2221,6 +2223,7 @@ export default function ProductionOrdersPage() {
                   className={`${inputCls} font-bold`}
                 >
                   <option value="50">50 kg Bag</option>
+                  <option value="40">40 kg Bag</option>
                   <option value="25">25 kg Bag</option>
                   <option value="20">20 kg Bag</option>
                   <option value="10">10 kg Bag</option>
@@ -2350,9 +2353,10 @@ export default function ProductionOrdersPage() {
                         <th className="px-3 py-2 text-left font-medium text-slate-700">Code</th>
                         <th className="px-3 py-2 text-left font-medium text-slate-700">Ingredient Name</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">BOM %</th>
-                        <th className="px-3 py-2 text-right font-medium text-slate-700">Per Bag (kg)</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Per Bag</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Planned Quantity</th>
                         <th className="px-3 py-2 text-right font-medium text-slate-700">Unit Cost</th>
-                        <th className="px-3 py-2 text-right font-medium text-slate-700">Line Total</th>
+                        <th className="px-3 py-2 text-right font-medium text-slate-700">Cost / Bag</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2372,21 +2376,23 @@ export default function ProductionOrdersPage() {
                                 {isPremix && <Badge className="bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200 text-[10px] px-1.5 py-0">Premix</Badge>}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-right text-slate-600">{ing.bomPercent.toFixed(2)}%</td>
-                            <td className="px-3 py-2 text-right font-medium text-teal-700">{qtyPerBag.toFixed(4)}</td>
-                            <td className="px-3 py-2 text-right text-slate-600">${ing.unitCost.toFixed(4)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-slate-800">${lineTotal.toFixed(4)}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{ing.isPackaging ? 'Packaging' : `${ing.bomPercent.toFixed(2)}%`}</td>
+                            <td className="px-3 py-2 text-right font-medium text-teal-700">{qtyPerBag.toFixed(4)} {ing.unit}</td>
+                            <td className="px-3 py-2 text-right font-medium text-teal-700">{((Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * form.planned_qty).toFixed(3)} {ing.unit}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">{ing.unitCost > 0 ? `$${ing.unitCost.toFixed(4)}` : 'Not costed'}</td>
+                            <td className="px-3 py-2 text-right font-medium text-slate-800">{ing.unitCost > 0 ? `$${lineTotal.toFixed(4)}` : 'Not costed'}</td>
                           </tr>
                         );
                       })}
                       <tr className="bg-teal-50 font-medium">
                         <td colSpan={4} className="px-3 py-2 text-right text-slate-700">Total:</td>
-                        <td className="px-3 py-2 text-right text-teal-800">{bagSizeKg(form.unit_size, 50).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right text-teal-800">{bomPreview.filter(ing => !ing.isPackaging).reduce((sum, ing) => sum + Number(ing.quantity) / Number(selectedFormulation.batch_size || 1) * bagSizeKg(form.unit_size), 0).toFixed(2)} kg</td>
+                        <td className="px-3 py-2 text-right text-teal-800">{bomPreview.filter(ing => !ing.isPackaging).reduce((sum, ing) => sum + Number(ing.quantity) / Number(selectedFormulation.batch_size || 1) * form.planned_qty, 0).toFixed(3)} kg</td>
                         <td colSpan={2} className="px-3 py-2 text-right text-slate-800">
-                          ${bomPreview.reduce((sum: number, ing: any) => {
+                          {bomPreview.some(ing => !(ing.unitCost > 0)) ? 'Not costed' : `$${bomPreview.reduce((sum: number, ing: any) => {
                             const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
                             return sum + (qtyPerBag * ing.unitCost);
-                          }, 0).toFixed(4)}
+                          }, 0).toFixed(4)}`}
                         </td>
                       </tr>
                     </tbody>
@@ -2401,7 +2407,8 @@ export default function ProductionOrdersPage() {
                     const qtyPerBag = (Number(ing.quantity) / Number(selectedFormulation.batch_size || 1)) * bagSizeKg(form.unit_size, 50);
                     return sum + (qtyPerBag * ing.unitCost);
                   }, 0);
-                  const bagSize = parseInt(form.unit_size) || 25;
+                  const bagSize = bagSizeKg(form.unit_size);
+                  const costsComplete = bomPreview.every(ing => ing.unitCost > 0);
                   const numBags = Math.ceil(form.planned_qty / bagSize);
                   const costPerKg = bagSize > 0 ? costPerBag / bagSize : 0;
                   
@@ -2414,11 +2421,11 @@ export default function ProductionOrdersPage() {
                       </div>
                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="text-xs font-medium text-blue-700 mb-1">Cost per Bag</div>
-                        <div className="text-sm font-semibold text-blue-900">${costPerBag.toFixed(2)}</div>
+                        <div className="text-sm font-semibold text-blue-900">{costsComplete ? `$${costPerBag.toFixed(2)}` : 'Not costed'}</div>
                       </div>
                       <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
                         <div className="text-xs font-medium text-purple-700 mb-1">Cost per kg</div>
-                        <div className="text-sm font-semibold text-purple-900">${costPerKg.toFixed(2)}</div>
+                        <div className="text-sm font-semibold text-purple-900">{costsComplete ? `$${costPerKg.toFixed(2)}` : 'Not costed'}</div>
                       </div>
                     </>
                   );
@@ -2458,7 +2465,7 @@ export default function ProductionOrdersPage() {
             </button>
             <button
               onClick={createOrder}
-              disabled={saving || !form.machine_id}
+              disabled={saving || !form.machine_id || !form.formulation_id || !(form.planned_qty > 0)}
               className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
             >
               {saving ? 'Creating...' : 'Create Order'}
