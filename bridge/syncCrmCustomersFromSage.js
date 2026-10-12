@@ -79,13 +79,27 @@ async function syncCrmCustomersFromSage() {
       ORDER BY c.Account
     `);
 
+    const { data: existingCustomers, error: existingError } = await supabase
+      .from('crm_customers')
+      .select('sage_customer_code, segment, lifecycle_stage, health_status, account_owner, notes, next_action, next_contact_at');
+    if (existingError) throw existingError;
+    const existingByCode = new Map((existingCustomers || []).map((customer) => [clean(customer.sage_customer_code).toUpperCase(), customer]));
     const now = new Date().toISOString();
-    const rows = result.recordset.map((row) => ({
+    const rows = result.recordset.map((row) => {
+      const sageCode = clean(row.Account);
+      const existing = existingByCode.get(sageCode.toUpperCase());
+      return {
       sage_customer_id: row.DCLink,
-      sage_customer_code: clean(row.Account),
+      sage_customer_code: sageCode,
       legal_name: clean(row.Name) || clean(row.Account),
       customer_type: 'customer',
-      segment: classifySegment(row),
+      segment: existing?.segment || classifySegment(row),
+      lifecycle_stage: existing?.lifecycle_stage || (bool(row.On_Hold) ? 'blocked' : 'active'),
+      health_status: existing?.health_status || 'healthy',
+      account_owner: existing?.account_owner || null,
+      notes: existing?.notes || null,
+      next_action: existing?.next_action || null,
+      next_contact_at: existing?.next_contact_at || null,
       status: bool(row.On_Hold) ? 'blocked' : 'active',
       customer_group: clean(row.GroupDescription) || null,
       area: clean(row.AreaDescription) || null,
@@ -108,7 +122,8 @@ async function syncCrmCustomersFromSage() {
       delivery_address: joined(row.Post1, row.Post2, row.Post3, row.Post4, row.Post5) || null,
       sage_last_synced_at: now,
       updated_at: now,
-    }));
+      };
+    });
 
     let synced = 0;
     for (let index = 0; index < rows.length; index += 500) {
