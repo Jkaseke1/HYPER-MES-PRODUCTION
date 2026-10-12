@@ -90,11 +90,13 @@ namespace SDK_Test
 
             try
             {
+                DateTime postedAtUtc;
                 lock (SdkSession.OperationLock)
                 {
                     SdkSession.EnsureConnected();
                     var transfer = PrepareTransferWithReconnect(request, reference);
                     transfer.Post();
+                    postedAtUtc = DateTime.UtcNow;
                 }
 
                 return Ok(new
@@ -103,6 +105,7 @@ namespace SDK_Test
                     environment = SageRuntime.EnvironmentName,
                     action = "warehouse-transfer",
                     sagePosting = "completed",
+                    postedAtUtc = postedAtUtc.ToString("o"),
                     message = "Warehouse transfer posted to Sage " + SageRuntime.EnvironmentName + ".",
                     transfer = TransferSummary(request)
                 });

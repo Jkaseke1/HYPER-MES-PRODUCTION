@@ -48,6 +48,8 @@ interface PendingTransfer {
   purpose?: string;
   notes?: string;
   requester?: { full_name?: string | null } | null;
+  receiver?: { full_name?: string | null } | null;
+  production_approved_at?: string | null;
   raw_materials?: { name: string; code: string; unit?: string };
 }
 
@@ -76,6 +78,7 @@ interface IncomingSyncStage {
   sync_status: SageTransferStatus['sync_status'];
   sync_message?: string | null;
   sync_updated_at: string;
+  sdk_posted_at?: string | null;
 }
 
 interface LineSageStage {
@@ -175,7 +178,7 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, production_approved_at, receiver:profiles!production_approved_by(full_name), requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
         .in('status', ['in_buffer', 'received'])
         .order('created_at', { ascending: false })
         .limit(500),
@@ -200,7 +203,7 @@ export default function ProductionWarehousePage() {
       ] = await Promise.all([
         supabase
           .from('sync_log')
-          .select('id, reference_id, status, message, updated_at')
+          .select('id, reference_id, status, message, updated_at, sage_response')
           .eq('event_type', 'material_transfer_to_production')
           .in('reference_id', incomingTransferIds)
           .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
@@ -221,6 +224,7 @@ export default function ProductionWarehousePage() {
               sync_status: row.status,
               sync_message: row.message,
               sync_updated_at: row.updated_at,
+              sdk_posted_at: row.sage_response?.postedAtUtc || null,
             };
           }
         });
@@ -945,8 +949,11 @@ export default function ProductionWarehousePage() {
                   <div className="grid gap-px xl:grid-cols-2">
                     {expandedIncomingBundleData.transfers.map((transfer) => {
                       const lineStage = getLineSageStage(transfer);
+                      const sync = incomingSyncByTransferId[transfer.id];
+                      const postingTime = sync?.sdk_posted_at || sync?.sync_updated_at;
                       return (
-                        <div key={transfer.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(130px,190px)_auto] items-center gap-3 bg-white px-4 py-2.5">
+                        <div key={transfer.id} className="min-w-0 bg-white px-4 py-3">
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-bold text-slate-900">{transfer.raw_materials?.name || 'Raw material'}</p>
                             <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500"><span className="text-teal-700">{transfer.raw_materials?.code || 'No Sage code'}</span><span className="mx-1 text-slate-300">|</span>{transfer.transfer_number}</p>
@@ -956,6 +963,13 @@ export default function ProductionWarehousePage() {
                             <span title={lineStage.detail} className={`inline-flex max-w-[118px] truncate border px-2 py-1 text-[10px] font-semibold ${lineStage.className}`}>{lineStage.label}</span>
                             <span className="whitespace-nowrap text-right font-mono text-xs font-bold text-slate-900">{Number(transfer.quantity).toLocaleString()} {transfer.unit}</span>
                           </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-600">
+                          <span><strong>PD received by:</strong> {transfer.status === 'in_buffer' ? 'Awaiting receipt' : transfer.receiver?.full_name || 'Not recorded / unavailable'}</span>
+                          {transfer.production_approved_at && !Number.isNaN(Date.parse(transfer.production_approved_at)) && <span><strong>PD received:</strong> {format(new Date(transfer.production_approved_at), 'dd MMM yyyy, HH:mm:ss')}</span>}
+                          {sync && postingTime && !Number.isNaN(Date.parse(postingTime)) && <span><strong>{sync.sync_status === 'success' ? (sync.sdk_posted_at ? 'SDK posting completed:' : 'Bridge confirmed Sage posting:') : 'Sage status updated:'}</strong> {format(new Date(postingTime), 'dd MMM yyyy, HH:mm:ss')}</span>}
+                          {!sync && <span><strong>Sage:</strong> {transfer.status === 'in_buffer' ? 'Not queued until PD receipt' : 'No posting confirmation available'}</span>}
+                        </div>
                         </div>
                       );
                     })}
