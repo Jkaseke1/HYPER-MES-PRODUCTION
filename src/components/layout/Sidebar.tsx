@@ -245,7 +245,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
       )}
 
       <nav className="flex-1 px-3 py-2 overflow-y-auto scrollbar-thin">
-        {isAdminOrMd && <NavLink
+        <NavLink
           to="/"
           end
           onClick={onMobileMenuClose}
@@ -267,7 +267,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
               )}
             </>
           )}
-        </NavLink>}
+        </NavLink>
 
         {/* Grouped Navigation */}
         {visibleGroups.map((group) => {

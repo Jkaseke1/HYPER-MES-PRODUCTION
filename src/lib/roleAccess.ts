@@ -35,6 +35,8 @@ export function defaultPathForRole(role: MesRole): string {
 
 export function canAccessPath(role: MesRole, path: string): boolean {
   const cleanPath = path.split('?')[0];
+  // Dashboard access never implies access to any other module.
+  if (cleanPath === '/') return true;
   if (adminOnlyPaths.some((adminPath) => cleanPath === adminPath || cleanPath.startsWith(`${adminPath}/`))) {
     return role === 'admin';
   }

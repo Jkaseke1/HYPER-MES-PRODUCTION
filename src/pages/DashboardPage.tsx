@@ -12,6 +12,9 @@ import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow, DispatchOrder } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
+import { useAuth } from '../context/AuthContext';
+import { isFullAccessRole } from '../lib/roleAccess';
+import RoleDashboard from '../components/dashboard/RoleDashboard';
 
 interface DashboardStats {
   totalProduction: number;
@@ -25,6 +28,13 @@ interface DashboardStats {
 import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
+  const { profile } = useAuth();
+  return isFullAccessRole(profile?.role)
+    ? <ExecutiveDashboard key={`${profile?.id}:${profile?.role}`} />
+    : <RoleDashboard key={`${profile?.id}:${profile?.role}`} role={profile?.role} />;
+}
+
+function ExecutiveDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalProduction: 0, activeOrders: 0, rawMaterialCount: 0,
     formulationCount: 0, pendingDispatches: 0, efficiency: 0,
