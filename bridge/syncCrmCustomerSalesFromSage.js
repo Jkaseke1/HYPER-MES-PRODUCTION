@@ -1,5 +1,6 @@
 // Read-only Sage customer-sales import for PlantControl CRM health reporting.
 const path = require('path');
+const { randomUUID } = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { createClient } = require('@supabase/supabase-js');
 
@@ -29,6 +30,7 @@ async function syncCrmCustomerSalesFromSage() {
   }
 
   const now = new Date().toISOString();
+  const sourceSyncRunId = randomUUID();
   const rows = all.map((entry) => ({
     invoice_date: String(entry.invoiceDate).slice(0, 10),
     sage_customer_code: String(entry.customerCode || '').trim(),
@@ -38,6 +40,7 @@ async function syncCrmCustomerSalesFromSage() {
     total_sales_amount: Number(entry.totalSalesAmount || 0),
     source_read_at: source?.readAtUtc || now,
     imported_at: now,
+    source_sync_run_id: sourceSyncRunId,
   })).filter((row) => row.invoice_date && row.sage_customer_code && row.sales_channel);
 
   for (let index = 0; index < rows.length; index += 500) {
@@ -46,8 +49,19 @@ async function syncCrmCustomerSalesFromSage() {
     });
     if (error) throw new Error(`Could not import CRM sales: ${error.message}`);
   }
+
+  // Only prune after every source page has been read and upserted successfully.
+  // This keeps the last known-good snapshot intact when a Sage/API import fails.
+  const { error: cleanupError } = await supabase
+    .from('crm_customer_sales_daily')
+    .delete()
+    .gte('invoice_date', fromDate)
+    .lt('invoice_date', toDate)
+    .or(`source_sync_run_id.is.null,source_sync_run_id.neq.${sourceSyncRunId}`);
+  if (cleanupError) throw new Error(`Could not reconcile stale CRM sales rows: ${cleanupError.message}`);
+
   console.log(`CRM customer-sales sync complete: ${rows.length} daily customer records from ${source?.companyDatabase || 'Sage'}.`);
-  return { fromDate, toDate, imported: rows.length };
+  return { fromDate, toDate, imported: rows.length, sourceSyncRunId };
 }
 
 module.exports = { syncCrmCustomerSalesFromSage };
