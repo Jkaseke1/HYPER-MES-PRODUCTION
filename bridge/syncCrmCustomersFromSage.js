@@ -82,6 +82,7 @@ async function syncCrmCustomersFromSage() {
 
   const syncRunId = await createSyncRun();
   const customers = [];
+  let synced = 0;
   let source;
   try {
     for (let page = 1; ; page += 1) {
@@ -144,7 +145,6 @@ async function syncCrmCustomersFromSage() {
       };
     });
 
-    let synced = 0;
     for (let index = 0; index < rows.length; index += 500) {
       const chunk = rows.slice(index, index + 500);
       const { error } = await supabase.from('crm_customers').upsert(chunk, { onConflict: 'sage_customer_code', ignoreDuplicates: false });
@@ -164,7 +164,7 @@ async function syncCrmCustomersFromSage() {
     await completeSyncRun(syncRunId, {
       status: 'failed',
       customers_read: customers.length,
-      customers_synced: 0,
+      customers_synced: synced,
       error_message: error.message,
     }).catch((auditError) => console.error(`CRM sync audit failure: ${auditError.message}`));
     throw error;
