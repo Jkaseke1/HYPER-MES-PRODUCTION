@@ -6,6 +6,7 @@
         public string FromWarehouse { get; set; }
         public string ToWarehouse { get; set; }
         public decimal Quantity { get; set; }
+        public System.DateTime? TransactionDate { get; set; }
         public string Reference { get; set; }
         public string Reference2 { get; set; }
         public string UserName { get; set; }

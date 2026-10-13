@@ -159,6 +159,7 @@ async function handleMaterialTransferToProduction(event) {
     fromWarehouse: 'RM',
     toWarehouse: 'PD',
     quantity,
+    transactionDate: transfer.transfer_date,
     reference: buildReference(transfer),
     reference2: `MES material transfer ${transfer.transfer_number || transfer.id}`.substring(0, 50),
     userName: plantControlUser.substring(0, 50),

@@ -222,6 +222,7 @@ namespace SDK_Test
                 FromWarehouse = new Warehouse(request.FromWarehouse.Trim().ToUpperInvariant()),
                 ToWarehouse = new Warehouse(request.ToWarehouse.Trim().ToUpperInvariant()),
                 Quantity = (double)request.Quantity,
+                Date = (request.TransactionDate ?? DateTime.Today).Date,
                 Reference = reference,
                 Reference2 = request.Reference2 ?? ""
             };
@@ -247,6 +248,7 @@ namespace SDK_Test
                 toWarehouse =
                     request.ToWarehouse.Trim().ToUpperInvariant(),
                 quantity = request.Quantity,
+                transactionDate = (request.TransactionDate ?? DateTime.Today).ToString("yyyy-MM-dd"),
                 reference = request.Reference.Trim(),
                 reference2 = request.Reference2
             };
