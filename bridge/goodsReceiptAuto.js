@@ -167,6 +167,13 @@ async function handleGoodsReceipt(syncEvent) {
   if (itemsError) throw new Error(`GRN items query failed: ${itemsError.message}`);
   if (!items || items.length === 0) throw new Error(`No items found for GRN: ${grn.grn_number}`);
 
+  for (const item of items) {
+    const { data: allowed, error: eligibilityError } = await supabase.rpc('grn_input_allowed', { p_material_id: item.raw_material_id });
+    if (eligibilityError || allowed !== true) {
+      throw new Error(`GRN posting blocked for ${item.raw_materials?.code || item.raw_material_id}: ${eligibilityError?.message || 'finished feed or ineligible RM input'}`);
+    }
+  }
+
   const warehouseCode = (grn.warehouses?.code || 'RM').trim().toUpperCase();
   const lines = items.map((item) => {
     const itemCode = (item.raw_materials?.sage_code || item.raw_materials?.code || '').trim();

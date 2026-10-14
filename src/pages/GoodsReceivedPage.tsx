@@ -22,6 +22,7 @@ import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import toast from 'react-hot-toast';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { grnMaterialGroups, grnMaterialGroup, isGrnInput } from '../lib/grnMaterials';
 
 interface GRNItem {
   raw_material_id: string;
@@ -106,6 +107,8 @@ export default function GoodsReceivedPage() {
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [finishedCodes, setFinishedCodes] = useState<Set<string>>(new Set());
+  const [inputCatalogueReady, setInputCatalogueReady] = useState(false);
   const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -271,6 +274,15 @@ export default function GoodsReceivedPage() {
   async function fetchData(showLoading = true) {
     if (showLoading) setLoading(true);
     try {
+      const codes = new Set<string>();
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('formulations').select('code,sage_code').range(offset, offset + 499);
+        if (error) throw new Error('Cannot validate GRN input catalogue. Please refresh or contact an administrator.');
+        (data || []).forEach((item) => [item.code, item.sage_code].forEach((code) => { if (code) codes.add(code.trim().toUpperCase()); }));
+        if ((data || []).length < 500) break;
+      }
+      setFinishedCodes(codes);
+      setInputCatalogueReady(true);
       const [grnsRes, suppliersRes, materialsRes, wbRes, correctionWbRes] = await Promise.all([
         supabase.from('goods_received_notes').select('*, receiver:profiles!received_by(full_name, email), approver:profiles!approved_by(full_name), suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(id, ticket_no, status, vehicle_reg, nett_mass, inbound_transport_mode, inbound_rate_per_tonne, inbound_currency_code, inbound_invoice_number, inbound_waybill_reference, inbound_transporter_id, inbound_transporters(name, transporter_code))').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('*').eq('is_active', true).order('name'),
@@ -491,6 +503,13 @@ export default function GoodsReceivedPage() {
   };
 
   const handleSaveGRN = async () => {
+    if (!inputCatalogueReady || items.some((item) => {
+      const material = materials.find((candidate) => candidate.id === item.raw_material_id);
+      return !material || !isGrnInput(material, finishedCodes);
+    })) {
+      toast.error('Select approved GRN inputs only. Finished feeds cannot be received into RM.');
+      return;
+    }
     if ((!supplierId || (supplierId === 'other' && !unregisteredSupplierName.trim())) || !manualGrvNumber.trim() || items.length === 0 || !items[0].raw_material_id) {
       toast.error('Please fill in all required fields');
       return;
@@ -1976,6 +1995,7 @@ export default function GoodsReceivedPage() {
                           <Label className="text-xs font-bold uppercase tracking-wide text-slate-700">Raw Material *</Label>
                           <Select
                             value={item.raw_material_id}
+                            disabled={!inputCatalogueReady}
                             onOpenChange={(open) => { if (open) setMaterialSearch(''); }}
                             onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
                           >
@@ -2001,7 +2021,10 @@ export default function GoodsReceivedPage() {
                                   />
                                 </div>
                               </div>
+                              {grnMaterialGroups.map((group) => <div key={group}>
+                                <div className="border-t bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">{group}</div>
                               {materials
+                                .filter((material) => isGrnInput(material, finishedCodes) && grnMaterialGroup(material) === group)
                                 .filter((material) => {
                                   const query = materialSearch.trim().toLowerCase();
                                   if (!query) return true;
@@ -2012,9 +2035,10 @@ export default function GoodsReceivedPage() {
                                   {material.code} — {material.name}
                                 </SelectItem>
                                 ))}
-                              {materials.length > 0 && !materials.some((material) => {
+                              </div>)}
+                              {!materials.some((material) => {
                                 const query = materialSearch.trim().toLowerCase();
-                                return !query || material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query);
+                                return isGrnInput(material, finishedCodes) && (!query || material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query));
                               }) && (
                                 <div className="px-2 py-3 text-center text-xs text-slate-500">No matching materials</div>
                               )}
