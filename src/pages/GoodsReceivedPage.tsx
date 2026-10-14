@@ -1462,11 +1462,11 @@ export default function GoodsReceivedPage() {
       {/* Create GRN Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-[1440px] w-[calc(100vw-24px)] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1440px] flex flex-col overflow-hidden rounded-lg border border-slate-200 shadow-2xl [&>button.absolute]:hidden">
-          <DialogHeader className="shrink-0 bg-[#0b0b30] text-white px-5 py-3.5 relative border-b border-[#ff9100]/30">
+          <DialogHeader className="shrink-0 bg-none bg-[#0b2035] text-white px-5 py-3.5 relative border-b border-[#0d9488]/30">
             <div className="flex items-center justify-between pr-10">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-[#ff9100]/15 border border-[#ff9100]/35 rounded-lg flex items-center justify-center">
-                  <Package className="w-5 h-5 text-orange-200" />
+                <div className="w-9 h-9 bg-[#0d9488]/15 border border-[#0d9488]/35 rounded-lg flex items-center justify-center">
+                  <Package className="w-5 h-5 text-teal-200" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -1479,8 +1479,8 @@ export default function GoodsReceivedPage() {
                 </div>
               </div>
               <div className="hidden md:flex items-center gap-2 text-xs">
-                <div className="flex items-center gap-1.5 bg-[#ff9100]/10 border border-[#ff9100]/25 px-3 py-1.5 rounded-lg text-orange-200 font-semibold">
-                  <div className="w-2 h-2 rounded-full bg-[#ff9100]" />
+                <div className="flex items-center gap-1.5 bg-[#0d9488]/10 border border-[#0d9488]/25 px-3 py-1.5 rounded-lg text-teal-200 font-semibold">
+                  <div className="w-2 h-2 rounded-full bg-[#0d9488]" />
                   Finance review enabled
                 </div>
               </div>
@@ -1519,7 +1519,7 @@ export default function GoodsReceivedPage() {
                 <div className="relative z-20 overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                      <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b2035] px-2 text-[10px] font-black text-teal-300">
                         01
                       </div>
                       <div>
@@ -1527,7 +1527,7 @@ export default function GoodsReceivedPage() {
                         <p className="text-[11px] text-slate-500">Supplier, receipt date and delivery notes</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold bg-orange-50 text-orange-800 border border-orange-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
+                    <span className="text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200 px-2.5 py-1 rounded-full uppercase tracking-wider">Required</span>
                   </div>
                   <div className="p-4">
                     <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,1.2fr)_200px_minmax(240px,1fr)]">
@@ -1551,7 +1551,7 @@ export default function GoodsReceivedPage() {
                             }}
                             placeholder="Search supplier name or code..."
                             autoComplete="off"
-                            className="h-10 border-slate-300 bg-white pl-9 pr-9 font-medium focus:border-orange-500"
+                            className="h-10 border-slate-300 bg-white pl-9 pr-9 font-medium focus:border-teal-500"
                           />
                           <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                           {supplierPickerOpen && (
@@ -1593,7 +1593,7 @@ export default function GoodsReceivedPage() {
                             value={unregisteredSupplierName}
                             onChange={(e) => setUnregisteredSupplierName(e.target.value)}
                             placeholder="Enter supplier name"
-                            className="mt-2 bg-white border-slate-300 font-medium focus:border-orange-500"
+                            className="mt-2 bg-white border-slate-300 font-medium focus:border-teal-500"
                           />
                         )}
                       </div>
@@ -1605,12 +1605,12 @@ export default function GoodsReceivedPage() {
                           type="date"
                           value={receivedDate}
                           onChange={(e) => setReceivedDate(e.target.value)}
-                          className="bg-white border-slate-300 font-medium focus:border-orange-500"
+                          className="bg-white border-slate-300 font-medium focus:border-teal-500"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="manual_grv_number" className="text-xs font-bold uppercase tracking-wide text-slate-700">Manual GRV Number *</Label>
-                        <div className="flex overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-orange-500">
+                        <div className="flex overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-teal-500">
                           <span className="flex items-center border-r border-slate-200 bg-slate-50 px-3 font-mono font-bold text-slate-500">HFGRV</span>
                           <Input
                             id="manual_grv_number"
@@ -1633,7 +1633,7 @@ export default function GoodsReceivedPage() {
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b2035] px-2 text-[10px] font-black text-teal-300">
                       02
                     </div>
                     <div>
@@ -1650,7 +1650,7 @@ export default function GoodsReceivedPage() {
                       value={supplierInvoiceNo}
                       onChange={(e) => setSupplierInvoiceNo(e.target.value)}
                       placeholder="e.g. INV27539"
-                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
+                      className="bg-white border-slate-300 font-mono focus:border-teal-500 focus:ring-teal-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1659,7 +1659,7 @@ export default function GoodsReceivedPage() {
                       value={supplierDeliveryNoteNo}
                       onChange={(e) => setSupplierDeliveryNoteNo(e.target.value)}
                       placeholder="e.g. DN-4567"
-                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
+                      className="bg-white border-slate-300 font-mono focus:border-teal-500 focus:ring-teal-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1668,7 +1668,7 @@ export default function GoodsReceivedPage() {
                       value={supplierOrderNo}
                       onChange={(e) => setSupplierOrderNo(e.target.value)}
                       placeholder="e.g. PO61092"
-                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
+                      className="bg-white border-slate-300 font-mono focus:border-teal-500 focus:ring-teal-500/20"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1677,7 +1677,7 @@ export default function GoodsReceivedPage() {
                       value={externalReference}
                       onChange={(e) => setExternalReference(e.target.value)}
                       placeholder="Defaults to WB ticket if left blank"
-                      className="bg-white border-slate-300 font-mono focus:border-orange-500 focus:ring-orange-500/20"
+                      className="bg-white border-slate-300 font-mono focus:border-teal-500 focus:ring-teal-500/20"
                     />
                   </div>
                 </div>
@@ -1691,7 +1691,7 @@ export default function GoodsReceivedPage() {
                   className="w-full flex items-center justify-between px-4 py-3 border-b border-slate-200 text-left hover:bg-slate-50"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center text-orange-700 border border-orange-100">
+                    <div className="w-8 h-8 bg-teal-50 rounded-lg flex items-center justify-center text-teal-700 border border-teal-100">
                       <Scale className="w-4 h-4" />
                     </div>
                     <div>
@@ -1700,7 +1700,7 @@ export default function GoodsReceivedPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {weighBridgeTicketId && <span className="text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200 px-2 py-1 rounded-full uppercase tracking-wider">Linked</span>}
+                    {weighBridgeTicketId && <span className="text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200 px-2 py-1 rounded-full uppercase tracking-wider">Linked</span>}
                     {wbExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
                   </div>
                 </button>
@@ -1929,7 +1929,7 @@ export default function GoodsReceivedPage() {
                                 id="wb_driver_signed"
                                 checked={wbForm.driver_signed}
                                 onChange={(e) => setWbForm({ ...wbForm, driver_signed: e.target.checked })}
-                                className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                                className="w-4 h-4 rounded border-slate-300 text-teal-500 focus:ring-teal-500"
                               />
                               <Label htmlFor="wb_driver_signed" className="text-xs font-semibold cursor-pointer">Driver Signed</Label>
                             </div>
@@ -1945,7 +1945,7 @@ export default function GoodsReceivedPage() {
               <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b0b30] px-2 text-[10px] font-black text-orange-300">
+                    <div className="flex h-8 min-w-8 items-center justify-center rounded-md bg-[#0b2035] px-2 text-[10px] font-black text-teal-300">
                       04
                     </div>
                     <div>
@@ -1956,7 +1956,7 @@ export default function GoodsReceivedPage() {
                   <button
                     type="button"
                     onClick={addItem}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0b2035] hover:bg-[#12334f] text-white text-xs font-bold rounded-lg transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Add Item
@@ -1967,15 +1967,15 @@ export default function GoodsReceivedPage() {
                   {items.map((item, index) => (
                     <div key={index} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                       {/* Item header */}
-                      <div className="flex items-center justify-between border-b border-slate-200 bg-[#0b0b30] px-3.5 py-2.5 text-white">
+                      <div className="flex items-center justify-between border-b border-slate-200 bg-[#0b2035] px-3.5 py-2.5 text-white">
                         <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded bg-orange-500 text-[10px] font-black text-white">{index + 1}</span>
+                          <span className="flex h-6 w-6 items-center justify-center rounded bg-teal-500 text-[10px] font-black text-white">{index + 1}</span>
                           <span className="text-xs font-bold uppercase tracking-wide text-white">Material line {index + 1}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex gap-2 text-xs">
                             <span className="rounded border border-white/15 bg-white/10 px-2 py-0.5 font-mono font-bold text-slate-200">{Number(item.received_qty || 0).toLocaleString()} {materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))}</span>
-                            <span className="rounded border border-orange-400/25 bg-orange-500/15 px-2 py-0.5 font-mono font-bold text-orange-200">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
+                            <span className="rounded border border-teal-400/25 bg-teal-500/15 px-2 py-0.5 font-mono font-bold text-teal-200">${formatMoney((Number(item.received_qty) || 0) * (Number(item.unit_cost) || 0))}</span>
                           </div>
                           {items.length > 1 && (
                             <button
@@ -2013,13 +2013,13 @@ export default function GoodsReceivedPage() {
                           />
                         </div>
                         <div className="space-y-1.5">
-                          <Label className="text-xs font-bold text-orange-600">Received Qty * ({materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))})</Label>
+                          <Label className="text-xs font-bold text-teal-600">Received Qty * ({materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))})</Label>
                           <Input
                             type="number"
                             value={item.received_qty}
                             onChange={(e) => updateItem(index, 'received_qty', parseLineItemNumber(e.target.value))}
                             step="0.01"
-                            className="bg-white border-orange-300 focus:border-orange-500 font-extrabold text-slate-900"
+                            className="bg-white border-teal-300 focus:border-teal-500 font-extrabold text-slate-900"
                             placeholder="0.00"
                           />
                         </div>
@@ -2064,9 +2064,9 @@ export default function GoodsReceivedPage() {
 
               {/* Receipt Overview Panel */}
               <aside className="lg:sticky lg:top-4 h-fit rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
+                <div className="border-b border-slate-200 bg-[#0b2035] px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/15 text-orange-300">
+                    <div className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center border border-white/15 text-teal-300">
                       <Hash className="w-4 h-4" />
                     </div>
                     <div>
@@ -2080,16 +2080,16 @@ export default function GoodsReceivedPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Total Ordered</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalOrderedQty.toLocaleString()} <span className="text-[10px] font-medium text-slate-500">{receiptUnitLabel}</span></p>
                   </div>
-                  <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Total Received</p>
-                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-orange-800">{receiptUnitLabel}</span></p>
+                  <div className="border border-teal-200 bg-teal-50 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Total Received</p>
+                    <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{totalReceivedQty.toLocaleString()} <span className="text-[10px] font-medium text-teal-800">{receiptUnitLabel}</span></p>
                   </div>
                   <div className="border border-slate-200 bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Weighbridge Nett</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">{wbNettMassValue ? wbNettMassValue.toLocaleString() : 0} <span className="text-[10px] font-medium text-slate-500">kg</span></p>
                   </div>
-                  <div className="border border-orange-200 bg-orange-50 px-3 py-2.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-orange-800">Estimated Total Before VAT</p>
+                  <div className="border border-teal-200 bg-teal-50 px-3 py-2.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-teal-800">Estimated Total Before VAT</p>
                     <p className="font-extrabold text-slate-900 text-lg mt-0.5 font-mono">${totalReceivedValue.toFixed(2)}</p>
                   </div>
 
@@ -2139,7 +2139,7 @@ export default function GoodsReceivedPage() {
               <button
                 onClick={handleSaveGRN}
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#ff9100] hover:bg-[#e67f00] rounded-lg shadow-sm transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#0d9488] hover:bg-[#0f766e] rounded-lg shadow-sm transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating...</>

@@ -33,7 +33,7 @@ export default function GRNMaterialPicker({ materials, finishedCodes, value, dis
     <PopoverContent align="start" portalContainer={triggerRef.current?.closest<HTMLElement>('[role="dialog"]')}
       className="w-[680px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border-slate-200 p-0 shadow-xl">
       <Command shouldFilter={false} className="max-h-[var(--radix-popover-content-available-height)] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:shrink-0">
-        <div className="flex shrink-0 items-center justify-between bg-slate-950 px-4 py-3 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Package className="h-4 w-4 text-teal-300" />GRN input catalogue</span><span className="text-xs font-normal text-teal-300">{matches.length} items</span></div>
+        <div className="flex shrink-0 items-center justify-between border-b border-teal-500/30 bg-[#0b2035] px-4 py-3 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Package className="h-4 w-4 text-teal-300" />GRN input catalogue</span><span className="text-xs font-normal text-teal-300">{matches.length} items</span></div>
         <CommandInput value={search} onValueChange={setSearch} placeholder="Search material name, item code or Sage code..." className="h-12 text-sm" />
         <div role="group" aria-label="Material categories" className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-200 bg-slate-50 p-3">
           {['All', ...grnMaterialGroups].map((group) => {
