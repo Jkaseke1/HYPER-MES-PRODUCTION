@@ -974,12 +974,16 @@ export default function MaterialTransferPage() {
     }
   }
 
+  const transferSearch = searchTerm.trim().toLowerCase();
   const filteredTransfers = transfers.filter((transfer) => {
-    const matchesSearch =
-      !searchTerm ||
-      transfer.raw_materials?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.raw_materials?.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transfer.to_location?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = !transferSearch || [
+      transfer.purpose,
+      transfer.transfer_number,
+      getLineSageReference(transfer.transfer_number, reversalsByTransferId[transfer.id], sageSyncLogs[transfer.id]),
+      transfer.raw_materials?.name,
+      transfer.raw_materials?.code,
+      transfer.to_location,
+    ].some((value) => value?.toLowerCase().includes(transferSearch));
     const matchesStatus = statusFilter === 'all' || transfer.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -1271,7 +1275,7 @@ export default function MaterialTransferPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search by material name, code, or destination..."
+                placeholder="Search IST, material, code or destination..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white w-64"
