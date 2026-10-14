@@ -22,7 +22,8 @@ import StockTakeFrozenBanner from '../components/stock/StockTakeFrozenBanner';
 import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import toast from 'react-hot-toast';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
-import { grnMaterialGroups, grnMaterialGroup, isGrnInput } from '../lib/grnMaterials';
+import { isGrnInput } from '../lib/grnMaterials';
+import GRNMaterialPicker from '../components/grn/GRNMaterialPicker';
 
 interface GRNItem {
   raw_material_id: string;
@@ -109,7 +110,6 @@ export default function GoodsReceivedPage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [finishedCodes, setFinishedCodes] = useState<Set<string>>(new Set());
   const [inputCatalogueReady, setInputCatalogueReady] = useState(false);
-  const [materialSearch, setMaterialSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -1993,57 +1993,13 @@ export default function GoodsReceivedPage() {
                       <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 xl:grid-cols-7">
                         <div className="col-span-2 space-y-1.5 xl:col-span-2">
                           <Label className="text-xs font-bold uppercase tracking-wide text-slate-700">Raw Material *</Label>
-                          <Select
+                          <GRNMaterialPicker
+                            materials={materials}
+                            finishedCodes={finishedCodes}
                             value={item.raw_material_id}
                             disabled={!inputCatalogueReady}
-                            onOpenChange={(open) => { if (open) setMaterialSearch(''); }}
-                            onValueChange={(value) => updateItem(index, 'raw_material_id', value)}
-                          >
-                            <SelectTrigger className="bg-white border-slate-300 font-medium focus:border-orange-500">
-                              <SelectValue placeholder="Select material" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <div
-                                className="sticky top-0 z-10 border-b border-slate-200 bg-white p-2"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onKeyDown={(event) => event.stopPropagation()}
-                              >
-                                <div className="relative">
-                                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-                                  <input
-                                    value={materialSearch}
-                                    onChange={(event) => setMaterialSearch(event.target.value)}
-                                    onKeyDown={(event) => event.stopPropagation()}
-                                    onPointerDown={(event) => event.stopPropagation()}
-                                    placeholder="Search code or material..."
-                                    autoFocus
-                                    className="h-8 w-full rounded border border-slate-200 bg-slate-50 pl-8 pr-2 text-xs text-slate-800 outline-none placeholder:text-slate-400 focus:border-orange-400 focus:bg-white"
-                                  />
-                                </div>
-                              </div>
-                              {grnMaterialGroups.map((group) => <div key={group}>
-                                <div className="border-t bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">{group}</div>
-                              {materials
-                                .filter((material) => isGrnInput(material, finishedCodes) && grnMaterialGroup(material) === group)
-                                .filter((material) => {
-                                  const query = materialSearch.trim().toLowerCase();
-                                  if (!query) return true;
-                                  return material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query);
-                                })
-                                .map((material) => (
-                                <SelectItem key={material.id} value={material.id}>
-                                  {material.code} — {material.name}
-                                </SelectItem>
-                                ))}
-                              </div>)}
-                              {!materials.some((material) => {
-                                const query = materialSearch.trim().toLowerCase();
-                                return isGrnInput(material, finishedCodes) && (!query || material.code.toLowerCase().includes(query) || material.name.toLowerCase().includes(query));
-                              }) && (
-                                <div className="px-2 py-3 text-center text-xs text-slate-500">No matching materials</div>
-                              )}
-                            </SelectContent>
-                          </Select>
+                            onSelect={(value) => updateItem(index, 'raw_material_id', value)}
+                          />
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs font-semibold text-slate-500">Ordered Qty ({materialUnitLabel(materials.find((material) => material.id === item.raw_material_id))})</Label>
