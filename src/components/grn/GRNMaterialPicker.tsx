@@ -31,15 +31,15 @@ export default function GRNMaterialPicker({ materials, finishedCodes, value, dis
     </PopoverTrigger>
     {/* Keep the list inside the modal's scroll-lock boundary so wheel/touch events reach it. */}
     <PopoverContent align="start" portalContainer={triggerRef.current?.closest<HTMLElement>('[role="dialog"]')}
-      className="w-[680px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border-slate-200 p-0 shadow-xl">
-      <Command shouldFilter={false} className="max-h-[var(--radix-popover-content-available-height)] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:shrink-0">
-        <div className="flex shrink-0 items-center justify-between border-b border-teal-500/30 bg-[#0b2035] px-4 py-3 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Package className="h-4 w-4 text-teal-300" />GRN input catalogue</span><span className="text-xs font-normal text-teal-300">{matches.length} items</span></div>
-        <CommandInput value={search} onValueChange={setSearch} placeholder="Search material name, item code or Sage code..." className="h-12 text-sm" />
-        <div role="group" aria-label="Material categories" className="flex shrink-0 flex-wrap gap-1.5 border-b border-slate-200 bg-slate-50 p-3">
+      className="w-[680px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border-teal-300 p-0 shadow-xl">
+      <Command shouldFilter={false} className="max-h-[var(--radix-popover-content-available-height)] [&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:focus-within:bg-teal-50 [&_[data-slot=command-input-wrapper]]:focus-within:ring-2 [&_[data-slot=command-input-wrapper]]:focus-within:ring-inset [&_[data-slot=command-input-wrapper]]:focus-within:ring-teal-500">
+        <div className="flex shrink-0 items-center justify-between border-b-4 border-[#00b8a9] bg-[#0b2035] px-4 py-3 text-sm font-semibold text-white"><span className="flex items-center gap-2"><Package className="h-4 w-4 text-teal-300" />GRN input catalogue</span><span className="rounded-md bg-teal-400/15 px-2 py-1 text-xs font-semibold text-teal-200">{matches.length} items</span></div>
+        <CommandInput value={search} onValueChange={setSearch} placeholder="Search material name, item code or Sage code..." className="h-12 text-sm outline-none focus:outline-none" />
+        <div role="group" aria-label="Material categories" className="flex shrink-0 flex-wrap gap-1.5 border-b border-teal-200 bg-[#edf9f7] p-3">
           {['All', ...grnMaterialGroups].map((group) => {
             const Icon = group === 'All' ? Layers : groupIcons[group as keyof typeof groupIcons];
             return <button type="button" key={group} aria-pressed={category === group} onClick={() => setCategory(group)}
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-medium ${category === group ? 'bg-teal-700 text-white' : 'text-slate-600 hover:bg-white'}`}>
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500 ${category === group ? 'border-[#00b8a9] bg-[#00b8a9] text-[#0b2035]' : 'border-teal-200 bg-white text-[#0b2035] hover:border-teal-500 hover:bg-teal-50'}`}>
               <Icon className="h-4 w-4" />{group}
             </button>;
           })}
@@ -50,7 +50,7 @@ export default function GRNMaterialPicker({ materials, finishedCodes, value, dis
             const rows = matches.filter((material) => grnMaterialGroup(material) === group);
             const Icon = groupIcons[group];
             return rows.length ? <CommandGroup key={group} heading={<span className="flex items-center gap-2 text-teal-800"><Icon className="h-4 w-4" />{group}<span className="text-slate-400">{rows.length}</span></span>}>
-              {rows.map((material) => <CommandItem key={material.id} value={material.id} onSelect={() => { onSelect(material.id); setOpen(false); }} className="min-h-14 gap-3 px-3 py-2 data-[selected=true]:bg-teal-50">
+              {rows.map((material) => <CommandItem key={material.id} value={material.id} onSelect={() => { onSelect(material.id); setOpen(false); }} className="min-h-14 gap-3 border-l-2 border-l-transparent px-3 py-2 data-[selected=true]:border-l-teal-500 data-[selected=true]:bg-teal-100">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-teal-50"><Icon className="h-4 w-4 text-teal-700" /></span>
                 <span className="min-w-0 flex-1"><span className="block break-words text-sm font-medium text-slate-900">{material.name}</span><span className="font-mono text-xs text-slate-500">{material.code}</span></span>
                 <span className="shrink-0 text-xs text-slate-500">{material.unit}</span>
