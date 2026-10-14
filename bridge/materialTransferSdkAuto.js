@@ -133,6 +133,12 @@ async function handleMaterialTransferToProduction(event) {
 
   const sageCode = transfer.raw_materials?.sage_code || transfer.raw_materials?.code;
   const quantity = Number(transfer.quantity || 0);
+  const transactionDate = String(transfer.transfer_date || '').slice(0, 10);
+  const parsedDate = new Date(`${transactionDate}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(transactionDate) ||
+      Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== transactionDate) {
+    throw new Error('RM initiator transfer date is missing or invalid; Sage posting blocked.');
+  }
 
   let plantControlUser = 'PlantControl';
   const plantControlUserId = transfer.production_approved_by || transfer.approved_by;
@@ -159,7 +165,7 @@ async function handleMaterialTransferToProduction(event) {
     fromWarehouse: 'RM',
     toWarehouse: 'PD',
     quantity,
-    transactionDate: transfer.transfer_date,
+    transactionDate,
     reference: buildReference(transfer),
     reference2: `MES material transfer ${transfer.transfer_number || transfer.id}`.substring(0, 50),
     userName: plantControlUser.substring(0, 50),
@@ -168,6 +174,7 @@ async function handleMaterialTransferToProduction(event) {
 
   console.log(`  Material: ${sageCode} - ${quantity}${transfer.unit || 'kg'} RM -> PD`);
   console.log(`  Reference: ${body.reference}`);
+  console.log(`  RM transaction date: ${body.transactionDate}`);
 
   if (DRY_RUN) {
     console.log(`[DRY RUN] Would POST ${SDK_BASE_URL}/api/v1/warehouse-transfers/post`);

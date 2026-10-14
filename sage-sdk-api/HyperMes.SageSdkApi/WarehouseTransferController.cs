@@ -154,6 +154,11 @@ namespace SDK_Test
             if (string.IsNullOrWhiteSpace(request.Reference))
                 return "Reference is required.";
 
+            if (request.FromWarehouse.Trim().Equals("RM", StringComparison.OrdinalIgnoreCase)
+                && request.ToWarehouse.Trim().Equals("PD", StringComparison.OrdinalIgnoreCase)
+                && (!request.TransactionDate.HasValue || request.TransactionDate.Value == DateTime.MinValue))
+                return "The RM initiator transaction date is required for RM to PD transfers.";
+
             return null;
         }
 
