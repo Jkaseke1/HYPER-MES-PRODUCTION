@@ -5,7 +5,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { grnMaterialGroup, grnMaterialGroups, isGrnInput } from '../../lib/grnMaterials';
 import type { RawMaterial } from '../../types/database';
 
-const groupIcons = { 'Raw materials': Wheat, Packaging: Package, Premixes: Layers, 'Additives & minerals': FlaskConical };
+const groupIcons = { 'Raw materials': Wheat, Packaging: Package, Premixes: Layers, 'Additives & minerals': FlaskConical, 'Other supplies': Package };
 
 export default function GRNMaterialPicker({ materials, finishedCodes, value, disabled, onSelect }: {
   materials: RawMaterial[]; finishedCodes: Set<string>; value: string; disabled: boolean; onSelect: (id: string) => void;
@@ -44,7 +44,7 @@ export default function GRNMaterialPicker({ materials, finishedCodes, value, dis
             </button>;
           })}
         </div>
-        <CommandList className="min-h-0 max-h-[360px] touch-pan-y overflow-y-auto overscroll-contain p-2 [scrollbar-width:thin]">
+        <CommandList key={category} className="min-h-0 max-h-[360px] touch-pan-y overflow-y-auto overscroll-contain p-2 [scrollbar-width:thin]">
           <CommandEmpty>No matching inputs</CommandEmpty>
           {grnMaterialGroups.map((group) => {
             const rows = matches.filter((material) => grnMaterialGroup(material) === group);
