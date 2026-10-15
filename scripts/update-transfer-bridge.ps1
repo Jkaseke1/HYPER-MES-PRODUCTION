@@ -1,4 +1,7 @@
-param([Parameter(Mandatory = $true)][ValidatePattern('^[a-f0-9]{7,40}$')][string]$SourceCommit)
+param(
+  [Parameter(Mandatory = $true)][ValidatePattern('^[a-f0-9]{7,40}$')][string]$SourceCommit,
+  [switch]$IncludeGrnGuard
+)
 $ErrorActionPreference = 'Stop'
 $bridge = 'C:\PlantControl\Production\bridge'
 $taskName = 'PlantControl Sage Bridge'
@@ -6,6 +9,7 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stage = Join-Path $env:TEMP "transfer-bridge-$stamp"
 $backup = "C:\PlantControl\Production\backups\transfer-bridge-$stamp"
 $files = @('bridgeWorker.js', 'materialTransferSdkAuto.js', 'sageStockSync.js', 'lib/sdkHttp.js')
+if ($IncludeGrnGuard) { $files += 'goodsReceiptAuto.js' }
 $settings = @{}
 foreach ($line in Get-Content -LiteralPath "$bridge\.env") {
   if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
@@ -18,6 +22,11 @@ $key = $settings['SUPABASE_SERVICE_KEY']
 if (!$key) { $key = $settings['SUPABASE_SERVICE_ROLE_KEY'] }
 if (!$url -or !$key) { throw 'Bridge Supabase configuration is missing.' }
 $headers = @{ apikey = $key; Authorization = "Bearer $key" }
+if ($IncludeGrnGuard) {
+  # This RPC is a STABLE SELECT-only eligibility check. NULL matches no material.
+  $eligibility = Invoke-RestMethod -Method Post -Uri "$($url.TrimEnd('/'))/rest/v1/rpc/grn_input_allowed" -Headers $headers -ContentType 'application/json' -Body '{"p_material_id":null}'
+  if ($eligibility -ne $false) { throw 'GRN input eligibility guard could not be verified. Apply its Supabase migrations first.' }
+}
 $active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers)
 if ($active.Count) { throw 'A Sage event is queued or processing. Wait for an idle queue; no services or files were changed.' }
 $task = Get-ScheduledTask -TaskName $taskName
