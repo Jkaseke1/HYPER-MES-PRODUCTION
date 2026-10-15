@@ -30,8 +30,12 @@ if ($IncludeGrnGuard) {
   $eligibility = Invoke-RestMethod -Method Post -Uri "$($url.TrimEnd('/'))/rest/v1/rpc/grn_input_allowed" -Headers $headers -UserAgent $userAgent -ContentType 'application/json' -Body '{"p_material_id":null}'
   if ($eligibility -ne $false) { throw 'GRN input eligibility guard could not be verified. Apply its Supabase migrations first.' }
 }
-$active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers -UserAgent $userAgent)
-if ($active.Count) { throw 'A Sage event is queued or processing. Wait for an idle queue; no services or files were changed.' }
+# Assign directly: wrapping Invoke-RestMethod in @() can count an empty JSON array as one object.
+$active = Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type,status&limit=1" -Headers $headers -UserAgent $userAgent
+if (@($active).Count) {
+  $active | Select-Object id, event_type, status | Format-Table | Out-Host
+  throw 'A Sage event is queued or processing. Wait for an idle queue; no services or files were changed.'
+}
 $task = Get-ScheduledTask -TaskName $taskName
 if ($task.State -eq 'Disabled') { throw 'Bridge task is disabled; investigate before deployment.' }
 New-Item -ItemType Directory -Force -Path $stage, "$stage\lib", $backup, "$backup\lib" | Out-Null
@@ -53,8 +57,11 @@ try {
   Disable-ScheduledTask -TaskName $taskName | Out-Null
   $stopped = $true
   # Recheck after staging. Keep PD receipts paused during this brief maintenance window.
-  $active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers -UserAgent $userAgent)
-  if ($active.Count) { throw 'A Sage event started during staging. Update aborted.' }
+  $active = Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type,status&limit=1" -Headers $headers -UserAgent $userAgent
+  if (@($active).Count) {
+    $active | Select-Object id, event_type, status | Format-Table | Out-Host
+    throw 'A Sage event started during staging. Update aborted.'
+  }
   Stop-ScheduledTask -TaskName $taskName
   Start-Sleep -Seconds 3
   $remaining = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match 'bridgeWorker\.js' })
