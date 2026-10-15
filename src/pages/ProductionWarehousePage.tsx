@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import './ProductionWarehousePage.css';
@@ -75,6 +76,8 @@ interface IncomingStage {
 }
 
 interface IncomingSyncStage {
+  sync_created_at?: string;
+  sage_environment?: string;
   sync_status: SageTransferStatus['sync_status'];
   sync_message?: string | null;
   sync_updated_at: string;
@@ -203,7 +206,7 @@ export default function ProductionWarehousePage() {
       ] = await Promise.all([
         supabase
           .from('sync_log')
-          .select('id, reference_id, status, message, updated_at, sage_response')
+          .select('id, reference_id, status, message, created_at, updated_at, sage_response')
           .eq('event_type', 'material_transfer_to_production')
           .in('reference_id', incomingTransferIds)
           .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
@@ -221,6 +224,8 @@ export default function ProductionWarehousePage() {
         (incomingSyncRows || []).forEach((row: any) => {
           if (!nextIncomingSync[row.reference_id]) {
             nextIncomingSync[row.reference_id] = {
+              sync_created_at: row.created_at,
+              sage_environment: row.sage_response?.environment,
               sync_status: row.status,
               sync_message: row.message,
               sync_updated_at: row.updated_at,
@@ -310,7 +315,7 @@ export default function ProductionWarehousePage() {
       setReceiptToConfirm(null);
       setReceiptNotice({
         tone: 'success',
-        message: `${transfer.raw_materials?.name || 'Material'} received into Production Warehouse.`,
+        message: `${transfer.raw_materials?.name || 'Material'} received locally in PD. Sage posting is queued and not yet confirmed.`,
       });
       await fetchTransfers(true);
     } catch (err: any) {
@@ -480,11 +485,18 @@ export default function ProductionWarehousePage() {
       const failed = syncLines.find((sync) => sync.sync_status === 'failed');
       return { label: 'Sage posting failed', detail: failed?.sync_message || 'The RM to PD Sage posting failed and needs review.', tone: 'rose', canReceive: false };
     }
+    const stages = syncLines.map((sync) => transferSyncStatus({ status: sync.sync_status, created_at: sync.sync_created_at, updated_at: sync.sync_updated_at, sage_response: { environment: sync.sage_environment } }));
+    const delayed = stages.find((stage) => stage.delayed);
+    const confirmedCount = stages.filter((stage) => stage.confirmed).length;
+    if (delayed) return { label: delayed.label, detail: `PD received locally. ${confirmedCount}/${bundle.transfers.length} lines have Sage confirmation. Queue age exceeds five minutes; check bridge status before retrying.`, tone: 'rose', canReceive: false };
+    if (syncLines.some((sync) => sync.sage_environment && sync.sage_environment.toLowerCase() !== 'production')) {
+      return { label: 'Verify Production posting', detail: 'A response identifies a different Sage environment. Do not assume Production is posted or replay the transfer.', tone: 'amber', canReceive: false };
+    }
     if (syncLines.some((sync) => sync.sync_status === 'processing')) {
-      return { label: 'Posting RM to PD in Sage', detail: 'Production receipt is complete; the bridge is posting the RM to PD warehouse movement in Sage.', tone: 'blue', canReceive: false };
+      return { label: 'Processing: Sage not confirmed', detail: `PD received locally. ${confirmedCount}/${bundle.transfers.length} lines have Sage confirmation.`, tone: 'blue', canReceive: false };
     }
     if (syncLines.some((sync) => ['pending', 'retry'].includes(sync.sync_status))) {
-      return { label: 'Sage post queued', detail: 'Production receipt is complete and the RM to PD Sage movement is queued.', tone: 'amber', canReceive: false };
+      return { label: 'Queued: Sage not confirmed', detail: `PD received locally. ${confirmedCount}/${bundle.transfers.length} lines have Sage confirmation.`, tone: 'amber', canReceive: false };
     }
     if (syncLines.length === bundle.transfers.length && syncLines.every((sync) => sync.sync_status === 'success')) {
       return { label: 'Posted RM to PD', detail: 'Production receipt and the Sage RM to PD warehouse transfer are complete.', tone: 'emerald', canReceive: false };
@@ -663,6 +675,10 @@ export default function ProductionWarehousePage() {
     const sync = incomingSyncByTransferId[transfer.id];
     if (!sync) {
       return { label: 'Awaiting Sage queue', detail: 'Production receipt is complete; waiting for the Sage posting event.', className: 'border-slate-200 bg-slate-50 text-slate-700' };
+    }
+    const stage = transferSyncStatus({ status: sync.sync_status, created_at: sync.sync_created_at, updated_at: sync.sync_updated_at, sage_response: { environment: sync.sage_environment } });
+    if (stage.delayed || (sync.sync_status === 'success' && !stage.confirmed)) {
+      return { label: stage.label, detail: 'PD receipt is recorded locally. Production Sage posting requires verification; do not blindly retry.', className: 'border-rose-200 bg-rose-50 text-rose-700' };
     }
     if (sync.sync_status === 'success') {
       return { label: 'Posted to Sage', detail: sync.sync_message || 'This RM to PD transfer was posted to Sage.', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' };

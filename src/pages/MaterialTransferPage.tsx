@@ -2,6 +2,7 @@ import { Fragment, useState, useEffect, useRef } from 'react';
 import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowRight, Package, Truck, Trash2, X, Loader2, Clock, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, RotateCcw, Wheat, Boxes } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
@@ -102,45 +103,23 @@ function getLineSageReference(
 }
 
 function SageSyncBadge({ log }: { log?: SageTransferSyncLog }) {
-  const base = 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold whitespace-nowrap';
-
-  if (!log) {
-    return (
-      <span className={`${base} bg-slate-50 text-slate-500 border-slate-200`}>
-        <Clock className="w-3 h-3" /> Not queued
-      </span>
-    );
-  }
-
-  if (log.status === 'success') {
-    return (
-      <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>
-        <CheckCircle2 className="w-3 h-3" /> Posted to Sage
-      </span>
-    );
-  }
-
-  if (log.status === 'failed') {
-    return (
-      <span className={`${base} bg-red-50 text-red-700 border-red-200`}>
-        <AlertTriangle className="w-3 h-3" /> Sage failed
-      </span>
-    );
-  }
-
-  if (log.status === 'processing') {
-    return (
-      <span className={`${base} bg-blue-50 text-blue-700 border-blue-200`}>
-        <Loader2 className="w-3 h-3 animate-spin" /> Posting
-      </span>
-    );
-  }
-
-  return (
-    <span className={`${base} bg-amber-50 text-amber-700 border-amber-200`}>
-      <Clock className="w-3 h-3" /> Pending Sage
-    </span>
-  );
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!log || !['pending', 'processing', 'retry'].includes(log.status)) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, [log?.status]);
+  const stage = transferSyncStatus(log, now);
+  const tones: Record<string, string> = {
+    slate: 'bg-slate-50 text-slate-600 border-slate-200',
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    amber: 'bg-amber-50 text-amber-800 border-amber-200',
+    rose: 'bg-rose-50 text-rose-700 border-rose-200',
+  };
+  return <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold ${tones[stage.tone]}`} title={log?.message || stage.label}>
+    {stage.confirmed ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : stage.delayed || log?.status === 'failed' ? <AlertTriangle className="h-3 w-3 shrink-0" /> : <Clock className="h-3 w-3 shrink-0" />}
+    {stage.label}
+  </span>;
 }
 
 function ReturnToRmBadge({ reversal }: { reversal?: MaterialTransferReversal }) {
@@ -183,6 +162,8 @@ function MaterialTransferStatusBadge({ status, reversal }: { status: string; rev
   if (status === 'received' && reversal) {
     return <ReturnToRmBadge reversal={reversal} />;
   }
+
+  if (status === 'received') return <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700">PD received (local)</span>;
 
   return (
     <StatusBadge status={status} />
@@ -540,6 +521,11 @@ export default function MaterialTransferPage() {
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [syncClock, setSyncClock] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setSyncClock(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCreate, setShowCreate] = useState(false);
   const [viewTransfer, setViewTransfer] = useState<MaterialTransfer | null>(null);
@@ -1246,7 +1232,7 @@ export default function MaterialTransferPage() {
           <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">In buffer</p><p className="mt-2 text-3xl font-bold text-[#ffc36b]">{statusCounts.in_buffer}</p><p className="mt-1 text-xs text-slate-400">Awaiting production</p></div>
           <div className="border-b border-white/10 px-5 py-4 sm:border-r xl:border-b-0"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Received</p><p className="mt-2 text-3xl font-bold text-emerald-300">{statusCounts.received}</p><p className="mt-1 text-xs text-slate-400">Production confirmed</p></div>
           <div className="border-b border-white/10 px-5 py-4 xl:border-b-0 xl:border-r"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">This month</p><p className="mt-2 text-3xl font-bold text-cyan-300">{thisMonthCount}</p><p className="mt-1 text-xs text-slate-400">Materials moved</p></div>
-          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Queued {activeSagePosts.length}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Received {statusCounts.received}</span></div><p className="mt-2 text-xs text-slate-400">Rejected {statusCounts.rejected}</p></div>
+          <div className="px-5 py-4"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Live Sage activity</p><div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold"><span className="inline-flex items-center gap-1.5 text-[#ffc36b]"><span className="h-1.5 w-1.5 rounded-full bg-[#f39200]" />Queued {activeSagePosts.length}</span><span className="inline-flex items-center gap-1.5 text-emerald-300"><CheckCircle className="h-3.5 w-3.5" />Sage confirmed {Object.values(sageSyncLogs).filter((log) => transferSyncStatus(log, syncClock).confirmed).length}</span></div><p className="mt-2 text-xs text-slate-400">Rejected {statusCounts.rejected}</p></div>
         </div>
       </section>
 
@@ -1320,8 +1306,11 @@ export default function MaterialTransferPage() {
                   const statuses = [...new Set(group.transfers.map((transfer) => transfer.status))];
                   const syncLogs = group.transfers.map((transfer) => sageSyncLogs[transfer.id]).filter(Boolean);
                   const hasFailedSync = syncLogs.some((log) => log.status === 'failed');
-                  const allPosted = syncLogs.length === group.transfers.length && syncLogs.every((log) => log.status === 'success');
-                  const hasActiveSync = syncLogs.some((log) => ['pending', 'processing', 'retry'].includes(log.status));
+                  const postedCount = syncLogs.filter((log) => transferSyncStatus(log, syncClock).confirmed).length;
+                  const allPosted = postedCount === group.transfers.length;
+                  const unresolved = syncLogs.filter((log) => !transferSyncStatus(log, syncClock).confirmed)
+                    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+                  const groupSyncStage = transferSyncStatus(unresolved[0], syncClock);
                   const postedReturns = group.transfers
                     .map((transfer) => reversalsByTransferId[transfer.id])
                     .filter((reversal) => reversal?.status === 'posted') as MaterialTransferReversal[];
@@ -1368,7 +1357,10 @@ export default function MaterialTransferPage() {
                           </span>
                         </td>
                         <td className="px-3 py-3">
-                          {hasFailedSync ? <span className="text-xs font-bold text-red-700">Sage failed</span> : allPosted ? <span className="text-xs font-bold text-emerald-700">Posted to Sage</span> : hasActiveSync ? <span className="text-xs font-bold text-amber-700">Posting</span> : <span className="text-xs font-semibold text-slate-500">Not queued</span>}
+                          <span className={`text-xs font-semibold ${hasFailedSync || groupSyncStage.delayed ? 'text-rose-700' : allPosted ? 'text-emerald-700' : 'text-amber-800'}`}>
+                            {allPosted ? 'Sage posting confirmed' : hasFailedSync ? 'Sage error: review required' : groupSyncStage.label}
+                            <span className="mt-1 block">{postedCount}/{group.transfers.length} lines confirmed</span>
+                          </span>
                         </td>
                         <td className="px-3 py-3">
                           <button
