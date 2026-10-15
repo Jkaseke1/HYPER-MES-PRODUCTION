@@ -48,7 +48,16 @@ foreach ($file in $files) {
   if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination (Join-Path $backup $file) }
 }
 # Resolve existing worker dependencies without loading .env or running handlers.
-& node -e 'const fs=require("fs"),path=require("path");for(const m of fs.readFileSync(process.argv[1],"utf8").matchAll(/require\(["\x27](\.\/[^"\x27]+)["\x27]\)/g)){require.resolve(path.resolve(process.argv[2],m[1]));}' "$stage\bridgeWorker.js" $bridge
+# Send JavaScript through stdin to avoid Windows PowerShell native-argument quote stripping.
+$dependencyCheck = @'
+const fs = require('fs');
+const path = require('path');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+for (const match of source.matchAll(/require\(["'](\.\/[^"']+)["']\)/g)) {
+  require.resolve(path.resolve(process.argv[3], match[1]));
+}
+'@
+$dependencyCheck | & node - "$stage\bridgeWorker.js" $bridge
 if ($LASTEXITCODE -ne 0) { throw 'A required bridge module is missing; no services were changed.' }
 $stopped = $false
 $installed = $false
