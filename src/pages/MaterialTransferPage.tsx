@@ -1310,7 +1310,7 @@ export default function MaterialTransferPage() {
                   const allPosted = postedCount === group.transfers.length;
                   const unresolved = syncLogs.filter((log) => !transferSyncStatus(log, syncClock).confirmed)
                     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
-                  const groupSyncStage = transferSyncStatus(unresolved[0], syncClock);
+                  const groupSyncStage = transferSyncStatus(unresolved.find((log) => log.status === 'failed') || unresolved[0], syncClock);
                   const postedReturns = group.transfers
                     .map((transfer) => reversalsByTransferId[transfer.id])
                     .filter((reversal) => reversal?.status === 'posted') as MaterialTransferReversal[];
@@ -1358,7 +1358,7 @@ export default function MaterialTransferPage() {
                         </td>
                         <td className="px-3 py-3">
                           <span className={`text-xs font-semibold ${hasFailedSync || groupSyncStage.delayed ? 'text-rose-700' : allPosted ? 'text-emerald-700' : 'text-amber-800'}`}>
-                            {allPosted ? 'Sage posting confirmed' : hasFailedSync ? 'Sage error: review required' : groupSyncStage.label}
+                            {allPosted ? 'Sage posting confirmed' : groupSyncStage.label}
                             <span className="mt-1 block">{postedCount}/{group.transfers.length} lines confirmed</span>
                           </span>
                         </td>

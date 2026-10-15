@@ -1,7 +1,6 @@
 // Read-only Sage stock cache synchronizer. Sage remains the inventory authority.
 
-const http = require('http');
-const https = require('https');
+const { sdkJson } = require('./lib/sdkHttp');
 const { supabase } = require('./lib/db');
 
 const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || 'http://127.0.0.1:5088').replace(/\/+$/, '');
@@ -19,29 +18,7 @@ const FULL_SYNC_BATCH_SIZE = Math.max(1, Number(process.env.SAGE_STOCK_SYNC_BATC
 let nextFullSyncOffset = 0;
 
 function getJson(urlString) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    const transport = url.protocol === 'https:' ? https : http;
-    const request = transport.request({
-      method: 'GET',
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: `${url.pathname}${url.search}`,
-      headers: { 'X-Hyper-Api-Key': SDK_API_KEY },
-    }, (response) => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', (chunk) => { body += chunk; });
-      response.on('end', () => {
-        let parsed = {};
-        try { parsed = body ? JSON.parse(body) : {}; } catch (_) { parsed = { message: body }; }
-        if (response.statusCode >= 200 && response.statusCode < 300) return resolve(parsed);
-        reject(new Error(parsed.message || parsed.Message || `HTTP ${response.statusCode}`));
-      });
-    });
-    request.on('error', (error) => reject(error));
-    request.end();
-  });
+  return sdkJson(urlString, { apiKey: SDK_API_KEY, timeoutMs: 15000 });
 }
 
 async function loadMaterials(itemCodes, { fullSync = false } = {}) {

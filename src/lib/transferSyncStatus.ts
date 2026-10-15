@@ -2,7 +2,8 @@ export interface TransferSyncLog {
   status: string;
   created_at?: string | null;
   updated_at?: string | null;
-  sage_response?: { environment?: string; postedAtUtc?: string } | null;
+  sage_response?: { environment?: string; postedAtUtc?: string; sagePosting?: string } | null;
+  error_details?: { postingOutcomeUnknown?: boolean } | null;
 }
 
 export function transferSyncStatus(log?: TransferSyncLog, now = Date.now()) {
@@ -13,6 +14,9 @@ export function transferSyncStatus(log?: TransferSyncLog, now = Date.now()) {
       return { label: `${environment} response: verify Production`, tone: 'amber', confirmed: false, delayed: false };
     }
     return { label: 'Sage posting confirmed', tone: 'emerald', confirmed: true, delayed: false };
+  }
+  if (log.status === 'failed' && log.error_details?.postingOutcomeUnknown) {
+    return { label: 'Sage outcome unknown: verification required', tone: 'rose', confirmed: false, delayed: false };
   }
   if (log.status === 'failed') return { label: 'Sage error: review before retry', tone: 'rose', confirmed: false, delayed: false };
   const started = Date.parse(log.created_at || log.updated_at || '');

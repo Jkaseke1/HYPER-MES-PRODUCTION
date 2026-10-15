@@ -76,6 +76,7 @@ interface IncomingStage {
 }
 
 interface IncomingSyncStage {
+  sync_error_details?: { postingOutcomeUnknown?: boolean };
   sync_created_at?: string;
   sage_environment?: string;
   sync_status: SageTransferStatus['sync_status'];
@@ -206,7 +207,7 @@ export default function ProductionWarehousePage() {
       ] = await Promise.all([
         supabase
           .from('sync_log')
-          .select('id, reference_id, status, message, created_at, updated_at, sage_response')
+          .select('id, reference_id, status, message, created_at, updated_at, sage_response, error_details')
           .eq('event_type', 'material_transfer_to_production')
           .in('reference_id', incomingTransferIds)
           .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
@@ -225,6 +226,7 @@ export default function ProductionWarehousePage() {
           if (!nextIncomingSync[row.reference_id]) {
             nextIncomingSync[row.reference_id] = {
               sync_created_at: row.created_at,
+              sync_error_details: row.error_details,
               sage_environment: row.sage_response?.environment,
               sync_status: row.status,
               sync_message: row.message,
@@ -481,6 +483,9 @@ export default function ProductionWarehousePage() {
     }
 
     const syncLines = bundle.transfers.map((transfer) => incomingSyncByTransferId[transfer.id]).filter(Boolean);
+    if (syncLines.some((sync) => sync.sync_status === 'failed' && sync.sync_error_details?.postingOutcomeUnknown)) {
+      return { label: 'Sage outcome unknown: verify', detail: 'A posting response was lost or could not be recorded. Check Sage before retrying; the movement may already exist.', tone: 'rose', canReceive: false };
+    }
     if (syncLines.some((sync) => sync.sync_status === 'failed')) {
       const failed = syncLines.find((sync) => sync.sync_status === 'failed');
       return { label: 'Sage posting failed', detail: failed?.sync_message || 'The RM to PD Sage posting failed and needs review.', tone: 'rose', canReceive: false };
@@ -676,8 +681,8 @@ export default function ProductionWarehousePage() {
     if (!sync) {
       return { label: 'Awaiting Sage queue', detail: 'Production receipt is complete; waiting for the Sage posting event.', className: 'border-slate-200 bg-slate-50 text-slate-700' };
     }
-    const stage = transferSyncStatus({ status: sync.sync_status, created_at: sync.sync_created_at, updated_at: sync.sync_updated_at, sage_response: { environment: sync.sage_environment } });
-    if (stage.delayed || (sync.sync_status === 'success' && !stage.confirmed)) {
+    const stage = transferSyncStatus({ status: sync.sync_status, created_at: sync.sync_created_at, updated_at: sync.sync_updated_at, sage_response: { environment: sync.sage_environment }, error_details: sync.sync_error_details });
+    if (stage.delayed || sync.sync_error_details?.postingOutcomeUnknown || (sync.sync_status === 'success' && !stage.confirmed)) {
       return { label: stage.label, detail: 'PD receipt is recorded locally. Production Sage posting requires verification; do not blindly retry.', className: 'border-rose-200 bg-rose-50 text-rose-700' };
     }
     if (sync.sync_status === 'success') {

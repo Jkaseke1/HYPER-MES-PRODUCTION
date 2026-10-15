@@ -304,6 +304,7 @@ async function processPendingEvents() {
   // the safeguard when another worker instance is ever started accidentally.
   if (eventProcessingInProgress) return;
   eventProcessingInProgress = true;
+  const deferredTransferStockCodes = new Set();
 
   try {
   let pendingQuery = supabase
@@ -354,10 +355,12 @@ async function processPendingEvents() {
   for (const event of pending) {
     // Claim the event atomically. A second bridge instance may have fetched the
     // same pending row, but only one instance is allowed to post it to Sage.
+    const bridgeStartedAt = new Date().toISOString();
     const { data: claimed, error: claimError } = await supabase
       .from('sync_log')
       .update({
         status: 'processing',
+        details: { ...(event.details || {}), bridgeStartedAt },
         message: event.event_type === 'grn_confirmed'
           ? 'Validating GRN for Sage'
           : 'Validating Sage transaction',
@@ -400,6 +403,7 @@ async function processPendingEvents() {
 
     console.log(`\nProcessing: ${event.event_type} — ${event.reference_type} — ${event.reference_id}`);
 
+    let confirmedTransferResult;
     try {
       let handlerResult = null;
 
@@ -485,6 +489,7 @@ async function processPendingEvents() {
         status: 'success',
         updated_at: new Date().toISOString(),
       };
+      if (event.event_type === 'material_transfer_to_production') confirmedTransferResult = handlerResult?.sage_response;
 
       if (event.retried_at) {
         successUpdate.resolved_at = new Date().toISOString();
@@ -493,13 +498,19 @@ async function processPendingEvents() {
       if (handlerResult?.message) successUpdate.message = handlerResult.message;
       if (handlerResult?.sage_response) successUpdate.sage_response = handlerResult.sage_response;
       if (handlerResult?.details) successUpdate.details = handlerResult.details;
+      if (event.event_type === 'material_transfer_to_production') {
+        successUpdate.details = { ...(event.details || {}), ...(handlerResult?.details || {}), bridgeStartedAt,
+          sageConfirmedAt: handlerResult?.sage_response?.postedAtUtc || new Date().toISOString(),
+          stockRefresh: 'queued separately; check stock last_synced_at' };
+      }
 
-      // A transaction is only ready for MES users once the related Sage stock
-      // balance is refreshed. Keep the visible status as "Posting to Sage"
-      // until that reconciliation finishes, so production never sees a stale
-      // balance immediately after a successful transfer.
+      // Other workflows keep their existing stock-refresh sequence. Material
+      // transfers record Sage confirmation separately from the cached balance.
       const itemCodes = postedStockCodes(event.event_type, handlerResult?.details);
-      if (itemCodes.length) {
+      if (event.event_type === 'material_transfer_to_production') {
+        // Confirm the actual Sage post without blocking the next line on cache reads.
+        itemCodes.forEach((code) => deferredTransferStockCodes.add(code));
+      } else if (itemCodes.length) {
         if (event.event_type === 'grn_confirmed') {
           await supabase
             .from('sync_log')
@@ -566,8 +577,10 @@ async function processPendingEvents() {
         .from('sync_log')
         .update({
           status:        'failed',
+          ...(confirmedTransferResult ? { sage_response: confirmedTransferResult } : {}),
           message:       err.message,
           error_details: {
+            postingOutcomeUnknown: Boolean(err.postingOutcomeUnknown || confirmedTransferResult),
             message: err.message,
             stack: err.stack,
             statusCode: err.statusCode || null,
@@ -576,19 +589,24 @@ async function processPendingEvents() {
           last_failed_at: new Date().toISOString(),
           last_failure_message: err.message,
           last_failure_details: {
+            postingOutcomeUnknown: Boolean(err.postingOutcomeUnknown || confirmedTransferResult),
             message: err.message,
             statusCode: err.statusCode || null,
             response: err.response || null,
           },
           resolved_at: null,
           retry_count:   (event.retry_count || 0) + 1,
-          next_retry_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+          next_retry_at: err.postingOutcomeUnknown || confirmedTransferResult ? null : new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           updated_at:    new Date().toISOString(),
         })
         .eq('id', event.id);
     }
   }
   } finally {
+    if (deferredTransferStockCodes.size) {
+      // Read-only reconciliation runs on its existing serial queue, outside the posting loop.
+      void refreshSageStock([...deferredTransferStockCodes], 'confirmed material transfer batch');
+    }
     eventProcessingInProgress = false;
   }
 }

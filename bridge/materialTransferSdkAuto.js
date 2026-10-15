@@ -1,8 +1,7 @@
 // materialTransferSdkAuto.js - Posts approved RM -> Production transfers via Sage SDK API
 // Reads material_transfers by reference_id from sync_log and avoids direct Sage SQL writes.
 
-const http = require('http');
-const https = require('https');
+const { sdkJson } = require('./lib/sdkHttp');
 const { supabase, DRY_RUN } = require('./lib/db');
 
 const DEFAULT_SDK_BASE_URL = 'http://127.0.0.1:5088';
@@ -10,56 +9,7 @@ const SDK_BASE_URL = (process.env.SAGE_SDK_API_BASE_URL || DEFAULT_SDK_BASE_URL)
 const SDK_API_KEY = process.env.SAGE_SDK_API_KEY || process.env.HYPER_SAGE_API_KEY;
 
 function postJson(urlString, apiKey, body) {
-  return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    const payload = JSON.stringify(body);
-    const transport = url.protocol === 'https:' ? https : http;
-
-    const req = transport.request(
-      {
-        method: 'POST',
-        hostname: url.hostname,
-        port: url.port || (url.protocol === 'https:' ? 443 : 80),
-        path: `${url.pathname}${url.search}`,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-          'X-Hyper-Api-Key': apiKey,
-        },
-      },
-      (res) => {
-        let responseBody = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => { responseBody += chunk; });
-        res.on('end', () => {
-          let parsed = responseBody;
-          try {
-            parsed = responseBody ? JSON.parse(responseBody) : {};
-          } catch (_) {
-            // Keep plain text responses intact for diagnostics.
-          }
-
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(parsed);
-            return;
-          }
-
-          const message = parsed?.exceptionMessage || parsed?.Message || parsed?.message || responseBody || `HTTP ${res.statusCode}`;
-          const error = new Error(`Sage SDK API failed: ${message}`);
-          error.statusCode = res.statusCode;
-          error.response = parsed;
-          reject(error);
-        });
-      }
-    );
-
-    req.on('error', (err) => {
-      reject(new Error(`Sage SDK API connection failed: ${err.message}`));
-    });
-
-    req.write(payload);
-    req.end();
-  });
+  return sdkJson(urlString, { method: 'POST', apiKey, body, timeoutMs: 120000 });
 }
 
 function buildReference(transfer) {
@@ -71,6 +21,11 @@ function buildReference(transfer) {
 }
 
 async function handleMaterialTransferToProduction(event) {
+  if (event.error_details?.postingOutcomeUnknown) {
+    const error = new Error('Previous Sage posting outcome is unresolved. Verify Sage before retrying this transfer.');
+    error.postingOutcomeUnknown = true;
+    throw error;
+  }
   console.log('\n  -> Material Transfer to Production (SDK)');
 
   if (!SDK_API_KEY) {
@@ -191,6 +146,12 @@ async function handleMaterialTransferToProduction(event) {
     SDK_API_KEY,
     body
   );
+
+  if (result.sagePosting !== 'completed') {
+    const error = new Error('Sage did not return a completed posting confirmation. Verify Sage before retrying.');
+    error.postingOutcomeUnknown = true;
+    throw error;
+  }
 
   console.log(`  Sage SDK response: ${result.status || 'ok'} - ${result.message || 'posted'}`);
   return {
