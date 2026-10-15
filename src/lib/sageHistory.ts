@@ -1,8 +1,46 @@
 import { transferSyncStatus, type TransferSyncLog } from './transferSyncStatus';
 
 export interface SageHistoryLog extends TransferSyncLog {
-  details?: { dryRun?: boolean; sdkTransfer?: { confirmPost?: boolean } } | null;
+  details?: { dryRun?: boolean; sdkTransfer?: { confirmPost?: boolean; reference?: string } } | null;
   sage_response?: NonNullable<TransferSyncLog['sage_response']> & { dryRun?: boolean };
+}
+
+interface GroupableHistory extends SageHistoryLog {
+  id: string;
+  reference_id?: string;
+  event_type?: string;
+  original?: { id?: string; purpose?: string };
+  record?: { original_transfer_id?: string };
+}
+
+export function groupHistoryByIst<T extends GroupableHistory>(rows: T[]) {
+  const groups = new Map<string, { key: string; label: string; rows: T[] }>();
+  for (const row of rows) {
+    const ist = [row.original?.purpose, row.details?.sdkTransfer?.reference]
+      .map(value => value?.match(/\bHFIST[\s-]*(\d+)\b/i)?.[1]).find(Boolean);
+    // Do not merge unrelated events just because their IST metadata is missing.
+    const key = ist ? `HFIST${ist}` : `unlinked:${row.original?.id || row.record?.original_transfer_id || row.reference_id || row.id}`;
+    const group = groups.get(key) || { key, label: ist ? `HFIST${ist}` : 'IST not recorded', rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()].map(group => {
+    const confirmed = group.rows.filter(row => sageHistoryStatus(row).confirmed).length;
+    const failed = group.rows.filter(row => row.status === 'failed').length;
+    const queued = group.rows.filter(row => ['pending', 'retry', 'processing'].includes(row.status)).length;
+    const review = group.rows.length - confirmed - queued;
+    const returns = group.rows.filter(row => row.event_type === 'material_transfer_return_to_rm').length;
+    const latest = group.rows.reduce((value, row) => {
+      const timestamp = row.updated_at || row.created_at || '';
+      return timestamp > value ? timestamp : value;
+    }, '');
+    return {
+      ...group, confirmed, failed, queued, returns, latest,
+      labelStatus: failed ? `${failed} failed; review required` : review ? 'Review required'
+        : queued ? `${queued} awaiting confirmation` : 'All recorded events confirmed',
+      tone: failed ? 'rose' : review || queued ? 'amber' : 'emerald',
+    };
+  }).sort((a, b) => b.latest.localeCompare(a.latest) || a.key.localeCompare(b.key));
 }
 
 export function sageHistoryStatus(row: SageHistoryLog) {

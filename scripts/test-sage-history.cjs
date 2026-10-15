@@ -9,7 +9,7 @@ const output = buildSync({
 }).outputFiles[0].text;
 const compiled = new Module('sage-history-test', module);
 compiled._compile(output, 'sage-history-test.cjs');
-const { sageHistoryStatus, harareDay, historyCsvCell } = compiled.exports;
+const { sageHistoryStatus, harareDay, historyCsvCell, groupHistoryByIst } = compiled.exports;
 
 const confirmed = { status: 'success', sage_response: { environment: 'Production', sagePosting: 'completed' } };
 assert.equal(sageHistoryStatus(confirmed).confirmed, true);
@@ -26,7 +26,31 @@ assert.equal(harareDay('invalid'), '');
 assert.equal(historyCsvCell('a,"b"'), '"a,""b"""');
 assert.equal(historyCsvCell(' =HYPERLINK("bad")').startsWith('"\''), true);
 assert.equal(historyCsvCell(null), '""');
-console.log('14 Sage history assertions passed; no database or Sage connections made.');
+const groupRows = [
+  { ...confirmed, id: 'forward-1', reference_id: 't1', event_type: 'material_transfer_to_production', original: { purpose: 'HFIST11600' }, updated_at: '2026-10-06T08:56:00Z' },
+  { status: 'failed', id: 'forward-2', reference_id: 't2', event_type: 'material_transfer_to_production', original: { purpose: 'hfist 11600' }, updated_at: '2026-10-06T08:57:00Z' },
+  { ...confirmed, id: 'return-1', reference_id: 'r1', event_type: 'material_transfer_return_to_rm', original: { purpose: 'HFIST11600' }, updated_at: '2026-10-07T08:00:00Z' },
+  { ...confirmed, id: 'other', original: { purpose: 'HFIST11954' } },
+  { status: 'pending', id: 'unknown-1' },
+  { status: 'pending', id: 'unknown-2' },
+];
+const grouped = groupHistoryByIst(groupRows);
+assert.equal(grouped.length, 4);
+const mixed = grouped.find(group => group.key === 'HFIST11600');
+assert.equal(mixed.rows.length, 3);
+assert.equal(mixed.confirmed, 2);
+assert.equal(mixed.failed, 1);
+assert.equal(mixed.returns, 1);
+assert.equal(mixed.tone, 'rose');
+assert.equal(mixed.latest, '2026-10-07T08:00:00Z');
+assert.equal(grouped[0].key, 'HFIST11600');
+assert.equal(groupHistoryByIst([]).length, 0);
+const uatGroup = groupHistoryByIst([{ ...groupRows[0], sage_response: { environment: 'UAT' } }])[0];
+assert.equal(uatGroup.confirmed, 0);
+assert.equal(uatGroup.tone, 'amber');
+assert.equal(grouped.find(group => group.key === 'HFIST11954').labelStatus, 'All recorded events confirmed');
+assert.match(grouped.find(group => group.key === 'unlinked:unknown-1').labelStatus, /awaiting confirmation/);
+console.log('27 Sage history assertions passed; no database or Sage connections made.');
 
 if (process.argv.includes('--preview')) {
   const fs = require('node:fs');
