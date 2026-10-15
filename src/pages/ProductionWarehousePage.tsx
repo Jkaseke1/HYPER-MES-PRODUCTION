@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
+import SageTransferHistory from '../components/SageTransferHistory';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import './ProductionWarehousePage.css';
@@ -54,12 +55,6 @@ interface PendingTransfer {
   raw_materials?: { name: string; code: string; unit?: string };
 }
 
-interface SageRetryTransfer extends PendingTransfer {
-  sync_log_id: string;
-  sync_status: 'failed' | 'pending' | 'processing' | 'retry';
-  sync_message?: string | null;
-  sync_updated_at: string;
-}
 
 interface SageTransferStatus extends PendingTransfer {
   sync_log_id: string;
@@ -127,14 +122,11 @@ export default function ProductionWarehousePage() {
     'accountant',
     'production_receiver',
   ].includes(profile?.role || '');
-  const canRetrySage = ['admin', 'finance', 'accountant', 'production_manager', 'warehouse_manager', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [sageProductionBalances, setSageProductionBalances] = useState<Record<string, { quantity: number; syncedAt: string | null }>>({});
   const [pendingAcceptanceTransfers, setPendingAcceptanceTransfers] = useState<PendingTransfer[]>([]);
   const [incomingTransfers, setIncomingTransfers] = useState<PendingTransfer[]>([]);
-  const [failedSageTransfers, setFailedSageTransfers] = useState<SageRetryTransfer[]>([]);
-  const [recentSageTransfers, setRecentSageTransfers] = useState<SageTransferStatus[]>([]);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [receivingBundleKey, setReceivingBundleKey] = useState<string | null>(null);
   const [selectedIncomingBundleKey, setSelectedIncomingBundleKey] = useState<string | null>(null);
@@ -146,15 +138,12 @@ export default function ProductionWarehousePage() {
   const [pageView, setPageView] = useState<'receiving' | 'stock' | 'sage'>('receiving');
   const [incomingFilter, setIncomingFilter] = useState<'all' | 'awaiting' | 'processed'>('all');
   const [incomingSearch, setIncomingSearch] = useState('');
-  const [sageActivityFilter, setSageActivityFilter] = useState<'all' | 'attention' | 'processed'>('all');
-  const [expandedSageIst, setExpandedSageIst] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [materialSettings, setMaterialSettings] = useState<ProductionMaterialSetting[]>([]);
   const [thresholdDraft, setThresholdDraft] = useState<Record<string, string>>({});
   const [lastAlertSignature, setLastAlertSignature] = useState('');
-  const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
   const [incomingReversalsByTransferId, setIncomingReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
 
@@ -253,35 +242,6 @@ export default function ProductionWarehousePage() {
       setIncomingReversalsByTransferId({});
     }
 
-    const { data: sageSyncRows, error: failedSyncError } = await supabase
-      .from('sync_log')
-      .select('id, reference_id, status, message, updated_at')
-      .eq('event_type', 'material_transfer_to_production')
-      .eq('reference_type', 'material_transfer')
-      .in('status', ['success', 'failed', 'pending', 'processing', 'retry'])
-      .gte('updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-      .order('updated_at', { ascending: false });
-    if (failedSyncError) console.error('Failed to load Sage retry queue:', failedSyncError);
-    const sageIds = [...new Set((sageSyncRows || []).map((row: any) => row.reference_id).filter(Boolean))];
-    if (sageIds.length > 0) {
-      const { data: sageTransfersData, error: failedTransfersError } = await supabase
-        .from('material_transfers')
-        .select('id, transfer_number, quantity, unit, status, purpose, notes, created_at, reversed_by, reversed_at, requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
-        .in('id', sageIds)
-        .is('reversed_by', null)
-        .is('reversed_at', null);
-      if (failedTransfersError) console.error('Failed to load received Sage failures:', failedTransfersError);
-      const byId = new Map((sageTransfersData || []).map((transfer: any) => [transfer.id, transfer]));
-      const statuses = (sageSyncRows || []).flatMap((row: any) => {
-        const transfer = byId.get(row.reference_id);
-        return transfer ? [{ ...transfer, sync_log_id: row.id, sync_status: row.status, sync_message: row.message, sync_updated_at: row.updated_at }] : [];
-      });
-      setRecentSageTransfers(statuses as SageTransferStatus[]);
-      setFailedSageTransfers(statuses.filter((row: SageTransferStatus) => row.sync_status === 'failed') as SageRetryTransfer[]);
-    } else {
-      setRecentSageTransfers([]);
-      setFailedSageTransfers([]);
-    }
     setMaterialSettings((settingsData as ProductionMaterialSetting[]) || []);
     const balMap: Record<string, number> = {};
     (wbData as any || []).forEach((b: any) => {
@@ -508,32 +468,6 @@ export default function ProductionWarehousePage() {
     }
     return { label: 'Received: awaiting Sage queue', detail: 'Production receipt is complete; waiting for the Sage posting event to be created.', tone: 'slate', canReceive: false };
   };
-  const sageActivityGroups = useMemo(() => {
-    const groups = new Map<string, SageTransferStatus[]>();
-    recentSageTransfers.forEach((transfer) => {
-      const key = transfer.purpose || transfer.transfer_number || transfer.id;
-      groups.set(key, [...(groups.get(key) || []), transfer]);
-    });
-    return [...groups.entries()].map(([key, lines]) => {
-      const hasFailed = lines.some((line) => line.sync_status === 'failed');
-      const hasProcessing = lines.some((line) => line.sync_status === 'processing');
-      const hasPending = lines.some((line) => ['pending', 'retry'].includes(line.sync_status));
-      const status: SageTransferStatus['sync_status'] = hasFailed ? 'failed' : hasProcessing ? 'processing' : hasPending ? (lines.some((line) => line.sync_status === 'retry') ? 'retry' : 'pending') : 'success';
-      return {
-        key,
-        lines,
-        status,
-        totalQuantity: lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0),
-        unit: new Set(lines.map((line) => line.unit)).size === 1 ? lines[0].unit : 'mixed units',
-        first: lines[0],
-      };
-    });
-  }, [recentSageTransfers]);
-  const visibleSageActivityGroups = sageActivityGroups.filter((group) => {
-    if (sageActivityFilter === 'processed') return group.status === 'success';
-    if (sageActivityFilter === 'attention') return group.status !== 'success';
-    return true;
-  });
   const stockHealth = useMemo(() => {
     const critical = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) === 0);
     const low = aggregated.filter((m) => m.production_reorder_level > 0 && Number(m.sage_pd_quantity || 0) > 0 && Number(m.sage_pd_quantity || 0) <= m.production_reorder_level);
@@ -601,20 +535,6 @@ export default function ProductionWarehousePage() {
     toast.success('Production threshold saved.');
   }
 
-  async function retryFailedSageLine(transfer: SageRetryTransfer) {
-    setRetryingSageId(transfer.sync_log_id);
-    setReceiptNotice(null);
-    try {
-      const { error } = await supabase.rpc('request_sync_retry', { p_log_id: transfer.sync_log_id });
-      if (error) throw error;
-      setReceiptNotice({ tone: 'success', message: `${transfer.raw_materials?.name || 'Material'} from ${transfer.purpose || 'the IST'} was queued for Sage retry. Other posted lines were left untouched.` });
-      await fetchTransfers(true);
-    } catch (err: any) {
-      setReceiptNotice({ tone: 'error', message: err?.message || 'The Sage line could not be queued for retry.' });
-    } finally {
-      setRetryingSageId(null);
-    }
-  }
 
   async function handleReceiveBundle(bundle: IncomingBundle) {
     const stage = getIncomingStage(bundle);
@@ -645,20 +565,6 @@ export default function ProductionWarehousePage() {
     }
   }
 
-  const sageStageIndex = (status: SageTransferStatus['sync_status']) => {
-    if (status === 'success') return 3;
-    if (status === 'processing') return 2;
-    if (status === 'pending' || status === 'retry') return 1;
-    return 0;
-  };
-
-  const sageStageLabel = (status: SageTransferStatus['sync_status']) => {
-    if (status === 'success') return 'Posted to Sage';
-    if (status === 'processing') return 'Posting to Sage';
-    if (status === 'retry') return 'Retry queued';
-    if (status === 'pending') return 'Queued for Sage';
-    return 'Sage posting failed';
-  };
 
   const getLineSageStage = (transfer: PendingTransfer): LineSageStage => {
     const reversal = incomingReversalsByTransferId[transfer.id];
@@ -733,7 +639,7 @@ export default function ProductionWarehousePage() {
         </button>
         <button type="button" onClick={() => setPageView('sage')} className={`warehouse-tab ${pageView === 'sage' ? 'is-active' : ''}`}>
           <span className="warehouse-tab-icon"><Radio className="h-4 w-4" /></span>
-          <span><strong>Sage activity</strong><small>{failedSageTransfers.length ? `${failedSageTransfers.length} issue${failedSageTransfers.length === 1 ? '' : 's'} need attention` : 'Posting and transfer audit'}</small></span>
+          <span><strong>Sage activity</strong><small>Posting and transfer audit</small></span>
         </button>
         <span className="ml-auto hidden px-3 text-xs font-medium text-slate-400 md:inline">Last refresh {format(lastRefresh, 'HH:mm:ss')}</span>
       </nav>
@@ -862,74 +768,7 @@ export default function ProductionWarehousePage() {
         </section>
       )}
 
-      {pageView === 'sage' && recentSageTransfers.length > 0 && (
-        <section className="warehouse-sage border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-5 py-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Sage posting status</h2>
-              <p className="mt-0.5 text-xs text-slate-500">Last 24 hours · {sageActivityGroups.length} ISTs</p>
-            </div>
-            <div className="sage-filter" role="group" aria-label="Filter Sage posting activity">
-              <button type="button" onClick={() => setSageActivityFilter('all')} className={sageActivityFilter === 'all' ? 'is-selected' : ''}>All <span>{sageActivityGroups.length}</span></button>
-              <button type="button" onClick={() => setSageActivityFilter('attention')} className={sageActivityFilter === 'attention' ? 'is-selected' : ''}>Attention <span>{sageActivityGroups.filter((group) => group.status !== 'success').length}</span></button>
-              <button type="button" onClick={() => setSageActivityFilter('processed')} className={sageActivityFilter === 'processed' ? 'is-selected' : ''}>Posted <span>{sageActivityGroups.filter((group) => group.status === 'success').length}</span></button>
-            </div>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {visibleSageActivityGroups.map((group) => {
-              const stage = sageStageIndex(group.status);
-              const failed = group.status === 'failed';
-              const expanded = expandedSageIst === group.key;
-              return (
-                <div key={group.key} className={`sage-ist-row px-5 py-3 ${failed ? 'has-failure' : group.status === 'success' ? 'is-posted' : 'is-pending'}`}>
-                  <button type="button" onClick={() => setExpandedSageIst(expanded ? null : group.key)} className="flex w-full flex-wrap items-center justify-between gap-3 text-left">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center border border-slate-200 bg-slate-50 text-slate-500">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</span>
-                      <div className="min-w-0">
-                        <p className="font-mono text-sm font-bold text-slate-900">{group.key}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{group.lines.length} material{group.lines.length === 1 ? '' : 's'} · {group.totalQuantity.toLocaleString()} {group.unit}</p>
-                      </div>
-                    </div>
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-blue-700'}`}>
-                      {failed ? <AlertTriangle className="h-3.5 w-3.5" /> : group.status === 'success' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {sageStageLabel(group.status)}
-                    </span>
-                  </button>
-                  <div className="mt-2 flex items-center gap-2 pl-11 text-[11px] font-semibold" aria-label={`Sage status: ${sageStageLabel(group.status)}`}>
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${failed ? 'bg-rose-500' : group.status === 'success' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <span className={failed ? 'text-rose-700' : group.status === 'success' ? 'text-emerald-700' : 'text-amber-700'}>{sageStageLabel(group.status)}</span>
-                    <span className="text-slate-500">Stage {stage + 1}/4</span>
-                  </div>
-                  {expanded && <div className="mt-3 ml-11 divide-y divide-slate-100 border border-slate-200 bg-slate-50">
-                    {group.lines.map((line) => <div key={line.sync_log_id} className="grid grid-cols-[minmax(0,1fr)_130px_auto] items-center gap-3 px-3 py-2 text-xs"><span className="min-w-0 truncate font-semibold text-slate-800">{line.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono font-normal text-slate-500">{line.raw_materials?.code}</span><span className="ml-2 font-mono font-normal text-slate-400">{line.transfer_number}</span></span><span title={line.sync_message || sageStageLabel(line.sync_status)} className={`border px-2 py-1 text-center text-[11px] font-semibold ${line.sync_status === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : line.sync_status === 'failed' ? 'border-rose-200 bg-rose-50 text-rose-700' : line.sync_status === 'processing' ? 'border-sky-200 bg-sky-50 text-sky-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>{sageStageLabel(line.sync_status)}</span><span className="font-mono text-slate-600">{Number(line.quantity).toLocaleString()} {line.unit}</span></div>)}
-                  </div>}
-                </div>
-              );
-            })}
-            {visibleSageActivityGroups.length === 0 && <div className="px-5 py-12 text-center text-sm text-slate-500">No ISTs match this status.</div>}
-          </div>
-        </section>
-      )}
-
-      {pageView === 'sage' && failedSageTransfers.length > 0 && (
-        <section className="border border-rose-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50/70 px-5 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center border border-rose-200 bg-rose-100 text-rose-700"><AlertTriangle className="h-5 w-5" /></div>
-              <div><h2 className="text-base font-bold text-slate-900">Sage posting status</h2><p className="mt-0.5 text-sm text-slate-600">Each received line is tracked until Sage confirms it is posted.</p></div>
-            </div>
-            <span className="border border-rose-200 bg-white px-2 py-1 text-xs font-bold text-rose-700">{failedSageTransfers.length} Sage line{failedSageTransfers.length === 1 ? '' : 's'} in queue</span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {failedSageTransfers.map((transfer) => (
-              <div key={transfer.sync_log_id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-3">
-                <div className="min-w-0"><p className="font-semibold text-slate-900">{transfer.raw_materials?.name || 'Raw material'} <span className="ml-1 font-mono text-xs font-normal text-slate-500">{transfer.raw_materials?.code}</span></p><p className="mt-1 text-xs text-slate-500"><span className="font-bold text-slate-700">{transfer.purpose || 'IST'}</span> · {transfer.transfer_number} · {Number(transfer.quantity).toLocaleString()} {transfer.unit}</p><p className={`mt-1 text-xs font-semibold ${transfer.sync_status === 'failed' ? 'text-rose-700' : 'text-blue-700'}`}>{transfer.sync_status === 'failed' ? (transfer.sync_message || 'Sage posting failed') : transfer.sync_status === 'processing' ? 'Posting to Sage now...' : 'Retry queued; waiting for the Sage bridge...'}</p></div>
-                {canRetrySage && transfer.sync_status === 'failed' && <button type="button" onClick={() => retryFailedSageLine(transfer)} disabled={retryingSageId === transfer.sync_log_id} className="inline-flex items-center gap-2 border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60"><RotateCcw className={`h-4 w-4 ${retryingSageId === transfer.sync_log_id ? 'animate-spin' : ''}`} />{retryingSageId === transfer.sync_log_id ? 'Queueing...' : 'Retry Sage line'}</button>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {pageView === 'sage' && <SageTransferHistory />}
 
       {expandedIncomingBundleData && (() => {
         const stage = getIncomingStage(expandedIncomingBundleData);
