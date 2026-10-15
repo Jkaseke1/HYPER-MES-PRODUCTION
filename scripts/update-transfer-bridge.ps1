@@ -21,13 +21,16 @@ if (!$url) { $url = $settings['VITE_SUPABASE_URL'] }
 $key = $settings['SUPABASE_SERVICE_KEY']
 if (!$key) { $key = $settings['SUPABASE_SERVICE_ROLE_KEY'] }
 if (!$url -or !$key) { throw 'Bridge Supabase configuration is missing.' }
-$headers = @{ apikey = $key; Authorization = "Bearer $key" }
+$headers = @{ apikey = $key }
+# Secret keys are not JWTs; legacy service-role keys still use Bearer auth.
+if (!$key.StartsWith('sb_secret_')) { $headers['Authorization'] = "Bearer $key" }
+$userAgent = 'PlantControl-Server-Installer/1.0'
 if ($IncludeGrnGuard) {
   # This RPC is a STABLE SELECT-only eligibility check. NULL matches no material.
-  $eligibility = Invoke-RestMethod -Method Post -Uri "$($url.TrimEnd('/'))/rest/v1/rpc/grn_input_allowed" -Headers $headers -ContentType 'application/json' -Body '{"p_material_id":null}'
+  $eligibility = Invoke-RestMethod -Method Post -Uri "$($url.TrimEnd('/'))/rest/v1/rpc/grn_input_allowed" -Headers $headers -UserAgent $userAgent -ContentType 'application/json' -Body '{"p_material_id":null}'
   if ($eligibility -ne $false) { throw 'GRN input eligibility guard could not be verified. Apply its Supabase migrations first.' }
 }
-$active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers)
+$active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers -UserAgent $userAgent)
 if ($active.Count) { throw 'A Sage event is queued or processing. Wait for an idle queue; no services or files were changed.' }
 $task = Get-ScheduledTask -TaskName $taskName
 if ($task.State -eq 'Disabled') { throw 'Bridge task is disabled; investigate before deployment.' }
@@ -50,7 +53,7 @@ try {
   Disable-ScheduledTask -TaskName $taskName | Out-Null
   $stopped = $true
   # Recheck after staging. Keep PD receipts paused during this brief maintenance window.
-  $active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers)
+  $active = @(Invoke-RestMethod -Uri "$($url.TrimEnd('/'))/rest/v1/sync_log?status=in.(pending,processing)&select=id,event_type&limit=1" -Headers $headers -UserAgent $userAgent)
   if ($active.Count) { throw 'A Sage event started during staging. Update aborted.' }
   Stop-ScheduledTask -TaskName $taskName
   Start-Sleep -Seconds 3
