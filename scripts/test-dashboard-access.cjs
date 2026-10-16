@@ -14,7 +14,7 @@ function load(name, dependencies = {}) {
   return exports;
 }
 const access = load('roleAccess');
-const { dashboardModulesForRole, usesOperationsDashboard, operationsDashboardAccess } = load('dashboardAccess', { './roleAccess': access });
+const { dashboardModulesForRole, operationsDashboardAccess } = load('dashboardAccess', { './roleAccess': access });
 const roles = ['admin','md','weighbridge','weigh_bridge','production_receiver','warehouse_clerk','raw_material_manager','warehouse_manager','production_manager','supervisor','operator','logistics','finance','finance_viewer','accountant','maintenance_tech','procurement','unassigned',null,undefined];
 for (const role of roles) {
   assert.equal(access.canAccessPath(role, '/'), true);
@@ -30,11 +30,6 @@ assert.equal(dashboardModulesForRole('procurement').length, 1);
 assert.equal(dashboardModulesForRole('production_receiver').length, 1);
 assert(!dashboardModulesForRole('weigh_bridge').some(module => module.table === 'production_orders'));
 assert.equal(access.defaultPathForRole('weighbridge'), '/weigh-bridge', 'Existing role landing page preserved');
-assert.equal(usesOperationsDashboard('raw_material_manager'), true);
-assert.equal(usesOperationsDashboard('admin'), true);
-assert.equal(usesOperationsDashboard('md'), true);
-assert.equal(usesOperationsDashboard('unassigned'), false);
-assert.equal(usesOperationsDashboard('weigh_bridge'), false);
 const rm = operationsDashboardAccess('raw_material_manager');
 assert.equal(rm.inventory, true);
 assert.equal(rm.snapshots, true);

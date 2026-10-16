@@ -4,6 +4,7 @@ import { Clock, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { canApprove } from '../../types/approval';
+import { canAccessPath } from '../../lib/roleAccess';
 import StatusBadge from '../ui/StatusBadge';
 
 const CATEGORY_META: Record<string, { label: string; pill: string }> = {
@@ -61,7 +62,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── GRN ──
-      if (canApprove('grn', role)) {
+      if (canApprove('grn', role) && canAccessPath(role, '/goods-received')) {
         try {
           const { data: grns } = await supabase
             .from('goods_received_notes')
@@ -79,7 +80,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Material Transfers ──
-      if (canApprove('material_transfer', role)) {
+      if (canApprove('material_transfer', role) && canAccessPath(role, '/material-transfer')) {
         try {
           const { data: transfers } = await supabase
             .from('material_transfers')
@@ -98,7 +99,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Chick Bookings ──
-      if (canApprove('chick_booking', role)) {
+      if (canApprove('chick_booking', role) && canAccessPath(role, '/chick-bookings')) {
         try {
           const { data: chickPOs } = await supabase
             .from('chick_purchase_orders')
@@ -116,7 +117,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Production Orders ──
-      if (canApprove('production_order', role)) {
+      if (canApprove('production_order', role) && canAccessPath(role, '/production-orders')) {
         try {
           const { data: pos } = await supabase
             .from('production_orders')
@@ -134,7 +135,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Dispatch Orders ──
-      if (canApprove('dispatch_order', role)) {
+      if (canApprove('dispatch_order', role) && canAccessPath(role, '/dispatch')) {
         try {
           const { data: dispatches } = await supabase
             .from('dispatch_orders')
@@ -152,7 +153,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Macropack Orders ──
-      if (canApprove('macropack_order', role)) {
+      if (canApprove('macropack_order', role) && canAccessPath(role, '/macropack')) {
         try {
           const { data: mpos } = await supabase
             .from('macropack_manufacture_orders')
@@ -170,7 +171,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       }
 
       // ── Weigh Bridge Tickets ──
-      if (canApprove('weigh_bridge_ticket', role)) {
+      if (canApprove('weigh_bridge_ticket', role) && canAccessPath(role, '/weigh-bridge')) {
         try {
           const { data: wbts } = await supabase
             .from('weigh_bridge_tickets')
@@ -222,7 +223,7 @@ export default function PendingApprovalsWidget({ limit = 10, compact = false }: 
       dispatch_order: '/dispatch',
       work_order: '/maintenance-work-orders',
       reconciliation_period: '/reconciliation',
-      macropack_order: '/macropack-manufacturing',
+      macropack_order: '/macropack',
       chick_booking: '/chick-bookings',
       material_transfer: '/material-transfer',
       weigh_bridge_ticket: '/weigh-bridge',

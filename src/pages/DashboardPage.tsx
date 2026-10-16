@@ -14,8 +14,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
 import { useAuth } from '../context/AuthContext';
 import { canAccessPath } from '../lib/roleAccess';
-import { usesOperationsDashboard, operationsDashboardAccess } from '../lib/dashboardAccess';
-import RoleDashboard from '../components/dashboard/RoleDashboard';
+import { operationsDashboardAccess } from '../lib/dashboardAccess';
 import toast from 'react-hot-toast';
 
 interface DashboardStats {
@@ -31,9 +30,7 @@ import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
   const { profile } = useAuth();
-  return usesOperationsDashboard(profile?.role)
-    ? <ExecutiveDashboard key={`${profile?.id}:${profile?.role}`} />
-    : <RoleDashboard key={`${profile?.id}:${profile?.role}`} role={profile?.role} />;
+  return <ExecutiveDashboard key={`${profile?.id}:${profile?.role}`} />;
 }
 
 function ExecutiveDashboard() {
@@ -605,7 +602,7 @@ function ExecutiveDashboard() {
               <h2 className="text-sm font-semibold tracking-tight text-slate-900">Reorder</h2>
               <span className="text-xs font-medium text-amber-800">{filteredLowStock.length}</span>
             </div>
-            {filteredLowStock.length === 0 ? (
+            {!access.inventory ? <p className="flex items-center gap-2 px-3 py-4 text-xs text-slate-500"><LockKeyhole className="h-4 w-4" />Access restricted</p> : filteredLowStock.length === 0 ? (
               <p className="px-3 py-2 text-xs text-slate-500">Stock is within reorder limits</p>
             ) : (
               <table className="w-full text-[12px]">

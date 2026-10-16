@@ -1,8 +1,4 @@
-import { canAccessPath, isFullAccessRole, type MesRole } from './roleAccess';
-
-export function usesOperationsDashboard(role: MesRole): boolean {
-  return isFullAccessRole(role) || role === 'raw_material_manager';
-}
+import { canAccessPath, type MesRole } from './roleAccess';
 
 export function operationsDashboardAccess(role: MesRole) {
   const production = canAccessPath(role, '/production-orders');

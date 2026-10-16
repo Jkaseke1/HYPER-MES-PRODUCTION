@@ -42,7 +42,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canAccessPath } from '../../lib/roleAccess';
-import { usesOperationsDashboard } from '../../lib/dashboardAccess';
 import toast from 'react-hot-toast';
 
 interface NavItem {
@@ -202,14 +201,10 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
   };
 
   const { profile, signOut: doSignOut } = useAuth() as any;
-  const showAllModules = usesOperationsDashboard(profile?.role);
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = useMemo(() => {
-    const groups = navGroups
-      .filter((group) => showAllModules || group.label !== 'Administration')
-      .map((group) => ({ ...group, items: group.items.filter((item) => showAllModules || canAccessPath(profile?.role, item.to)) }))
-      .filter((group) => group.items.length > 0);
+    const groups = navGroups;
     if (!normalizedQuery) return groups;
     return groups
       .map((group) => ({
@@ -217,7 +212,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
         items: group.items.filter((item) => item.label.toLowerCase().includes(normalizedQuery)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [normalizedQuery, showAllModules, profile?.role]);
+  }, [normalizedQuery]);
   const initials = (profile?.full_name || profile?.email || 'U').split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase();
 
   return (
