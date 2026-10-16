@@ -163,7 +163,17 @@ function MaterialTransferStatusBadge({ status, reversal }: { status: string; rev
     return <ReturnToRmBadge reversal={reversal} />;
   }
 
-  if (status === 'received') return <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-700">PD received (local)</span>;
+  if (status === 'received') {
+    return (
+      <span
+        title="Physical receipt confirmed in PlantControl. Sage posting is tracked separately."
+        className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-semibold text-[#09072c]"
+      >
+        <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-orange-600" />
+        Received in PD
+      </span>
+    );
+  }
 
   return (
     <StatusBadge status={status} />
