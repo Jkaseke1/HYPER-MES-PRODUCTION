@@ -38,9 +38,12 @@ import {
   Calendar,
   Gauge,
   Waypoints,
+  LockKeyhole,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { canAccessPath, isFullAccessRole } from '../../lib/roleAccess';
+import { canAccessPath } from '../../lib/roleAccess';
+import { usesOperationsDashboard } from '../../lib/dashboardAccess';
+import toast from 'react-hot-toast';
 
 interface NavItem {
   to: string;
@@ -199,13 +202,13 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
   };
 
   const { profile, signOut: doSignOut } = useAuth() as any;
-  const isAdminOrMd = isFullAccessRole(profile?.role);
+  const showAllModules = usesOperationsDashboard(profile?.role);
 
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = useMemo(() => {
-    let groups = navGroups
-      .filter((group) => isAdminOrMd || group.label !== 'Administration')
-      .map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(profile?.role, item.to)) }))
+    const groups = navGroups
+      .filter((group) => showAllModules || group.label !== 'Administration')
+      .map((group) => ({ ...group, items: group.items.filter((item) => showAllModules || canAccessPath(profile?.role, item.to)) }))
       .filter((group) => group.items.length > 0);
     if (!normalizedQuery) return groups;
     return groups
@@ -214,7 +217,7 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
         items: group.items.filter((item) => item.label.toLowerCase().includes(normalizedQuery)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [normalizedQuery, isAdminOrMd, profile?.role]);
+  }, [normalizedQuery, showAllModules, profile?.role]);
   const initials = (profile?.full_name || profile?.email || 'U').split(' ').map((s: string) => s[0]).join('').slice(0, 2).toUpperCase();
 
   return (
@@ -300,7 +303,17 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
               {isExpanded && !collapsed && (
                 <div>
                   {group.items.map((item) => (
-                    <NavLink
+                    !canAccessPath(profile?.role, item.to) ? <button
+                      key={item.to}
+                      type="button"
+                      aria-disabled="true"
+                      title={`${item.label}: access restricted`}
+                      onClick={() => toast.error('You do not have access to this function.')}
+                      className="mb-0.5 flex w-full cursor-not-allowed items-center gap-3 rounded px-3 py-2.5 text-left text-[14px] text-white/45"
+                    >
+                      <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-transparent" />
+                      <span className="min-w-0 flex-1">{item.label}</span><LockKeyhole className="h-3 w-3 shrink-0" />
+                    </button> : <NavLink
                       key={item.to}
                       to={item.to}
                       onClick={onMobileMenuClose}
@@ -325,7 +338,15 @@ export default function Sidebar({ collapsed, onToggle, mobileMenuOpen, onMobileM
               {isExpanded && collapsed && (
                 <div>
                   {group.items.map((item) => (
-                    <NavLink
+                    !canAccessPath(profile?.role, item.to) ? <button
+                      key={item.to}
+                      type="button"
+                      aria-label={`${item.label}: access restricted`}
+                      aria-disabled="true"
+                      title={`${item.label}: access restricted`}
+                      onClick={() => toast.error('You do not have access to this function.')}
+                      className="mb-0.5 flex w-full cursor-not-allowed items-center justify-center rounded px-2 py-2 text-white/30"
+                    ><item.icon className="h-4 w-4" /></button> : <NavLink
                       key={item.to}
                       to={item.to}
                       onClick={onMobileMenuClose}

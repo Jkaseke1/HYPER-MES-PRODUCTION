@@ -6,15 +6,17 @@ import {
 import {
   AlertTriangle, RefreshCw, Activity, Gauge,
   Layers, Scale, Sparkles, Factory, Truck,
-  Clock, ArrowRight, Package, ClipboardList, FlaskConical
+  Clock, ArrowRight, Package, ClipboardList, FlaskConical, LockKeyhole
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { ProductionOrder, RawMaterial, MonthlyTrendRow, InventoryForecastRow, DispatchOrder } from '../types/database';
 import StatusBadge from '../components/ui/StatusBadge';
 import PendingApprovalsWidget from '../components/dashboard/PendingApprovalsWidget';
 import { useAuth } from '../context/AuthContext';
-import { isFullAccessRole } from '../lib/roleAccess';
+import { canAccessPath } from '../lib/roleAccess';
+import { usesOperationsDashboard, operationsDashboardAccess } from '../lib/dashboardAccess';
 import RoleDashboard from '../components/dashboard/RoleDashboard';
+import toast from 'react-hot-toast';
 
 interface DashboardStats {
   totalProduction: number;
@@ -29,12 +31,15 @@ import { Link } from 'react-router-dom';
 
 export default function DashboardPage() {
   const { profile } = useAuth();
-  return isFullAccessRole(profile?.role)
+  return usesOperationsDashboard(profile?.role)
     ? <ExecutiveDashboard key={`${profile?.id}:${profile?.role}`} />
     : <RoleDashboard key={`${profile?.id}:${profile?.role}`} role={profile?.role} />;
 }
 
 function ExecutiveDashboard() {
+  const { profile } = useAuth();
+  const access = useMemo(() => operationsDashboardAccess(profile?.role), [profile?.role]);
+  const inventoryPath = canAccessPath(profile?.role, '/raw-materials') ? '/raw-materials' : '/warehouse';
   const [stats, setStats] = useState<DashboardStats>({
     totalProduction: 0, activeOrders: 0, rawMaterialCount: 0,
     formulationCount: 0, pendingDispatches: 0, efficiency: 0,
@@ -53,6 +58,7 @@ function ExecutiveDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const fetchLiveOrders = useCallback(async () => {
+    if (!access.production) { setLiveOrders([]); return; }
     const { data } = await supabase
       .from('production_orders')
       .select('*, formulations(name, code)')
@@ -61,25 +67,26 @@ function ExecutiveDashboard() {
       .limit(8);
     setLiveOrders((data as ProductionOrder[]) || []);
     setLastUpdated(new Date());
-  }, []);
+  }, [access.production]);
 
   const fetchDashboardData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const restricted = () => Promise.resolve({ data: null, count: null, error: null });
     const [ordersRes, materialsRes, formulationsRes, dispatchRes, recentRes, stockRes, trendRes, forecastRes, varianceRes, sageStockRes, snapshotsRes, recentDispatchRes] =
       await Promise.all([
-        supabase.from('production_orders').select('planned_qty, actual_qty, status'),
-        supabase.from('raw_materials').select('id', { count: 'exact', head: true }),
-        supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']),
-        supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10),
-        supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target, is_active').order('name'),
-        supabase.from('monthly_operations_trends').select('*'),
-        supabase.from('inventory_depletion_forecasts').select('*'),
-        supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5),
-        supabase.from('sage_stock_balances').select('*'),
-        supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100),
-        supabase.from('dispatch_orders').select('*, branches(name)').order('created_at', { ascending: false }).limit(5),
+        access.production ? supabase.from('production_orders').select('planned_qty, actual_qty, status') : restricted(),
+        access.inventory ? supabase.from('raw_materials').select('id', { count: 'exact', head: true }) : restricted(),
+        access.formulations ? supabase.from('formulations').select('id', { count: 'exact', head: true }).eq('status', 'active') : restricted(),
+        access.dispatch ? supabase.from('dispatch_orders').select('id', { count: 'exact', head: true }).in('status', ['pending', 'loading']) : restricted(),
+        access.production ? supabase.from('production_orders').select('*, formulations(name, code)').order('created_at', { ascending: false }).limit(10) : restricted(),
+        access.inventory ? supabase.from('raw_materials').select('id, name, code, unit, current_stock, reorder_level, alert_threshold_pct, days_of_cover_target, is_active').order('name') : restricted(),
+        access.trends ? supabase.from('monthly_operations_trends').select('*') : restricted(),
+        access.inventory ? supabase.from('inventory_depletion_forecasts').select('*') : restricted(),
+        access.snapshots ? supabase.from('rm_daily_snapshots').select('raw_material_name, stock_variance').eq('snapshot_date', todayStr).gt('stock_variance', 0.1).order('stock_variance', { ascending: false }).limit(5) : restricted(),
+        access.inventory ? supabase.from('sage_stock_balances').select('*') : restricted(),
+        access.snapshots ? supabase.from('rm_daily_snapshots').select('raw_material_name, physical_stock').order('snapshot_date', { ascending: false }).limit(100) : restricted(),
+        access.dispatch ? supabase.from('dispatch_orders').select('*, branches(name)').order('created_at', { ascending: false }).limit(5) : restricted(),
       ]);
 
     const orders = ordersRes.data || [];
@@ -155,28 +162,27 @@ function ExecutiveDashboard() {
 
     if (isInitial) setLoading(false);
     setLastUpdated(new Date());
-  }, []);
+  }, [access]);
 
   useEffect(() => {
     fetchLiveOrders();
     fetchDashboardData(true);
 
-    const channel = supabase
-      .channel('live-dashboard-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
+    const channel = supabase.channel('live-dashboard-sync');
+    if (access.production) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
         fetchLiveOrders();
         fetchDashboardData(false);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
+      });
+    if (access.inventory) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
         fetchDashboardData(false);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'raw_materials' }, () => {
         fetchDashboardData(false);
-      })
-      .subscribe();
+      });
+    channel.subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchLiveOrders, fetchDashboardData]);
+  }, [access, fetchLiveOrders, fetchDashboardData]);
 
   const forecastMap = useMemo(() => {
     return inventoryForecasts.reduce<Record<string, InventoryForecastRow>>((acc, row) => {
@@ -285,7 +291,7 @@ function ExecutiveDashboard() {
   const shortcuts = [
     { to: '/production-orders', label: 'Production orders', hint: 'Batches and runs', icon: ClipboardList, tint: 'bg-teal-500' },
     { to: '/formulations', label: 'Formulations', hint: 'Active recipes', icon: FlaskConical, tint: 'bg-sky-500' },
-    { to: '/raw-materials', label: 'Raw materials', hint: 'Stock and reorder', icon: Package, tint: 'bg-amber-500' },
+    { to: inventoryPath, label: 'Raw materials', hint: 'Stock and reorder', icon: Package, tint: 'bg-amber-500' },
     { to: '/dispatch', label: 'Dispatch', hint: 'Loads leaving site', icon: Truck, tint: 'bg-violet-500' },
     { to: '/goods-received', label: 'Goods received', hint: 'Inbound deliveries', icon: Scale, tint: 'bg-emerald-600' },
     { to: '/production-control', label: 'Control centre', hint: 'Floor status', icon: Factory, tint: 'bg-slate-700' },
@@ -303,18 +309,18 @@ function ExecutiveDashboard() {
             </div>
             <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4 xl:max-w-3xl">
               {[
-                { label: 'Active orders', value: stats.activeOrders.toLocaleString(), note: stats.activeOrders > 0 ? 'In the queue' : 'No active runs', icon: Activity },
-                { label: 'Production', value: stats.totalProduction.toLocaleString(), note: 'Completed tonnes', icon: Scale },
-                { label: 'Dispatch', value: stats.pendingDispatches.toLocaleString(), note: stats.pendingDispatches > 0 ? 'Trips waiting' : 'All dispatched', icon: Truck },
-                { label: 'Efficiency', value: `${stats.efficiency}%`, note: 'Target 85%', icon: Gauge },
-              ].map(({ label, value, note, icon: Icon }) => (
+                { label: 'Active orders', value: stats.activeOrders.toLocaleString(), note: stats.activeOrders > 0 ? 'In the queue' : 'No active runs', icon: Activity, allowed: access.production },
+                { label: 'Production', value: stats.totalProduction.toLocaleString(), note: 'Completed tonnes', icon: Scale, allowed: access.production },
+                { label: 'Dispatch', value: stats.pendingDispatches.toLocaleString(), note: stats.pendingDispatches > 0 ? 'Trips waiting' : 'All dispatched', icon: Truck, allowed: access.dispatch },
+                { label: 'Efficiency', value: `${stats.efficiency}%`, note: 'Target 85%', icon: Gauge, allowed: access.production },
+              ].map(({ label, value, note, icon: Icon, allowed }) => (
                 <div key={label} className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">{label}</span>
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-teal-300" />
+                    {allowed ? <Icon className="h-3.5 w-3.5 shrink-0 text-teal-300" /> : <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
                   </div>
-                  <p className="mt-1 text-xl font-semibold tabular-nums leading-none tracking-tight">{value}</p>
-                  <p className="mt-1 truncate text-[11px] text-slate-400">{note}</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums leading-none tracking-tight">{allowed ? value : '--'}</p>
+                  <p className="mt-1 truncate text-[11px] text-slate-400">{allowed ? note : 'Access restricted'}</p>
                 </div>
               ))}
             </div>
@@ -337,7 +343,7 @@ function ExecutiveDashboard() {
                   {filteredLowStock.length > 3 ? ` and ${filteredLowStock.length - 3} more` : ''}
                 </span>
               </p>
-              <Link to="/raw-materials" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-900">
+              <Link to={inventoryPath} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-900">
                 Review materials <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
@@ -347,8 +353,10 @@ function ExecutiveDashboard() {
 
       <div className="space-y-3 px-4 py-3 sm:px-5">
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {shortcuts.map(({ to, label, hint, icon: Icon, tint }) => (
-            <Link key={to} to={to} className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:border-slate-300">
+          {shortcuts.map(({ to, label, hint, icon: Icon, tint }) => {
+            const allowed = canAccessPath(profile?.role, to);
+            const className = 'flex min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm transition hover:border-slate-300';
+            const content = <>
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white ${tint}`}>
                 <Icon className="h-3.5 w-3.5" />
               </span>
@@ -356,8 +364,11 @@ function ExecutiveDashboard() {
                 <span className="block text-[13px] font-semibold leading-tight text-slate-900">{label}</span>
                 <span className="block text-[11px] leading-tight text-slate-400">{hint}</span>
               </span>
-            </Link>
-          ))}
+              {!allowed && <LockKeyhole className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" />}
+            </>;
+            return allowed ? <Link key={to} to={to} className={className}>{content}</Link>
+              : <button key={to} type="button" aria-disabled="true" title={`${label}: access restricted`} onClick={() => toast.error('You do not have access to this function.')} className={`${className} cursor-not-allowed`}>{content}</button>;
+          })}
         </div>
 
       {/* Hero Live Production Banner */}
@@ -436,7 +447,7 @@ function ExecutiveDashboard() {
               </div>
             </div>
             <div className="-mx-1">
-              <ResponsiveContainer width="100%" height={168}>
+              {!access.trends ? <div className="flex h-[168px] items-center justify-center gap-2 text-sm text-slate-500"><LockKeyhole className="h-4 w-4" />Access restricted</div> : <ResponsiveContainer width="100%" height={168}>
                 <ComposedChart data={trendChartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="prodFill" x1="0" y1="0" x2="0" y2="1">
@@ -455,7 +466,7 @@ function ExecutiveDashboard() {
                   <Bar dataKey="consumption" fill="#7dd3fc" radius={[4, 4, 0, 0]} name="Consumption (t)" barSize={12} />
                   <Line type="monotone" dataKey="dispatch" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} name="Dispatch (t)" />
                 </ComposedChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
           </div>
 
@@ -465,7 +476,7 @@ function ExecutiveDashboard() {
                 <h2 className="text-sm font-semibold tracking-tight text-slate-900">Dispatch</h2>
                 <p className="text-[11px] text-slate-500">Shipments, delivery notes, and Sage posting</p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{stats.pendingDispatches} pending</span>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{access.dispatch ? `${stats.pendingDispatches} pending` : 'Access restricted'}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -479,7 +490,7 @@ function ExecutiveDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentDispatches.length === 0 ? (
+                  {!access.dispatch ? <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500"><LockKeyhole className="mr-2 inline h-4 w-4" />Access restricted</td></tr> : recentDispatches.length === 0 ? (
                     <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">No recent dispatches</td></tr>
                   ) : recentDispatches.map((d) => (
                     <tr key={d.id} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/70">
@@ -517,7 +528,7 @@ function ExecutiveDashboard() {
                   <p className="mt-0.5 text-xs text-slate-500">Latest batches recorded in PlantControl</p>
                 </div>
               </div>
-              <span className="text-xs text-slate-400">{recentOrders.length} batches</span>
+              <span className="text-xs text-slate-400">{access.production ? `${recentOrders.length} batches` : 'Access restricted'}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -532,7 +543,7 @@ function ExecutiveDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrders.length === 0 ? (
+                  {!access.production ? <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-500"><LockKeyhole className="mr-2 inline h-4 w-4" />Access restricted</td></tr> : recentOrders.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-400">No production orders yet</td>
                     </tr>

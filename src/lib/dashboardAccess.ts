@@ -1,4 +1,20 @@
-import { canAccessPath, type MesRole } from './roleAccess';
+import { canAccessPath, isFullAccessRole, type MesRole } from './roleAccess';
+
+export function usesOperationsDashboard(role: MesRole): boolean {
+  return isFullAccessRole(role) || role === 'raw_material_manager';
+}
+
+export function operationsDashboardAccess(role: MesRole) {
+  const production = canAccessPath(role, '/production-orders');
+  const inventory = canAccessPath(role, '/warehouse');
+  const dispatch = canAccessPath(role, '/dispatch');
+  return {
+    production, inventory, dispatch,
+    formulations: canAccessPath(role, '/formulations'),
+    snapshots: canAccessPath(role, '/rm-history'),
+    trends: production && inventory && dispatch,
+  };
+}
 
 export interface DashboardModule {
   path: string;
