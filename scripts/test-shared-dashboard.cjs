@@ -16,6 +16,7 @@ const hooks = {
   useState: initial => [initial === true ? false : sidebar && initial === null ? 'Production' : initial, () => {}],
   useEffect: callback => { effects.push(callback); },
   useMemo: callback => callback(), useCallback: callback => callback,
+  useRef: value => ({ current: value }),
 };
 function query(table) {
   queries.push(table);
@@ -50,7 +51,8 @@ function load(relative) {
     if (name === 'recharts') return new Proxy({}, { get: () => () => null });
     return require(name);
   };
-  vm.runInNewContext(code, { exports, require: localRequire, console, Date, setTimeout });
+  vm.runInNewContext(code, { exports, require: localRequire, console, Date, setTimeout, clearTimeout,
+    document: { hidden: false, addEventListener() {}, removeEventListener() {} } });
   modules[relative] = exports;
   return exports;
 }

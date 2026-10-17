@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import {
   Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line, ComposedChart,
@@ -53,6 +53,7 @@ function ExecutiveDashboard() {
   const [varianceAlerts, setVarianceAlerts] = useState<{ raw_material_name: string; stock_variance: number }[]>([]);
   const [liveOrders, setLiveOrders] = useState<ProductionOrder[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const refreshDashboard = useRef<() => void>(() => {});
 
   const fetchLiveOrders = useCallback(async () => {
     if (!access.production) { setLiveOrders([]); return; }
@@ -162,23 +163,53 @@ function ExecutiveDashboard() {
   }, [access]);
 
   useEffect(() => {
-    fetchLiveOrders();
-    fetchDashboardData(true);
+    let disposed = false;
+    let inFlight = false;
+    let queued = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleRefresh = () => {
+      if (disposed || document.hidden || timer !== undefined) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (!document.hidden) void runRefresh();
+      }, 2000);
+    };
+    const runRefresh = async (initial = false) => {
+      if (disposed) return;
+      if (inFlight) { queued = true; return; }
+      if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+      inFlight = true;
+      try {
+        await Promise.all([fetchLiveOrders(), fetchDashboardData(initial)]);
+      } catch (error) {
+        console.error('Failed to refresh dashboard:', error);
+      } finally {
+        inFlight = false;
+        if (initial && !disposed) setLoading(false);
+        if (queued) { queued = false; scheduleRefresh(); }
+      }
+    };
+    refreshDashboard.current = () => { void runRefresh(); };
+    const onVisibilityChange = () => {
+      if (!document.hidden) scheduleRefresh();
+    };
+    void runRefresh(true);
 
     const channel = supabase.channel('live-dashboard-sync');
-    if (access.production) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, () => {
-        fetchLiveOrders();
-        fetchDashboardData(false);
-      });
-    if (access.inventory) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchDashboardData(false);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'raw_materials' }, () => {
-        fetchDashboardData(false);
-      });
+    if (access.production) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'production_orders' }, scheduleRefresh);
+    if (access.inventory) channel.on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'raw_materials' }, scheduleRefresh);
     channel.subscribe();
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      disposed = true;
+      queued = false;
+      refreshDashboard.current = () => {};
+      if (timer !== undefined) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      supabase.removeChannel(channel);
+    };
   }, [access, fetchLiveOrders, fetchDashboardData]);
 
   const forecastMap = useMemo(() => {
@@ -322,7 +353,7 @@ function ExecutiveDashboard() {
               ))}
             </div>
             <button
-              onClick={() => { fetchLiveOrders(); fetchDashboardData(false); }}
+              onClick={() => refreshDashboard.current()}
               className="inline-flex w-fit shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/15"
             >
               <RefreshCw className="h-3.5 w-3.5" />
