@@ -1034,8 +1034,8 @@ export default function MaterialTransferPage() {
     received: transfers.filter(t => t.status === 'received').length,
     rejected: transfers.filter(t => t.status === 'rejected').length,
   };
-  const canReceiveInProduction = ['admin', 'md', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
-  const canCreateTransfer = ['admin', 'md', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
+  const canReceiveInProduction = ['admin', 'production_manager', 'supervisor', 'operator', 'finance', 'accountant', 'production_receiver'].includes(profile?.role || '');
+  const canCreateTransfer = ['admin', 'production_manager', 'supervisor', 'warehouse_manager', 'warehouse_clerk', 'raw_material_manager', 'rm_manager', 'logistics', 'weighbridge'].includes(profile?.role || '');
   const canReverseTransfer = ['admin', 'finance'].includes(profile?.role || '');
   const canReturnCompletedTransfer = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   const canAddIstLine = ['admin', 'finance'].includes(profile?.role || '');

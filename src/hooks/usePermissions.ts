@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import type { PermissionCode } from '../types/permissions';
+import { isReadOnlyRole, isReadOnlyPermission } from '../lib/readOnlyAccess';
 
 interface UserPermissions {
   permissions: Set<string>;
@@ -94,6 +95,9 @@ export function usePermissions() {
   const hasPermission = useCallback(
     (permission: PermissionCode | PermissionCode[]): boolean => {
       if (state.loading) return false;
+      if (isReadOnlyRole(profile?.role)) {
+        return Array.isArray(permission) ? permission.some(isReadOnlyPermission) : isReadOnlyPermission(permission);
+      }
       
       // Admin has all permissions
       if (state.roles.includes('admin') || state.permissions.has('admin.full')) {
@@ -105,18 +109,21 @@ export function usePermissions() {
       }
       return state.permissions.has(permission);
     },
-    [state]
+    [state, profile?.role]
   );
 
   const hasRole = useCallback(
     (role: string | string[]): boolean => {
       if (state.loading) return false;
+      if (isReadOnlyRole(profile?.role)) {
+        return Array.isArray(role) ? role.includes('md') : role === 'md';
+      }
       if (Array.isArray(role)) {
         return role.some((r) => state.roles.includes(r));
       }
       return state.roles.includes(role);
     },
-    [state]
+    [state, profile?.role]
   );
 
   const hasAnyPermission = useCallback(
@@ -139,6 +146,10 @@ export function usePermissions() {
 
   return {
     ...state,
+    roles: isReadOnlyRole(profile?.role) ? ['md'] : state.roles,
+    permissions: isReadOnlyRole(profile?.role)
+      ? new Set([...state.permissions].filter(isReadOnlyPermission))
+      : state.permissions,
     hasPermission,
     hasRole,
     hasAnyPermission,

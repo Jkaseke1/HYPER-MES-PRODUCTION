@@ -557,7 +557,7 @@ export default function AdminUsersPage() {
     );
   }
 
-  if (!isAdmin() && !hasPermission('admin.users')) {
+  if (profile?.role !== 'md' && !isAdmin() && !hasPermission('admin.users')) {
     return (
       <div className="p-6">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">

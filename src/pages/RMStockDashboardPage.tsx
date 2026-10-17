@@ -39,7 +39,7 @@ export default function RMStockDashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const { profile } = useAuth();
-  const canRefreshReporting = ['admin', 'md', 'finance', 'accountant', 'raw_material_manager', 'warehouse_manager']
+  const canRefreshReporting = ['admin', 'finance', 'accountant', 'raw_material_manager', 'warehouse_manager']
     .includes(profile?.role || '');
 
   const fetchData = async () => {

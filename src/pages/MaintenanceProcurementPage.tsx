@@ -17,7 +17,7 @@ export default function MaintenanceProcurementPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ title: '', business_reason: '', priority: 'normal', required_by: '', description: '', quantity: '1', unit: 'each' });
-  const canCreate = ['admin', 'md', 'maintenance_tech', 'procurement'].includes(profile?.role || '');
+  const canCreate = ['admin', 'maintenance_tech', 'procurement'].includes(profile?.role || '');
 
   const load = async () => {
     const { data, error } = await supabase.from('maintenance_procurement_requests').select('*, maintenance_procurement_quotes(count), maintenance_procurement_sage_history(count)').order('created_at', { ascending: false });

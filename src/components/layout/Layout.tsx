@@ -106,6 +106,7 @@ export default function Layout() {
           onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
         />
         <main className="p-4 sm:p-6">
+          {profile?.role === 'md' && <div role="status" className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">Managing Director: read-only access</div>}
           <Outlet />
         </main>
       </div>

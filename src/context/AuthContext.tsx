@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, setSupabaseSessionRole } from '../lib/supabase';
 import type { Profile } from '../types/database';
 
 interface AuthContextType {
@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (s?.user) {
           void fetchProfile(s.user.id);
         } else {
+          setSupabaseSessionRole(null);
           setLoading(false);
         }
       })
@@ -65,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchProfile(s.user.id);
         })();
       } else {
+        setSupabaseSessionRole(null);
         setProfile(null);
         setLoading(false);
       }
@@ -84,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         8000,
         'Profile lookup timed out.'
       );
+      setSupabaseSessionRole(data?.role || null);
       setProfile(data);
     } catch (error) {
       console.warn('Unable to load the user profile:', error);
@@ -151,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     await supabase.auth.signOut();
+    setSupabaseSessionRole(null);
     setProfile(null);
   }
 

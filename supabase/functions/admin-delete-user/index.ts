@@ -35,7 +35,7 @@ Deno.serve(async (request) => {
   const { data: adminRole } = await adminClient
     .from('user_roles').select('roles!inner(code)').eq('user_id', requester.id)
     .eq('roles.code', 'admin').maybeSingle();
-  if (requesterProfile?.role !== 'admin' && !adminRole) {
+  if (requesterProfile?.role === 'md' || (requesterProfile?.role !== 'admin' && !adminRole)) {
     return json({ error: 'Only administrators can delete users.' }, 403);
   }
 

@@ -45,7 +45,7 @@ Deno.serve(async (request) => {
     .eq('roles.code', 'admin')
     .maybeSingle();
 
-  if (requesterProfile?.role !== 'admin' && !adminRole) {
+  if (requesterProfile?.role === 'md' || (requesterProfile?.role !== 'admin' && !adminRole)) {
     return json({ error: 'Only administrators can create users.' }, 403);
   }
 

@@ -851,8 +851,8 @@ export default function StockTakeDetailPage() {
     }
   };
 
-  const canManage = ['admin', 'md', 'warehouse_manager', 'raw_material_manager'].includes(profile?.role || '');
-  const canApproveVariance = ['admin', 'md', 'finance', 'accountant'].includes(profile?.role || '');
+  const canManage = ['admin', 'warehouse_manager', 'raw_material_manager'].includes(profile?.role || '');
+  const canApproveVariance = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   const hasReadySageSnapshot = stockTake?.baseline_source === 'sage_sdk' && stockTake?.baseline_sync_status === 'READY' && Boolean(stockTake?.baseline_snapshot_at);
   const canEdit = hasReadySageSnapshot && (stockTake?.status === 'OPEN' || stockTake?.status === 'FROZEN');
   const showSystemQty = canManage || !stockTake?.blind_mode || stockTake?.status === 'CLOSED';
