@@ -552,6 +552,8 @@ export default function MaterialTransferPage() {
   const [refreshingReturnStock, setRefreshingReturnStock] = useState(false);
   const [openMaterialPickerId, setOpenMaterialPickerId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
+  const fetchQueued = useRef(false);
+  const refreshMounted = useRef(false);
 
   // Multi-line transfer state
   const [transferLines, setTransferLines] = useState<Array<{
@@ -569,38 +571,53 @@ export default function MaterialTransferPage() {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
+    refreshMounted.current = true;
+    void fetchData();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    // Batch notification bursts without letting continuous updates postpone refresh forever.
+    const scheduleRefresh = () => {
+      if (document.hidden || refreshTimer !== undefined) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        if (!document.hidden) void fetchData(true);
+      }, 1000);
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) scheduleRefresh();
+    };
     const channel = supabase
       .channel('material-transfer-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfer_reversals' }, () => {
-        fetchData(true);
+        scheduleRefresh();
       })
       .subscribe();
 
     const intervalId = window.setInterval(() => {
-      fetchData(true);
-    }, 3000);
+      scheduleRefresh();
+    }, 30000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
+      refreshMounted.current = false;
+      fetchQueued.current = false;
+      if (refreshTimer !== undefined) clearTimeout(refreshTimer);
       window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       supabase.removeChannel(channel);
     };
   }, []);
@@ -630,7 +647,10 @@ export default function MaterialTransferPage() {
   };
 
   async function fetchData(silent = false) {
-    if (fetchInProgress.current) return;
+    if (fetchInProgress.current) {
+      fetchQueued.current = true;
+      return;
+    }
     fetchInProgress.current = true;
     if (!silent) setLoading(true);
     try {
@@ -719,6 +739,10 @@ export default function MaterialTransferPage() {
     } finally {
       fetchInProgress.current = false;
       if (!silent) setLoading(false);
+      if (fetchQueued.current) {
+        fetchQueued.current = false;
+        if (refreshMounted.current && !document.hidden) void fetchData(true);
+      }
     }
   }
 
