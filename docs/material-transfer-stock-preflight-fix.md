@@ -7,6 +7,9 @@ long-running refresh. Check the corresponding sync_log stock refresh details
 and bridge log to confirm which occurred.
 
 Changes:
+- Explicit RM-only checks include active raw materials that also have an active
+  formulation, such as FFS0001. Rolling/mixed/PD refresh exclusions are unchanged;
+  finished-good PD cache rows retain their formulation ownership.
 - Target item codes in the database instead of searching only the first API
   page of the material catalogue.
 - Never mark the refresh successful unless every requested code was refreshed.

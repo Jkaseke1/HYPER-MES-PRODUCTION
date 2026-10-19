@@ -16,9 +16,13 @@ for (const rows of [[], [{ raw_material_id: 'a', quantity: 12, is_fresh: false }
 }
 assert.throws(() => validate(['a', 'b'], [{ raw_material_id: 'a', quantity: 12, is_fresh: true }], 'RM'));
 const records = Array.from({ length: 1200 }, (_, i) => ({ id: String(i), code: 'MAT' + i, sage_code: null, is_active: true }));
+records.unshift({ id: 'ffs-overlap', code: 'FFS0001', sage_code: '', is_active: true });
+const writes = [];
+const sdkReads = [];
 function query(table) {
-  let rows = table === 'raw_materials' ? records : [];
+  let rows = table === 'raw_materials' ? records : table === 'formulations' ? [{ sage_code: 'FFS0001', status: 'active' }] : [];
   const q = {
+    upsert(row) { writes.push(row); return Promise.resolve({ error: null }); },
     select() { return q; }, order() { return q; },
     eq(key, value) { rows = rows.filter(row => row[key] === value); return q; },
     in(key, values) { rows = rows.filter(row => values.includes(row[key])); return q; },
@@ -30,13 +34,36 @@ function query(table) {
 const mod = { exports: {} };
 vm.runInNewContext(fs.readFileSync('bridge/sageStockSync.js', 'utf8') +
   '\nmodule.exports.test = { loadMaterials, validatedStockQuantity };', {
-  module: mod, process: { env: {} }, URL, console,
-  require: name => name === './lib/db' ? { supabase: { from: query } } : { sdkJson() { throw Error('No SDK calls in tests'); } },
+  module: mod, process: { env: { SAGE_SDK_API_KEY: 'test-only' } }, URL, console,
+  require: name => name === './lib/db' ? { supabase: { from: query } } : { sdkJson(url) { sdkReads.push(url); return Promise.resolve({ quantity: 4500 }); } },
 });
 async function main() {
   const result = await mod.exports.test.loadMaterials(['MAT1199']);
   assert.equal(result.length, 1, 'Targeted refresh finds materials beyond first 1000 catalogue rows');
   assert.equal(result[0].id, '1199');
+  const overlap = await mod.exports.syncSageStock(['FFS0001'], { warehouseCodes: [' rm '] });
+  assert.equal(overlap.synced, 1, 'Explicit RM check includes an ingredient with an active formulation');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].raw_material_id, 'ffs-overlap');
+  assert.equal(writes[0].warehouse_id, 18);
+  assert.equal(writes[0].quantity, 4500);
+  assert.equal(new URL(sdkReads[0]).searchParams.get('warehouse'), 'RM');
+  writes.length = 0; sdkReads.length = 0;
+  for (const options of [{ warehouseCodes: ['PD'] }, {}, { warehouseCodes: ['RM', 'PD'] }]) {
+    const protectedRefresh = await mod.exports.syncSageStock(['FFS0001'], options);
+    assert.equal(protectedRefresh.synced, 0);
+  }
+  const rolling = await mod.exports.test.loadMaterials(undefined, { fullSync: true, warehouseCodes: ['RM'] });
+  assert(!rolling.some(row => row.code === 'FFS0001'), 'Unrequested catalogue refresh keeps its existing exclusion');
+  assert.equal(writes.length, 0, 'No raw-material write can replace the finished-good PD balance');
+  assert.equal(sdkReads.length, 0);
+  const nineItems = ['FFS0001', ...Array.from({ length: 8 }, (_, i) => 'MAT' + i)];
+  const nine = await mod.exports.syncSageStock(nineItems, { warehouseCodes: ['RM'] });
+  assert.equal(nine.materialCount, 9);
+  assert.equal(nine.synced, 9, 'All nine preflight items refresh, including FFS0001');
+  assert.equal(nine.failures.length, 0);
+  assert.equal(writes.length, 9);
+  assert(writes.every(row => row.warehouse_id === 18));
   for (const value of [null, undefined, '', NaN, Infinity, 'bad']) {
     assert.throws(() => mod.exports.test.validatedStockQuantity(value));
   }

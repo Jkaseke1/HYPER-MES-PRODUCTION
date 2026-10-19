@@ -21,7 +21,7 @@ function getJson(urlString) {
   return sdkJson(urlString, { apiKey: SDK_API_KEY, timeoutMs: 15000 });
 }
 
-async function loadMaterials(itemCodes, { fullSync = false } = {}) {
+async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes } = {}) {
   let query = supabase
     .from('raw_materials')
     .select('id, code, sage_code')
@@ -57,6 +57,13 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
   });
   if (!materials.length) return materials;
 
+  // RM ingredients may also have formulations (for example Full Fat Soya Meal).
+  // An explicit RM-only check must read their Sage RM balance. Keep excluding
+  // formulation overlaps from rolling/mixed/PD refreshes to protect FG ownership.
+  if (itemCodes?.length && warehouseCodes?.length === 1 && warehouseCodes[0] === 'RM') {
+    return materials;
+  }
+
   // Finished goods can exist in the legacy raw_materials catalogue as well as
   // formulations. Their PD/DEB balance belongs to the formulation record; do
   // not overwrite it with a raw-material source during rolling reconciliation.
@@ -74,7 +81,6 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
 
 async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {}) {
   if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for Sage stock sync');
-  const materials = await loadMaterials(itemCodes, { fullSync });
   const requestedWarehouses = (warehouseCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
   const warehouses = requestedWarehouses.length
     ? WAREHOUSES.filter((warehouse) => requestedWarehouses.includes(warehouse.code))
@@ -82,6 +88,7 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
   if (requestedWarehouses.length && warehouses.length !== requestedWarehouses.length) {
     throw new Error(`Unknown Sage warehouse requested: ${requestedWarehouses.filter((code) => !warehouses.some((warehouse) => warehouse.code === code)).join(', ')}`);
   }
+  const materials = await loadMaterials(itemCodes, { fullSync, warehouseCodes: warehouses.map(warehouse => warehouse.code) });
   let synced = 0;
   const failures = [];
 
