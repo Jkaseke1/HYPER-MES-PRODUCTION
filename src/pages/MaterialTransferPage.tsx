@@ -6,6 +6,7 @@ import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { verifiedTransferBalances } from '../lib/transferStockValidation';
 import { transferRequestIdentity } from '../lib/transferRequestIdentity';
 import { isValidTransferDocumentDate } from '../lib/transferDocumentDate';
+import { transferQuantitySummary } from '../lib/transferQuantitySummary';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
@@ -894,7 +895,7 @@ export default function MaterialTransferPage() {
         const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
         const material = rawMaterials.find(m => m.id === line.raw_material_id);
         if (line.quantity > rmBalance) {
-          setTransferError([`${material?.name || 'Material'} cannot be transferred because available Sage RM stock after Buffer allocation is insufficient. Available: ${rmBalance.toLocaleString()} kg; requested: ${line.quantity.toLocaleString()} kg.`]);
+          setTransferError([`${material?.name || 'Material'} cannot be transferred because available Sage RM stock after Buffer allocation is insufficient. Available: ${rmBalance.toLocaleString()} ${material?.unit || 'kg'}; requested: ${line.quantity.toLocaleString()} ${material?.unit || 'kg'}.`]);
           setSaving(false);
           return;
         }
@@ -1289,7 +1290,7 @@ export default function MaterialTransferPage() {
                 transferGroups.map((group) => {
                   const firstTransfer = group.transfers[0];
                   const expanded = expandedGroups[group.key] ?? false;
-                  const totalQuantity = group.transfers.reduce((sum, transfer) => sum + Math.abs(transfer.quantity || 0), 0);
+                  const totalQuantity = transferQuantitySummary(group.transfers.map(transfer => ({ ...transfer, quantity: Math.abs(transfer.quantity || 0) })));
                   const statuses = [...new Set(group.transfers.map((transfer) => transfer.status))];
                   const syncLogs = group.transfers.map((transfer) => sageSyncLogs[transfer.id]).filter(Boolean);
                   const hasFailedSync = syncLogs.some((log) => log.status === 'failed');
@@ -1327,7 +1328,7 @@ export default function MaterialTransferPage() {
                           <p className="text-xs text-slate-500">{group.transfers.length === 1 ? 'Single-material transfer' : 'Grouped material transfer bundle'}</p>
                         </td>
                         <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{group.transfers.length}</td>
-                        <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity.toLocaleString()} kg</td>
+                        <td className="px-3 py-3 text-right text-sm font-bold text-slate-700">{totalQuantity}</td>
                         <td className="px-3 py-3 text-xs font-medium text-slate-700">{requester}</td>
                         <td className="px-3 py-3">
                           {postedReturns.length === group.transfers.length && postedReturns.length > 0
@@ -1580,7 +1581,7 @@ export default function MaterialTransferPage() {
                   <div className="grid grid-cols-[44px_minmax(0,1.45fr)_minmax(180px,0.9fr)_44px] items-center gap-3 bg-slate-50 px-3 py-2.5 border-b border-slate-200">
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">#</span>
                     <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Raw material *</span>
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Transfer quantity (kg) *</span>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Transfer quantity *</span>
                     <span className="sr-only">Actions</span>
                   </div>
 

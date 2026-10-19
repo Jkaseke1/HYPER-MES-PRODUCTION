@@ -7,6 +7,7 @@ const source = fs.readFileSync('src/lib/incomingIstDate.ts', 'utf8');
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText;
 const exported = {};
 vm.runInNewContext(compile(source), { exports: exported, require });
+vm.runInNewContext(compile(fs.readFileSync('src/lib/transferQuantitySummary.ts', 'utf8')), { exports: exported });
 const { incomingIstDate } = exported;
 const fixture = { transfer_date: '2026-10-03', created_at: '2026-10-19T11:13:00Z' };
 assert.equal(incomingIstDate([fixture]).value, '2026-10-03');
@@ -20,15 +21,15 @@ const page = fs.readFileSync('src/pages/ProductionWarehousePage.tsx', 'utf8');
 const grouping = page.slice(page.indexOf('  const incomingBundles = useMemo'), page.indexOf('  const visibleIncomingBundles = useMemo'));
 const context = {
   incomingTransfers: [fixture, { ...fixture, created_at: '2026-10-18T22:00:00Z' }].map((row, i) => ({
-    ...row, id: String(i), quantity: 10, status: 'in_buffer', purpose: 'HFIST11959', requester: { full_name: 'Admin' },
+    ...row, id: String(i), quantity: 10, unit: 'kg', status: 'in_buffer', purpose: 'HFIST11959', requester: { full_name: 'Admin' },
   })),
-  useMemo: fn => fn(), incomingIstDate,
+  useMemo: fn => fn(), incomingIstDate, transferQuantitySummary: exported.transferQuantitySummary,
 };
 vm.createContext(context);
 vm.runInContext(compile(grouping + '\nglobalThis.bundles = incomingBundles;'), context);
 assert.equal(context.bundles.length, 1, 'Legacy grouping uses the RM document date, not entry timestamp');
 assert.equal(context.bundles[0].istDate.label, '03 Oct 2026');
-assert.equal(context.bundles[0].totalQuantity, 20);
+assert.equal(context.bundles[0].totalQuantity, '20 kg');
 assert.match(page, /notes, transfer_date, created_at/);
 assert.match(page, /bundle\.istDate\.label/);
 assert.match(page, /expandedIncomingBundleData\.istDate\.label/);

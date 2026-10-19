@@ -3,6 +3,7 @@ import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { incomingIstDate } from '../lib/incomingIstDate';
+import { transferQuantitySummary } from '../lib/transferQuantitySummary';
 import SageTransferHistory from '../components/SageTransferHistory';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -104,7 +105,7 @@ interface IncomingBundle {
   requester: string;
   createdAt: string;
   istDate: ReturnType<typeof incomingIstDate>;
-  totalQuantity: number;
+  totalQuantity: string;
 }
 
 type ReceiptNotice = { tone: 'success' | 'error'; message: string } | null;
@@ -378,7 +379,7 @@ export default function ProductionWarehousePage() {
   }, [aggregated, search]);
 
   const totalMaterials = aggregated.length;
-  const totalSagePdQty = aggregated.reduce((sum, material) => sum + Math.max(0, material.sage_pd_quantity || 0), 0);
+  const totalSagePdQty = transferQuantitySummary(aggregated.map(material => ({ quantity: Math.max(0, material.sage_pd_quantity || 0), unit: material.unit })));
   const lastSagePdSync = aggregated.reduce<string | null>((latest, material) => {
     if (!material.sage_pd_synced_at) return latest;
     if (!latest || new Date(material.sage_pd_synced_at) > new Date(latest)) return material.sage_pd_synced_at;
@@ -389,7 +390,7 @@ export default function ProductionWarehousePage() {
     const diff = (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24);
     return diff <= 7;
   }).length;
-  const pendingReceiptQuantity = pendingAcceptanceTransfers.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const pendingReceiptQuantity = transferQuantitySummary(pendingAcceptanceTransfers);
   const incomingBundles = useMemo<IncomingBundle[]>(() => {
     const groups = new Map<string, PendingTransfer[]>();
     incomingTransfers.forEach((transfer) => {
@@ -406,7 +407,7 @@ export default function ProductionWarehousePage() {
       requester: group[0].requester?.full_name || 'Unknown requester',
       createdAt: group[0].created_at,
       istDate: incomingIstDate(group),
-      totalQuantity: group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0),
+      totalQuantity: transferQuantitySummary(group),
     }));
   }, [incomingTransfers]);
   const visibleIncomingBundles = useMemo(() => incomingBundles.filter((bundle) => {
@@ -478,9 +479,8 @@ export default function ProductionWarehousePage() {
     return { critical, low, healthy: aggregated.length - critical.length - low.length };
   }, [aggregated]);
   const floorReadiness = totalMaterials ? Math.round((stockHealth.healthy / totalMaterials) * 100) : 100;
-  const movedThisWeek = transfers
-    .filter((transfer) => Date.now() - new Date(transfer.movement_date || transfer.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000)
-    .reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0);
+  const movedThisWeek = transferQuantitySummary(transfers
+    .filter((transfer) => Date.now() - new Date(transfer.movement_date || transfer.created_at).getTime() <= 7 * 24 * 60 * 60 * 1000));
   const topFloorMaterials = [...aggregated]
     .filter((material) => Number(material.sage_pd_quantity || 0) > 0)
     .sort((a, b) => Number(b.sage_pd_quantity || 0) - Number(a.sage_pd_quantity || 0))
@@ -682,7 +682,7 @@ export default function ProductionWarehousePage() {
                 </select>
               </div>
               <div className="incoming-queue-total text-right">
-                <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} kg</p>
+                <p className="font-mono text-lg font-bold text-slate-900">{pendingReceiptQuantity}</p>
                 <p className="text-xs font-medium text-slate-500">awaiting receipt</p>
               </div>
             {!isProductionReceiver && (
@@ -737,7 +737,7 @@ export default function ProductionWarehousePage() {
                     <span className="inline-flex items-center gap-1.5 text-sm text-slate-600"><UserRound className="h-3.5 w-3.5 text-slate-400" />{bundle.requester}</span>
                     <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{bundle.istDate.label}</span>
                     <div className="incoming-bundle-quantity text-right">
-                      <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
+                      <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity}</p>
                     </div>
                     <span className="font-mono text-[11px] text-slate-600" title={bundle.transfers.map(getLineSageReference).join('\n')}>
                       {bundle.transfers.length === 1 ? getLineSageReference(bundle.transfers[0]) : `${bundle.transfers.length} line refs`}
@@ -805,7 +805,7 @@ export default function ProductionWarehousePage() {
                 <span><strong className="mr-1 text-slate-900">Requested by:</strong>{expandedIncomingBundleData.requester}</span>
                 <span><strong className="mr-1 text-slate-900">IST date:</strong>{expandedIncomingBundleData.istDate.label}</span>
                 <span><strong className="mr-1 text-slate-900">Created:</strong>{format(new Date(expandedIncomingBundleData.createdAt), 'dd MMM yyyy, HH:mm')}</span>
-                <span><strong className="mr-1 text-slate-900">Total:</strong><span className="font-mono font-bold text-slate-900">{expandedIncomingBundleData.transfers.length} lines | {expandedIncomingBundleData.totalQuantity.toLocaleString()} kg</span></span>
+                <span><strong className="mr-1 text-slate-900">Total:</strong><span className="font-mono font-bold text-slate-900">{expandedIncomingBundleData.transfers.length} lines | {expandedIncomingBundleData.totalQuantity}</span></span>
                 <span title={stage.detail} className={`inline-flex border px-2 py-1 text-[11px] font-semibold ${stageClassName}`}>{stage.label}</span>
               </div>
 
@@ -880,9 +880,9 @@ export default function ProductionWarehousePage() {
       {pageView === 'stock' && <>
       <section className="floor-summary-grid grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Floor readiness</p><Activity className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{floorReadiness}%</p><p className="mt-1 text-xs text-slate-500">{stockHealth.healthy} of {totalMaterials} materials above minimum</p></div>
-        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{formatWarehouseQuantity(totalSagePdQty)} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
-        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
-        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity.toLocaleString()} <span className="text-sm">kg</span></p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sage production available</p><Package className="h-4 w-4 text-emerald-600" /></div><p className="mt-2 text-2xl font-bold text-emerald-700">{totalSagePdQty}</p><p className="mt-1 text-xs text-slate-500">Warehouse 19 live balance</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Moved this week</p><ArrowUpRight className="h-4 w-4 text-teal-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{movedThisWeek}</p><p className="mt-1 text-xs text-slate-500">{recentCount} materials received on floor</p></div>
+        <div className="bg-white px-5 py-4"><div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Inbound queue</p><Truck className="h-4 w-4 text-amber-600" /></div><p className="mt-2 text-2xl font-bold text-slate-900">{pendingReceiptQuantity}</p><p className="mt-1 text-xs text-slate-500">{pendingAcceptanceTransfers.length} transfer{pendingAcceptanceTransfers.length === 1 ? '' : 's'} awaiting receipt</p></div>
       </section>
 
       <section className={`floor-health-banner flex flex-wrap items-center justify-between gap-3 border-l-4 px-4 py-3 ${stockHealth.critical.length ? 'border-rose-500 bg-rose-50' : stockHealth.low.length ? 'border-amber-500 bg-amber-50' : 'border-emerald-500 bg-emerald-50'}`}>
