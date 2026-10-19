@@ -587,7 +587,7 @@ export default function DashboardPage() {
                 </span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-semibold tracking-tight text-slate-900">Reorder</h2>
+                    <h2 className="text-[13px] font-bold uppercase tracking-[0.14em] text-slate-900">Reorder</h2>
                     <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1.5 text-[10px] font-bold text-white">
                       {filteredLowStock.length}
                     </span>
@@ -618,7 +618,7 @@ export default function DashboardPage() {
                     <tr key={item.id} className="border-t border-slate-100">
                       <td className="max-w-[140px] px-3 py-1.5">
                         <p className="truncate font-medium text-slate-900">{item.name}</p>
-                        <p className="truncate text-[10px] text-slate-400">reorder {item.reorder_level.toLocaleString()} {item.unit}</p>
+                        <p className="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">Reorder {item.reorder_level.toLocaleString()} {item.unit}</p>
                       </td>
                       <td className={`px-2 py-1.5 text-right tabular-nums ${alertInfo.mesStock <= item.reorder_level ? 'font-medium text-amber-700' : 'text-slate-700'}`}>
                         {alertInfo.mesStock.toLocaleString()}
