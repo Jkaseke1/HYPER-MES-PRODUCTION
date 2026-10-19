@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { verifiedTransferBalances } from '../lib/transferStockValidation';
 import { transferRequestIdentity } from '../lib/transferRequestIdentity';
+import { isValidTransferDocumentDate } from '../lib/transferDocumentDate';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
@@ -570,7 +571,7 @@ export default function MaterialTransferPage() {
   }>>([{ id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
 
   const [sharedForm, setSharedForm] = useState({
-    transfer_date: format(new Date(), 'yyyy-MM-dd'),
+    transfer_date: '',
     purpose: '',
     production_order_id: '',
     notes: '',
@@ -821,6 +822,10 @@ export default function MaterialTransferPage() {
     setSaving(true);
     setTransferError(null);
     try {
+      if (!isValidTransferDocumentDate(sharedForm.transfer_date)) {
+        setTransferError(['Select a valid RM transfer date from the IST before creating this transfer.']);
+        return;
+      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) {
         setTransferError(['Your session has expired. Sign in again before creating a transfer.']);
@@ -925,7 +930,7 @@ export default function MaterialTransferPage() {
       setShowCreate(false);
       setTransferLines([{ id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
       setSharedForm({
-        transfer_date: format(new Date(), 'yyyy-MM-dd'),
+        transfer_date: '',
         purpose: '',
         production_order_id: '',
         notes: '',
@@ -1201,7 +1206,7 @@ export default function MaterialTransferPage() {
             )}
             {canCreateTransfer && (
               <button
-                onClick={() => { setTransferError(null); setShowCreate(true); }}
+                onClick={() => { setSharedForm(previous => ({ ...previous, transfer_date: '' })); setTransferError(null); setShowCreate(true); }}
                 className="inline-flex items-center gap-2 bg-[#f39200] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#d98100]"
               >
                 <Plus className="h-4 w-4" /> New Transfer
@@ -1470,8 +1475,9 @@ export default function MaterialTransferPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Transfer Date *</label>
+                    <label htmlFor="transfer-document-date" className="text-xs font-semibold text-slate-600 mb-1 block">Transfer Date *</label>
                     <input
+                      id="transfer-document-date"
                       type="date"
                       value={sharedForm.transfer_date}
                       onChange={(e) => setSharedForm({ ...sharedForm, transfer_date: e.target.value })}
@@ -1668,6 +1674,7 @@ export default function MaterialTransferPage() {
                 onClick={createTransfers}
                 disabled={
                   saving ||
+                  !isValidTransferDocumentDate(sharedForm.transfer_date) ||
                   !sharedForm.purpose ||
                   transferLines.filter(l => l.raw_material_id && l.quantity > 0).length === 0
                 }
