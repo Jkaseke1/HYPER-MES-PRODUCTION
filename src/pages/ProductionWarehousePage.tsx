@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
+import { incomingIstDate } from '../lib/incomingIstDate';
 import SageTransferHistory from '../components/SageTransferHistory';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -47,6 +48,7 @@ interface PendingTransfer {
   status: string;
   transfer_batch_key?: string | null;
   created_at: string;
+  transfer_date?: string | null;
   purpose?: string;
   notes?: string;
   requester?: { full_name?: string | null } | null;
@@ -101,6 +103,7 @@ interface IncomingBundle {
   purpose: string;
   requester: string;
   createdAt: string;
+  istDate: ReturnType<typeof incomingIstDate>;
   totalQuantity: number;
 }
 
@@ -171,7 +174,7 @@ export default function ProductionWarehousePage() {
         .eq('warehouse_id', 19),
       supabase
         .from('material_transfers')
-        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, created_at, production_approved_at, receiver:profiles!production_approved_by(full_name), requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
+        .select('id, transfer_number, raw_material_id, quantity, unit, status, transfer_batch_key, purpose, notes, transfer_date, created_at, production_approved_at, receiver:profiles!production_approved_by(full_name), requester:profiles!requested_by(full_name), raw_materials(name, code, unit)')
         .in('status', ['in_buffer', 'received'])
         .order('created_at', { ascending: false })
         .limit(500),
@@ -390,7 +393,7 @@ export default function ProductionWarehousePage() {
   const incomingBundles = useMemo<IncomingBundle[]>(() => {
     const groups = new Map<string, PendingTransfer[]>();
     incomingTransfers.forEach((transfer) => {
-      const dateKey = format(new Date(transfer.created_at), 'yyyy-MM-dd');
+      const dateKey = incomingIstDate([transfer]).value || 'missing-ist-date';
       const requesterKey = transfer.requester?.full_name || 'Unknown requester';
       const key = transfer.transfer_batch_key || `${dateKey}|${transfer.purpose || 'Unspecified'}|${requesterKey}`;
       groups.set(key, [...(groups.get(key) || []), transfer]);
@@ -402,6 +405,7 @@ export default function ProductionWarehousePage() {
       purpose: group[0].purpose || 'Unspecified transfer',
       requester: group[0].requester?.full_name || 'Unknown requester',
       createdAt: group[0].created_at,
+      istDate: incomingIstDate(group),
       totalQuantity: group.reduce((sum, transfer) => sum + Number(transfer.quantity || 0), 0),
     }));
   }, [incomingTransfers]);
@@ -731,7 +735,7 @@ export default function ProductionWarehousePage() {
                     <span className="incoming-material-count border border-amber-200 bg-amber-50 px-2 py-0.5 text-center text-xs font-semibold text-amber-800">{bundle.transfers.length} materials</span>
                     <span title={stage.detail} className={`incoming-status min-w-0 whitespace-normal border px-2 py-0.5 text-center text-xs font-semibold leading-4 ${stageClassName}`}>{stage.label}</span>
                     <span className="inline-flex items-center gap-1.5 text-sm text-slate-600"><UserRound className="h-3.5 w-3.5 text-slate-400" />{bundle.requester}</span>
-                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{format(new Date(bundle.createdAt), 'dd MMM yyyy, HH:mm')}</span>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-slate-600"><Calendar className="h-3.5 w-3.5 text-slate-400" />{bundle.istDate.label}</span>
                     <div className="incoming-bundle-quantity text-right">
                       <p className="font-mono text-sm font-bold text-slate-900">{bundle.totalQuantity.toLocaleString()} kg</p>
                     </div>
@@ -799,7 +803,8 @@ export default function ProductionWarehousePage() {
 
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
                 <span><strong className="mr-1 text-slate-900">Requested by:</strong>{expandedIncomingBundleData.requester}</span>
-                <span><strong className="mr-1 text-slate-900">IST date:</strong>{format(new Date(expandedIncomingBundleData.createdAt), 'dd MMM yyyy, HH:mm')}</span>
+                <span><strong className="mr-1 text-slate-900">IST date:</strong>{expandedIncomingBundleData.istDate.label}</span>
+                <span><strong className="mr-1 text-slate-900">Created:</strong>{format(new Date(expandedIncomingBundleData.createdAt), 'dd MMM yyyy, HH:mm')}</span>
                 <span><strong className="mr-1 text-slate-900">Total:</strong><span className="font-mono font-bold text-slate-900">{expandedIncomingBundleData.transfers.length} lines | {expandedIncomingBundleData.totalQuantity.toLocaleString()} kg</span></span>
                 <span title={stage.detail} className={`inline-flex border px-2 py-1 text-[11px] font-semibold ${stageClassName}`}>{stage.label}</span>
               </div>
