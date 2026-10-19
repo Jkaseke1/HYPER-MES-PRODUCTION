@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Scale, AlertTriangle, CheckCircle, Truck, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import TransporterPicker from './TransporterPicker';
 
 interface WeighBridgeData {
   wb_transaction_no: string;
@@ -28,13 +29,6 @@ interface WeighBridgeData {
   wb_inbound_invoice_number: string;
   wb_inbound_waybill_reference: string;
   wb_inbound_transport_notes: string;
-}
-
-interface Transporter {
-  id: string;
-  transporter_code: string;
-  name: string;
-  default_currency: string;
 }
 
 interface WeighBridgeTicketProps {
@@ -74,7 +68,6 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
   const [expanded, setExpanded] = useState(!!hideHeader);
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [transporters, setTransporters] = useState<Transporter[]>([]);
 
   useEffect(() => {
     // Fetch raw materials (Sage-linked products)
@@ -93,11 +86,6 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
       .order('name')
       .then(({ data }) => setSuppliers(data || []));
 
-    if (allowCompanyHiredTransport) {
-      supabase
-        .rpc('list_inbound_transporters_for_weighbridge')
-        .then(({ data }) => setTransporters((data || []) as Transporter[]));
-    }
   }, [allowCompanyHiredTransport]);
 
   const handleMassChange = (field: 'wb_first_mass' | 'wb_second_mass', value: string) => {
@@ -321,21 +309,11 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                   {allowCompanyHiredTransport && data.wb_inbound_transport_mode === 'company_hired' && (
                     <div className="mt-3 border-t border-orange-100 pt-3">
                       <Field title="Transporter *">
-                        <select
-                          value={data.wb_inbound_transporter_id}
-                          onChange={(e) => {
-                            const transporter = transporters.find((item) => item.id === e.target.value);
-                            onChange('wb_inbound_transporter_id', e.target.value);
-                            onChange('wb_haulier_code', transporter?.transporter_code || '');
-                            onChange('wb_inbound_currency_code', transporter?.default_currency || 'USD');
-                          }}
-                          className={input}
-                        >
-                          <option value="">Select company transporter…</option>
-                          {transporters.map((transporter) => (
-                            <option key={transporter.id} value={transporter.id}>{transporter.transporter_code} - {transporter.name}</option>
-                          ))}
-                        </select>
+                        <TransporterPicker value={data.wb_inbound_transporter_id} onSelect={(transporter) => {
+                          onChange('wb_inbound_transporter_id', transporter.id);
+                          onChange('wb_haulier_code', transporter.transporter_code);
+                          onChange('wb_inbound_currency_code', transporter.default_currency || 'USD');
+                        }} />
                       </Field>
                       <p className="text-[11px] text-slate-600">The GRN Raw Materials Manager will enter the rate, invoice or waybill, and transport notes after linking this signed ticket to the GRN.</p>
                     </div>

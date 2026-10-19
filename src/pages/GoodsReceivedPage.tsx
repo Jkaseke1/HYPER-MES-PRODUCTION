@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
+import TransporterPicker from '../components/grn/TransporterPicker';
+import PendingTransporterDetails from '../components/grn/PendingTransporterDetails';
+import { canEditGrnTransport } from '../lib/transportPermissions';
 import ApprovalHistory from '../components/approval/ApprovalHistory';
 import GRNAttachments from '../components/grn/GRNAttachments';
 import ReturnToSupplierModal from '../components/grn/ReturnToSupplierModal';
@@ -715,11 +718,11 @@ export default function GoodsReceivedPage() {
       toast.error('This GRN does not have a company-hired transporter selected at the weighbridge.');
       return;
     }
-    if (!['pending', 'pending_costing', 'pending_finance'].includes(viewing.status)) {
+    if (!canEditGrnTransport(profile?.role, viewing.status, viewTransportClaim?.status)) {
       toast.error('Transport cost evidence is locked after GRN approval.');
       return;
     }
-    if (Number(transportRate) <= 0) { toast.error('Enter the agreed transport rate per tonne.'); return; }
+    if (!Number.isFinite(Number(transportRate)) || Number(transportRate) <= 0) { toast.error('Enter the agreed transport rate per tonne.'); return; }
     setSavingViewTransportCost(true);
     try {
       const { data, error } = await supabase.rpc('save_inbound_transport_claim', {
@@ -1834,6 +1837,14 @@ export default function GoodsReceivedPage() {
                             </span>
                           </div>
 
+                          {companyHired && ['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '') && <details className="mt-3 border-t border-orange-200 pt-3">
+                            <summary className="cursor-pointer text-sm font-semibold text-orange-800">Edit transporter</summary>
+                            <div className="mt-3"><TransporterPicker value={ticket.inbound_transporter_id || ''} onSelect={async (selected) => {
+                              const { error } = await supabase.rpc('set_ticket_transporter_before_grn', { p_ticket_id: ticket.id, p_transporter_id: selected.id });
+                              if (error) throw error;
+                              setWbTickets(current => current.map(row => row.id === ticket.id ? { ...row, inbound_transporter_id: selected.id, haulier_code: selected.transporter_code, inbound_transporters: selected } : row));
+                            }} /></div>
+                          </details>}
                           {companyHired ? <>
                             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                               <div><p className="text-xs font-semibold text-slate-500">Transporter</p><p className="mt-1 font-semibold text-slate-900">{transporter?.name || ticket.haulier_code || 'Not recorded'}</p></div>
@@ -2332,6 +2343,7 @@ export default function GoodsReceivedPage() {
           {viewing && !editingFinanceCosts && (viewing.status === 'pending_finance' || viewing.status === 'pending') && (
             <div className="flex-shrink-0 px-5 py-2 bg-white border-b border-slate-200">
               <GRNApprovalButtons
+                key={viewing.id}
                 grnId={viewing.id}
                 currentStatus={viewing.status}
                 vatMode={(viewing as any).vat_mode}
@@ -2518,8 +2530,21 @@ export default function GoodsReceivedPage() {
                   if (!ticket) return null;
                   const hired = ticket.inbound_transport_mode === 'company_hired';
                   const transporter = Array.isArray(ticket.inbound_transporters) ? ticket.inbound_transporters[0] : ticket.inbound_transporters;
-                  const canCorrectTransport = canCaptureTransportCost && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && ['draft', 'rejected', undefined].includes(viewTransportClaim?.status);
-                  return <div className={`rounded-lg border p-2.5 ${hired ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-center gap-1.5 mb-1.5"><ShieldCheck className={`w-3.5 h-3.5 ${hired ? 'text-amber-700' : 'text-slate-500'}`} /><h3 className="text-xs font-semibold text-slate-700">Inbound Transport Accountability</h3></div>{hired ? <><div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs"><div><span className="text-slate-400">Mode:</span> <span className="font-semibold text-amber-800">Company-hired</span></div><div><span className="text-slate-400">Transporter:</span> <span className="text-slate-800">{transporter?.name || 'Not recorded'} {transporter?.transporter_code ? `(${transporter.transporter_code})` : ''}</span></div><div><span className="text-slate-400">Agreed rate:</span> <span className="font-mono text-slate-800">{viewTransportClaim ? `${viewTransportClaim.currency_code} ${viewTransportClaim.rate_per_tonne}` : 'Missing'} / t</span></div><div><span className="text-slate-400">Supplier document:</span> <span className="font-mono text-slate-800">{viewTransportClaim?.invoice_number || viewTransportClaim?.waybill_reference || 'Missing'}</span></div></div>{canCorrectTransport && <div className="mt-3 space-y-2 border-t border-amber-200 pt-3"><p className="text-[11px] font-semibold text-amber-900">Complete missing transport cost</p><div className="grid grid-cols-2 gap-2"><Input type="number" min="0" step="0.01" value={transportRate} onChange={(event) => setTransportRate(event.target.value)} placeholder="Rate per tonne" className="h-8 bg-white text-xs" /><Select value={transportCurrency} onValueChange={setTransportCurrency}><SelectTrigger className="h-8 bg-white text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="ZIG">ZIG</SelectItem><SelectItem value="ZAR">ZAR</SelectItem></SelectContent></Select></div><Input value={transportInvoice} onChange={(event) => setTransportInvoice(event.target.value)} placeholder="Invoice number (optional)" className="h-8 bg-white text-xs" /><Input value={transportWaybill} onChange={(event) => setTransportWaybill(event.target.value)} placeholder="Waybill reference (optional)" className="h-8 bg-white text-xs" /><Button type="button" size="sm" onClick={() => void saveMissingTransportCost()} disabled={savingViewTransportCost} className="w-full bg-amber-700 text-white hover:bg-amber-800">{savingViewTransportCost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Truck className="mr-1.5 h-3.5 w-3.5" />}{savingViewTransportCost ? 'Saving...' : 'Save transport cost'}</Button></div>}<p className="mt-2 text-[10px] text-amber-800">The gate transporter remains locked. Only the GRN cost details can be completed here; payment is still verified from Sage.</p></> : <p className="text-xs text-slate-600">Supplier-provided transport. No company freight claim should be created for this GRN.</p>}</div>;
+                  const canCorrectTransport = canEditGrnTransport(profile?.role, viewing.status, viewTransportClaim?.status);
+                  return <div className={`rounded-lg border p-2.5 ${hired ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-slate-50'}`}><div className="flex items-center gap-1.5 mb-1.5"><ShieldCheck className={`w-3.5 h-3.5 ${hired ? 'text-amber-700' : 'text-slate-500'}`} /><h3 className="text-xs font-semibold text-slate-700">Inbound Transport Accountability</h3></div>{hired ? <><div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs"><div><span className="text-slate-400">Mode:</span> <span className="font-semibold text-amber-800">Company-hired</span></div><div><span className="text-slate-400">Transporter:</span> <span className="text-slate-800">{transporter?.name || 'Not recorded'} {transporter?.transporter_code ? `(${transporter.transporter_code})` : ''}</span></div><div><span className="text-slate-400">Agreed rate:</span> <span className="font-mono text-slate-800">{viewTransportClaim ? `${viewTransportClaim.currency_code} ${viewTransportClaim.rate_per_tonne}` : 'Missing'} / t</span></div><div><span className="text-slate-400">Supplier document:</span> <span className="font-mono text-slate-800">{viewTransportClaim?.invoice_number || viewTransportClaim?.waybill_reference || 'Missing'}</span></div></div>{canCorrectTransport && !viewTransportClaim && ['admin', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '') && <details className="mt-3 border-t border-amber-200 pt-3" open={!ticket.inbound_transporter_id}><summary className="cursor-pointer text-xs font-semibold text-amber-900">Select / add transporter</summary><div className="mt-2"><TransporterPicker value={ticket.inbound_transporter_id || ''} onSelect={async selected => {
+                    const { error } = await supabase.rpc('complete_pending_grn_transporter', { p_grn_id: viewing.id, p_transporter_id: selected.id });
+                    if (error) throw error;
+                    setViewing(current => current?.id === viewing.id ? { ...current, weigh_bridge_tickets: Array.isArray((current as any).weigh_bridge_tickets) ? [{ ...ticket, inbound_transporter_id: selected.id, haulier_code: selected.transporter_code, inbound_transporters: selected }] : { ...ticket, inbound_transporter_id: selected.id, haulier_code: selected.transporter_code, inbound_transporters: selected } } as any : current);
+                    toast.success('Transporter details saved.');
+                  }} /></div>{ticket.inbound_transporter_id && <PendingTransporterDetails key={viewing.id + ':' + ticket.inbound_transporter_id} grnId={viewing.id} transporterId={ticket.inbound_transporter_id} onSaved={name => {
+                    setViewing(current => {
+                      if (current?.id !== viewing.id) return current;
+                      const currentTicket = Array.isArray((current as any).weigh_bridge_tickets) ? (current as any).weigh_bridge_tickets[0] : (current as any).weigh_bridge_tickets;
+                      if (currentTicket?.inbound_transporter_id !== ticket.inbound_transporter_id) return current;
+                      const nextTicket = { ...currentTicket, inbound_transporters: { ...transporter, name } };
+                      return { ...current, weigh_bridge_tickets: Array.isArray((current as any).weigh_bridge_tickets) ? [nextTicket] : nextTicket } as any;
+                    });
+                  }} />}</details>}{canCorrectTransport && <div className="mt-3 space-y-2 border-t border-amber-200 pt-3"><p className="text-[11px] font-semibold text-amber-900">Edit transport details</p><div className="grid grid-cols-2 gap-2"><Input aria-label="Agreed rate per tonne" type="number" min="0" step="0.01" value={transportRate} onChange={(event) => setTransportRate(event.target.value)} placeholder="Rate per tonne" className="h-8 bg-white text-xs" /><Select value={transportCurrency} onValueChange={setTransportCurrency}><SelectTrigger className="h-8 bg-white text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="USD">USD</SelectItem><SelectItem value="ZIG">ZIG</SelectItem><SelectItem value="ZAR">ZAR</SelectItem></SelectContent></Select></div><Input aria-label="Transport invoice number" value={transportInvoice} onChange={(event) => setTransportInvoice(event.target.value)} placeholder="Invoice number (optional)" className="h-8 bg-white text-xs" /><Input aria-label="Waybill reference" value={transportWaybill} onChange={(event) => setTransportWaybill(event.target.value)} placeholder="Waybill reference (optional)" className="h-8 bg-white text-xs" /><label className="block text-xs font-medium text-slate-700">Transport notes<Textarea value={transportNotes} onChange={(event) => setTransportNotes(event.target.value)} maxLength={2000} className="mt-1 bg-white text-xs" /></label><Button type="button" size="sm" onClick={() => void saveMissingTransportCost()} disabled={savingViewTransportCost} className="w-full bg-amber-700 text-white hover:bg-amber-800">{savingViewTransportCost ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Truck className="mr-1.5 h-3.5 w-3.5" />}{savingViewTransportCost ? 'Saving...' : 'Save transport details'}</Button></div>}<p className="mt-2 text-[10px] text-amber-800">The Weighbridge transport option stays fixed. Select the transporter before saving freight costs; payment remains verified from Sage.</p></> : <p className="text-xs text-slate-600">Supplier-provided transport. No company freight claim should be created for this GRN.</p>}</div>;
                 })()}
 
                 {/* Notes */}

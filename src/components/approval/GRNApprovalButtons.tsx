@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, X, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import FinanceTransporterReview from '../grn/FinanceTransporterReview';
 
 interface GRNApprovalButtonsProps {
   grnId: string;
@@ -26,6 +27,7 @@ export default function GRNApprovalButtons({
 }: GRNApprovalButtonsProps) {
   const { profile } = useAuth();
   const [processing, setProcessing] = useState(false);
+  const [transporterBlocked, setTransporterBlocked] = useState(true);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showVatModal, setShowVatModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -48,7 +50,7 @@ export default function GRNApprovalButtons({
   }
 
   async function handleApprove() {
-    if (!profile) return;
+    if (!profile || transporterBlocked) return;
     setProcessing(true);
 
     try {
@@ -168,6 +170,7 @@ export default function GRNApprovalButtons({
   return (
     <>
       <div className={`space-y-3 ${className}`}>
+        <FinanceTransporterReview key={grnId} grnId={grnId} onBlocked={setTransporterBlocked} />
         {/* Finance Approval - Single Step */}
         {canApprove && (
           <div className="p-3 bg-[#0b0b30]/5 border border-[#0b0b30]/15 rounded-lg">
@@ -187,8 +190,8 @@ export default function GRNApprovalButtons({
               </button>
               <button
                 onClick={handleApprove}
-                disabled={processing || !vatReviewedAt}
-                title={vatReviewedAt ? undefined : 'Complete the Finance VAT review before approval.'}
+                disabled={processing || !vatReviewedAt || transporterBlocked}
+                title={transporterBlocked ? 'Resolve the transporter registration before approval.' : vatReviewedAt ? undefined : 'Complete the Finance VAT review before approval.'}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#ff9100] hover:bg-[#e67f00] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
