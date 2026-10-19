@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { Check, ChevronDown, FlaskConical, Layers, Package, Wheat } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, FlaskConical, Layers, Package, Wheat } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../ui/command';
 import { grnMaterialGroup, grnMaterialGroups, isGrnInput } from '../../lib/grnMaterials';
 import type { RawMaterial } from '../../types/database';
 
-const groupIcons = { 'Raw materials': Wheat, Packaging: Package, Premixes: Layers, 'Additives & minerals': FlaskConical, 'Other supplies': Package };
+const groupIcons = { 'Raw materials': Wheat, Packaging: Package, Premixes: Layers, 'Additives & minerals': FlaskConical, 'Other supplies': Package, 'Needs category review': AlertTriangle };
 
 export default function GRNMaterialPicker({ materials, finishedCodes, value, disabled, onSelect }: {
   materials: RawMaterial[]; finishedCodes: Set<string>; value: string; disabled: boolean; onSelect: (id: string) => void;
