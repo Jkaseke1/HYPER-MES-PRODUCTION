@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import type { Profile, Branch } from '../types/database';
 import type { Role, Permission, UserRole, UserBranchAccess } from '../types/permissions';
 import { APP_VERSION, APP_BUILD_TIME } from '../config/version';
+import { roleIdsIncludingPrimary, userRoleLabels, userAccessSaveError } from '../lib/userAccessEditor';
 import { broadcastSystemUpdate, fetchRecentSystemUpdates, fetchGitHubCommits, computeUpdateStatus, getNextVersion, SystemUpdateLogRecord, GitHubCommitRecord } from '../lib/updateManager';
 
 interface UserWithDetails extends Profile {
@@ -185,8 +186,9 @@ export default function AdminUsersPage() {
         supabase.from('approval_audit_log').select('*').order('created_at', { ascending: false }).limit(100),
       ]);
       
-      if (usersRes.error) console.error('Users fetch error:', usersRes.error);
-      if (rolesRes.error) console.error('Roles fetch error:', rolesRes.error);
+      for (const result of [usersRes, rolesRes, userRolesRes, userBranchRes, branchesRes]) {
+        if (result.error) throw result.error;
+      }
       if (permsRes.error) console.error('Permissions fetch error:', permsRes.error);
       if (branchesRes.error) console.error('Branches fetch error:', branchesRes.error);
       
@@ -248,6 +250,7 @@ export default function AdminUsersPage() {
       setAccessLogs(mergedLogs);
     } catch (error) {
       console.error('FetchData error:', error);
+      toast.error('User access data could not be loaded. No assignments were changed.');
     } finally {
       setLoading(false);
     }
@@ -255,7 +258,9 @@ export default function AdminUsersPage() {
 
   function openUserModal(user: UserWithDetails) {
     setSelectedUser(user);
-    setUserRoles(user.user_roles?.map(ur => ur.role_id) || []);
+    try {
+      setUserRoles(roleIdsIncludingPrimary(user.role, user.user_roles?.map(ur => ur.role_id) || [], roles));
+    } catch (error: any) { toast.error(error.message); return; }
     setUserBranches(user.user_branch_access?.map(uba => ({ 
       branch_id: uba.branch_id, 
       access_level: uba.access_level 
@@ -270,67 +275,32 @@ export default function AdminUsersPage() {
     setUserModal(true);
   }
 
-  async function saveUserProfile() {
-    if (!selectedUser) return;
-    setSaving(true);
-    
-    try {
-      // Update user profile
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          full_name: userProfile.full_name,
-          email: userProfile.email,
-          phone: userProfile.phone,
-          sage_agent_name: userProfile.sage_agent_name.trim() || null,
-          role: userProfile.role
-        })
-        .eq('id', selectedUser.id);
-
-      if (error) throw error;
-    } catch (error: any) {
-      console.error('Error updating user profile:', error);
-      alert('Failed to update user profile: ' + error.message);
-      setSaving(false);
-      return;
-    }
-  }
-
   async function saveUserRoles() {
-    if (!selectedUser) return;
+    if (!selectedUser || saving || profile?.role === 'md' || !isAdmin()) return;
     setSaving(true);
-    
     try {
-      // Update user profile first
-      await saveUserProfile();
-      
-      // Delete existing roles and add new ones
-      await supabase.from('user_roles').delete().eq('user_id', selectedUser.id);
-      if (userRoles.length > 0) {
-        await supabase.from('user_roles').insert(
-          userRoles.map(roleId => ({ user_id: selectedUser.id, role_id: roleId }))
-        );
-      }
-      
-      // Delete existing branch access and add new ones
-      await supabase.from('user_branch_access').delete().eq('user_id', selectedUser.id);
-      if (userBranches.length > 0) {
-        await supabase.from('user_branch_access').insert(
-          userBranches.map(ba => ({ 
-            user_id: selectedUser.id, 
-            branch_id: ba.branch_id, 
-            access_level: ba.access_level 
-          }))
-        );
-      }
+      const roleIds = roleIdsIncludingPrimary(userProfile.role, userRoles, roles);
+      const { data, error } = await supabase.rpc('admin_save_user_access', {
+        p_user_id: selectedUser.id,
+        p_full_name: userProfile.full_name,
+        p_email: userProfile.email,
+        p_phone: userProfile.phone || null,
+        p_sage_agent_name: userProfile.sage_agent_name.trim() || null,
+        p_primary_role: userProfile.role,
+        p_role_ids: roleIds,
+        p_branch_access: userBranches,
+      });
+      if (error) throw error;
+      if (data !== selectedUser.id) throw new Error('The user update was not confirmed. Reload and check the account.');
+      toast.success('Profile, roles and branch access saved.');
+      setUserModal(false);
+      await fetchData();
     } catch (error: any) {
-      console.error('Error saving user roles and access:', error);
-      alert('Failed to save user roles and access: ' + error.message);
+      console.error('Error saving user access:', error);
+      toast.error(userAccessSaveError(error));
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
-    setUserModal(false);
-    fetchData();
   }
 
   function openCreateUserModal() {
@@ -490,6 +460,7 @@ export default function AdminUsersPage() {
   }
 
   function toggleUserRole(roleId: string) {
+    if (userModal && roles.find(role => role.id === roleId)?.code === userProfile.role) return;
     setUserRoles(prev => 
       prev.includes(roleId) 
         ? prev.filter(id => id !== roleId)
@@ -545,7 +516,7 @@ export default function AdminUsersPage() {
 
   // Stats
   const totalUsers = users.length;
-  const adminCount = users.filter(u => u.user_roles?.some(ur => ur.roles?.code === 'admin')).length;
+  const adminCount = users.filter(u => !['md', 'finance_viewer'].includes(u.role) && (u.role === 'admin' || u.user_roles?.some(ur => ur.roles?.code === 'admin'))).length;
   const activeRoles = roles.filter(r => r.is_active).length;
 
   if (loading || permissionsLoading || authLoading) {
@@ -659,10 +630,10 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 text-slate-600">{user.email}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {user.user_roles?.length > 0 ? (
-                          user.user_roles.map(ur => (
-                            <span key={ur.id} className="px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full">
-                              {ur.roles?.name}
+                        {userRoleLabels(user.role, user.user_roles || [], roles).length > 0 ? (
+                          userRoleLabels(user.role, user.user_roles || [], roles).map(role => (
+                            <span key={role.code} title={role.source} className="px-2 py-0.5 bg-teal-50 text-teal-700 text-xs rounded-full">
+                              {role.name}
                             </span>
                           ))
                         ) : (
@@ -1089,8 +1060,8 @@ export default function AdminUsersPage() {
       )}
 
       {/* User Edit Modal */}
-      <Modal open={userModal} onClose={() => setUserModal(false)} title={`Edit User: ${selectedUser?.full_name}`} size="lg">
-        <div className="space-y-6">
+      <Modal open={userModal} onClose={() => { if (!saving) setUserModal(false); }} title={`Edit User: ${selectedUser?.full_name}`} size="lg">
+        <fieldset disabled={saving} className="space-y-6">
           {/* User Profile Section */}
           <div>
             <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
@@ -1139,7 +1110,14 @@ export default function AdminUsersPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Primary Role</label>
                 <select
                   value={userProfile.role}
-                  onChange={(e) => setUserProfile({ ...userProfile, role: e.target.value as Profile['role'] })}
+                  onChange={(e) => {
+                    const nextRole = e.target.value as Profile['role'];
+                    try {
+                      const nextIds = roleIdsIncludingPrimary(nextRole, userRoles, roles);
+                      setUserProfile({ ...userProfile, role: nextRole });
+                      setUserRoles(nextIds);
+                    } catch (error: any) { toast.error(error.message); }
+                  }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
                 >
                   <option value="operator">Operator</option>
@@ -1178,6 +1156,7 @@ export default function AdminUsersPage() {
                   <input
                     type="checkbox"
                     checked={userRoles.includes(role.id)}
+                    disabled={role.code === userProfile.role}
                     onChange={() => toggleUserRole(role.id)}
                     className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
                   />
@@ -1255,7 +1234,7 @@ export default function AdminUsersPage() {
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-        </div>
+        </fieldset>
       </Modal>
 
       {/* Role Edit Modal */}
