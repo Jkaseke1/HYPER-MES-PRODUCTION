@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { verifiedTransferBalances } from '../lib/transferStockValidation';
+import { transferRequestIdentity } from '../lib/transferRequestIdentity';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
@@ -553,6 +554,8 @@ export default function MaterialTransferPage() {
   const [refreshingReturnStock, setRefreshingReturnStock] = useState(false);
   const [stockCheckStatus, setStockCheckStatus] = useState('');
   const pendingStockChecks = useRef<Record<string, string>>({});
+  const transferSubmission = useRef<ReturnType<typeof transferRequestIdentity> | null>(null);
+  const creatingTransfers = useRef(false);
   const [openMaterialPickerId, setOpenMaterialPickerId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
   const fetchQueued = useRef(false);
@@ -813,7 +816,8 @@ export default function MaterialTransferPage() {
   }
 
   async function createTransfers() {
-    if (saving || refreshingTransferStock) return;
+    if (creatingTransfers.current || saving || refreshingTransferStock) return;
+    creatingTransfers.current = true;
     setSaving(true);
     setTransferError(null);
     try {
@@ -877,8 +881,6 @@ export default function MaterialTransferPage() {
 
       const freshSageBalances = await requestFreshSageTransferStock(validLines.map((line) => line.raw_material_id));
 
-      const transferBatchKey = crypto.randomUUID();
-
       // Sage is the stock authority for RM transfers. The bridge refreshes this
       // balance from the configured Sage company and verifies it again when posting.
       for (const line of validLines) {
@@ -893,35 +895,32 @@ export default function MaterialTransferPage() {
         }
       }
 
-      // Create all transfers
-      const errors: string[] = [];
-      for (const line of validLines) {
-        const material = rawMaterials.find(m => m.id === line.raw_material_id);
-        const { error } = await supabase.rpc('create_material_transfer_to_buffer', {
-          p_raw_material_id: line.raw_material_id,
-          p_from_warehouse_id: fromWarehouseId,
-          p_quantity: line.quantity,
-          p_unit: material?.unit || 'kg',
-          p_transfer_date: sharedForm.transfer_date,
-          p_purpose: sharedForm.purpose,
-          p_notes: sharedForm.notes || null,
-          p_production_order_id: sharedForm.production_order_id || null,
-          p_requested_by: user.id,
-          p_transfer_batch_key: transferBatchKey,
-        });
-
-        if (error) {
-          errors.push(`${material?.name || line.raw_material_id}: ${error.message}`);
-        }
+      const payload = {
+        p_lines: validLines.map(line => ({
+          raw_material_id: line.raw_material_id,
+          quantity: line.quantity,
+          unit: rawMaterials.find(material => material.id === line.raw_material_id)?.unit || 'kg',
+        })).sort((a, b) => a.raw_material_id.localeCompare(b.raw_material_id)),
+        p_from_warehouse_id: fromWarehouseId,
+        p_transfer_date: sharedForm.transfer_date,
+        p_purpose: istReference,
+        p_notes: sharedForm.notes || null,
+        p_production_order_id: sharedForm.production_order_id || null,
+        p_requested_by: user.id,
+      };
+      transferSubmission.current = transferRequestIdentity(transferSubmission.current, payload, () => crypto.randomUUID());
+      const { data: createdIds, error } = await withClientTimeout(
+        supabase.rpc('create_material_transfer_bundle', {
+          ...payload, p_transfer_batch_key: transferSubmission.current.key,
+        }),
+        30_000,
+        'Transfer save confirmation timed out. The IST may already exist. Check the register before retrying; do not use another IST number for the same movement.',
+      );
+      if (error) throw error;
+      if (!Array.isArray(createdIds) || createdIds.length !== validLines.length) {
+        throw new Error('The transfer save could not be confirmed. Check the existing IST before retrying; do not create a replacement IST.');
       }
-
-      if (errors.length > 0) {
-        setTransferError(errors.map((message) => message.toLowerCase().includes('duplicate key')
-          ? 'A transfer reference was already used while saving this line. Retry this material; the system will generate a new reference.'
-          : message));
-        setSaving(false);
-        return;
-      }
+      transferSubmission.current = null;
 
       setShowCreate(false);
       setTransferLines([{ id: crypto.randomUUID(), raw_material_id: '', quantity: 0, source_lot_id: '' }]);
@@ -936,8 +935,9 @@ export default function MaterialTransferPage() {
       fetchData();
     } catch (err: any) {
       console.error('Unexpected error:', err);
-      setTransferError([err.message || 'The transfer could not be saved. Please try again.']);
+      setTransferError([err.message || 'The save outcome is unconfirmed. Check the IST register before retrying; do not create a replacement IST.']);
     } finally {
+      creatingTransfers.current = false;
       setSaving(false);
     }
   }
@@ -1447,7 +1447,7 @@ export default function MaterialTransferPage() {
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-extrabold">Transfer could not be completed</p>
-                <p className="mt-1 text-xs text-red-800">Correct the items below and try again. No new line is created for a failed item.</p>
+                <p className="mt-1 text-xs text-red-800">If the connection was lost, check the IST register before retrying. An error response does not prove that nothing was saved.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-red-800">
                   {transferError.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}
                 </ul>
