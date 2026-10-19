@@ -137,23 +137,39 @@ async function refreshRequestedSageStock(event) {
 
   if (!itemCodes.length) throw new Error('Stock refresh request does not contain any Sage item codes.');
   if (itemCodes.length > 20) throw new Error('A Sage stock refresh may contain at most 20 materials.');
+  const materialIds = [...new Set((event.details?.materialIds || [])
+    .map(id => String(id || '').trim()).filter(Boolean))];
+  if (!materialIds.length || materialIds.length > 20) {
+    throw new Error('Stock check is missing its selected material IDs. Start a new stock check from the transfer form.');
+  }
+  if (materialIds.length !== itemCodes.length) {
+    throw new Error('Selected materials do not have distinct Sage item codes. Review the duplicate mappings before creating a transfer.');
+  }
 
   const warehouseCodes = [...new Set((event.details?.warehouseCodes || ['RM'])
     .map((code) => String(code || '').trim().toUpperCase())
     .filter((code) => ['RM', 'PD'].includes(code)))];
   if (warehouseCodes.length !== 1) throw new Error('A material-transfer Sage stock refresh must request exactly one warehouse: RM or PD.');
 
-  const result = await queueSageStockSync(itemCodes, 'material transfer preflight', { warehouseCodes });
+  // Code-only lookup can include an unselected catalogue alias. Scope this
+  // preflight to the exact selected rows and verify identities, not just counts.
+  const result = await queueSageStockSync(itemCodes, 'material transfer preflight', { warehouseCodes, materialIds });
   if (result.failures.length) {
     throw new Error(`Sage stock refresh failed: ${result.failures.slice(0, 3).join('; ')}`);
   }
-  if (result.materialCount !== itemCodes.length || result.synced !== itemCodes.length) {
-    throw new Error(`Incomplete Sage stock refresh: requested ${itemCodes.length} item(s), refreshed ${result.synced}. Check active material/Sage code mappings before retrying.`);
+  const refreshedIds = new Set(result.syncedMaterialIds || []);
+  const refreshedCodes = new Set(result.syncedItemCodes || []);
+  const missingIds = materialIds.filter(id => !refreshedIds.has(id));
+  const missingCodes = itemCodes.filter(code => !refreshedCodes.has(code));
+  if (result.materialCount !== materialIds.length || result.synced !== materialIds.length
+    || refreshedIds.size !== materialIds.length || refreshedCodes.size !== itemCodes.length
+    || missingIds.length || missingCodes.length) {
+    throw new Error(`Incomplete Sage stock refresh: ${result.synced} balance(s) saved for ${materialIds.length} selected material(s). Missing material IDs: ${missingIds.join(', ') || 'none'}; missing Sage codes: ${missingCodes.join(', ') || 'none'}. No transfer was created.`);
   }
 
   return {
     message: `Live Sage ${warehouseCodes[0]} stock refreshed for ${itemCodes.length} material${itemCodes.length === 1 ? '' : 's'}.`,
-    details: { itemCodes, warehouse: warehouseCodes[0], synced: result.synced },
+    details: { ...(event.details || {}), materialIds, itemCodes, warehouse: warehouseCodes[0], synced: result.synced },
   };
 }
 

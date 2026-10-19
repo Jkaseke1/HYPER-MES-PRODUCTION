@@ -17,8 +17,10 @@ for (const rows of [[], [{ raw_material_id: 'a', quantity: 12, is_fresh: false }
 assert.throws(() => validate(['a', 'b'], [{ raw_material_id: 'a', quantity: 12, is_fresh: true }], 'RM'));
 const records = Array.from({ length: 1200 }, (_, i) => ({ id: String(i), code: 'MAT' + i, sage_code: null, is_active: true }));
 records.unshift({ id: 'ffs-overlap', code: 'FFS0001', sage_code: '', is_active: true });
+records.unshift({ id: 'pack-alias', code: 'OLD-MAT0', sage_code: 'MAT0', is_active: true });
 const writes = [];
 const sdkReads = [];
+const sdkFailures = new Set();
 function query(table) {
   let rows = table === 'raw_materials' ? records : table === 'formulations' ? [{ sage_code: 'FFS0001', status: 'active' }] : [];
   const q = {
@@ -35,7 +37,13 @@ const mod = { exports: {} };
 vm.runInNewContext(fs.readFileSync('bridge/sageStockSync.js', 'utf8') +
   '\nmodule.exports.test = { loadMaterials, validatedStockQuantity };', {
   module: mod, process: { env: { SAGE_SDK_API_KEY: 'test-only' } }, URL, console,
-  require: name => name === './lib/db' ? { supabase: { from: query } } : { sdkJson(url) { sdkReads.push(url); return Promise.resolve({ quantity: 4500 }); } },
+  require: name => name === './lib/db' ? { supabase: { from: query } } : { sdkJson(url, options) {
+    assert.equal(new URL(url).pathname, '/api/v1/stock', 'Only read-only stock endpoint used');
+    assert.equal(options.method, undefined);
+    sdkReads.push(url);
+    if (sdkFailures.has(new URL(url).searchParams.get('itemCode'))) throw Error('Simulated network failure');
+    return Promise.resolve({ quantity: 4500 });
+  } },
 });
 async function main() {
   const result = await mod.exports.test.loadMaterials(['MAT1199']);
@@ -58,7 +66,7 @@ async function main() {
   assert.equal(writes.length, 0, 'No raw-material write can replace the finished-good PD balance');
   assert.equal(sdkReads.length, 0);
   const nineItems = ['FFS0001', ...Array.from({ length: 8 }, (_, i) => 'MAT' + i)];
-  const nine = await mod.exports.syncSageStock(nineItems, { warehouseCodes: ['RM'] });
+  const nine = await mod.exports.syncSageStock(nineItems, { warehouseCodes: ['RM'], materialIds: ['ffs-overlap', ...Array.from({ length: 8 }, (_, i) => String(i))] });
   assert.equal(nine.materialCount, 9);
   assert.equal(nine.synced, 9, 'All nine preflight items refresh, including FFS0001');
   assert.equal(nine.failures.length, 0);
@@ -75,12 +83,40 @@ async function main() {
   const context = { queueSageStockSync: async () => stockResult };
   vm.createContext(context);
   vm.runInContext(handler, context);
-  const event = { details: { itemCodes: ['MAT1199'], warehouseCodes: ['RM'] } };
+  const event = { details: { itemCodes: ['MAT1199'], materialIds: ['1199'], warehouseCodes: ['RM'], requestedBy: 'test-user' } };
   await assert.rejects(context.refreshRequestedSageStock(event), /Incomplete Sage stock refresh/);
   stockResult = { failures: ['SDK unavailable'], materialCount: 1, synced: 0 };
   await assert.rejects(context.refreshRequestedSageStock(event), /SDK unavailable/);
-  stockResult = { failures: [], materialCount: 1, synced: 1 };
+  stockResult = { failures: [], materialCount: 1, synced: 1, syncedMaterialIds: ['1199'], syncedItemCodes: ['MAT1199'] };
   assert.match((await context.refreshRequestedSageStock(event)).message, /refreshed/);
+  stockResult = { ...stockResult, syncedMaterialIds: ['wrong-id'] };
+  await assert.rejects(context.refreshRequestedSageStock(event), /Missing material IDs: 1199/);
+  stockResult = { ...stockResult, syncedMaterialIds: ['1199'], syncedItemCodes: ['wrong-code'] };
+  await assert.rejects(context.refreshRequestedSageStock(event), /missing Sage codes: MAT1199/);
+  const fourteenCodes = ['FFS0001', ...Array.from({ length: 13 }, (_, i) => 'MAT' + i)];
+  const fourteenIds = ['ffs-overlap', ...Array.from({ length: 13 }, (_, i) => String(i))];
+  const unscoped = await mod.exports.test.loadMaterials(fourteenCodes, { warehouseCodes: ['RM'] });
+  assert.equal(unscoped.length, 15, 'Reproduce 14 codes expanding to 15 catalogue records');
+  context.queueSageStockSync = (codes, reason, options) => mod.exports.syncSageStock(codes, options);
+  writes.length = 0; sdkReads.length = 0;
+  const fourteenEvent = { details: { itemCodes: fourteenCodes, materialIds: fourteenIds, warehouseCodes: ['RM'], requestedBy: 'test-user' } };
+  const confirmed = await context.refreshRequestedSageStock(fourteenEvent);
+  assert.equal(confirmed.details.synced, 14);
+  assert.equal(confirmed.details.requestedBy, 'test-user', 'Retain request audit context');
+  assert.equal(confirmed.details.materialIds.length, 14);
+  assert.equal(writes.length, 14);
+  assert(!writes.some(row => row.raw_material_id === 'pack-alias'), 'Unselected alias is not refreshed');
+  assert.equal(sdkReads.length, 14);
+  assert(writes.every(row => row.warehouse_id === 18));
+  await assert.rejects(context.refreshRequestedSageStock({ details: {
+    itemCodes: ['MAT0', 'MAT0'], materialIds: ['0', 'pack-alias'], warehouseCodes: ['RM'],
+  } }), /distinct Sage item codes/);
+  await assert.rejects(context.refreshRequestedSageStock({ details: {
+    itemCodes: ['MAT0'], warehouseCodes: ['RM'],
+  } }), /selected material IDs/);
+  sdkFailures.add('MAT0');
+  await assert.rejects(context.refreshRequestedSageStock(fourteenEvent), /Simulated network failure/);
+  sdkFailures.clear();
   const page = fs.readFileSync('src/pages/MaterialTransferPage.tsx', 'utf8');
   assert.match(page, /pendingStockChecks.current\[key\]/);
   assert.match(page, /120_000/);
@@ -112,6 +148,6 @@ async function main() {
   assert.equal((await uiContext.verifySageStock(['a'], 18)).get('a'), 50);
   assert.equal(requestCalls, 1, 'Timeout retry rechecks the existing read-only job');
   assert.equal(pending.current['RM:a'], undefined);
-  console.log('Stock preflight tests passed: complete coverage, server freshness, invalid quantities, >1000-row catalogue, and false success protection.');
+  console.log('Stock preflight tests passed: exact 14 selected IDs despite 15 catalogue matches, FFS overlap, missing/wrong identity denial, network failure, duplicate mapping guard, freshness and timeout retry.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

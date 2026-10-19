@@ -21,7 +21,7 @@ function getJson(urlString) {
   return sdkJson(urlString, { apiKey: SDK_API_KEY, timeoutMs: 15000 });
 }
 
-async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes } = {}) {
+async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes, materialIds } = {}) {
   let query = supabase
     .from('raw_materials')
     .select('id, code, sage_code')
@@ -32,7 +32,9 @@ async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes } = {
   }
   // Targeted preflights must not be limited to the first API page of the catalogue.
   let data, error;
-  if (itemCodes?.length) {
+  if (materialIds?.length) {
+    ({ data, error } = await query.in('id', materialIds));
+  } else if (itemCodes?.length) {
     const codes = [...new Set(itemCodes.map(code => String(code).trim().toUpperCase()))];
     const bySage = await query.in('sage_code', codes);
     const byCode = await supabase.from('raw_materials').select('id, code, sage_code')
@@ -79,7 +81,7 @@ async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes } = {
   return materials.filter((material) => !finishedGoodCodes.has((material.sage_code || material.code).trim().toUpperCase()));
 }
 
-async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {}) {
+async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes, materialIds } = {}) {
   if (!SDK_API_KEY) throw new Error('Missing SAGE_SDK_API_KEY or HYPER_SAGE_API_KEY for Sage stock sync');
   const requestedWarehouses = (warehouseCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean);
   const warehouses = requestedWarehouses.length
@@ -88,9 +90,11 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
   if (requestedWarehouses.length && warehouses.length !== requestedWarehouses.length) {
     throw new Error(`Unknown Sage warehouse requested: ${requestedWarehouses.filter((code) => !warehouses.some((warehouse) => warehouse.code === code)).join(', ')}`);
   }
-  const materials = await loadMaterials(itemCodes, { fullSync, warehouseCodes: warehouses.map(warehouse => warehouse.code) });
+  const materials = await loadMaterials(itemCodes, { fullSync, warehouseCodes: warehouses.map(warehouse => warehouse.code), materialIds });
   let synced = 0;
   const failures = [];
+  const syncedMaterialIds = new Set();
+  const syncedItemCodes = new Set();
 
   for (const material of materials) {
     const itemCode = (material.sage_code || material.code).trim().toUpperCase();
@@ -107,13 +111,17 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
         }, { onConflict: 'raw_material_id,warehouse_id' });
         if (error) throw new Error(error.message);
         synced += 1;
+        syncedMaterialIds.add(material.id);
+        syncedItemCodes.add(itemCode);
       } catch (error) {
         failures.push(`${itemCode}/${warehouse.code}: ${error.message}`);
       }
     }
   }
 
-  return { materialCount: materials.length, warehouseCount: warehouses.length, synced, failures, fullSyncBatch: !itemCodes?.length && !fullSync, fullSync };
+  return { materialCount: materials.length, warehouseCount: warehouses.length, synced, failures,
+    syncedMaterialIds: [...syncedMaterialIds], syncedItemCodes: [...syncedItemCodes],
+    fullSyncBatch: !itemCodes?.length && !fullSync, fullSync };
 }
 
 async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {

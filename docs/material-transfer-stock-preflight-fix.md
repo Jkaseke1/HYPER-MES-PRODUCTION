@@ -7,6 +7,11 @@ long-running refresh. Check the corresponding sync_log stock refresh details
 and bridge log to confirm which occurred.
 
 Changes:
+- Preflight selects the exact material IDs recorded by the stock-check request.
+  A different catalogue record sharing a Sage code is not included. Completion
+  checks the refreshed ID and code sets, not only the number of writes. Request
+  audit metadata is retained. Selected materials with duplicate Sage codes are
+  blocked rather than treating one physical balance as independent stock.
 - Explicit RM-only checks include active raw materials that also have an active
   formulation, such as FFS0001. Rolling/mixed/PD refresh exclusions are unchanged;
   finished-good PD cache rows retain their formulation ownership.
@@ -31,4 +36,7 @@ Deployment order:
 3. Deploy the frontend, then verify a read-only stock refresh for all selected
    materials. Test normal creation only with an authorised operational transfer.
 
-The migration and live-server update have not been applied by this local change.
+The initial clock migration was subsequently applied and the original bridge
+fix deployed by the operator. The exact-ID alias correction requires another
+backed-up bridge-file update only; no additional SQL migration, SDK binary update
+or historical data cleanup is part of that correction.
