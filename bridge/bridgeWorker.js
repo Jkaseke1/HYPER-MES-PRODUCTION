@@ -147,6 +147,9 @@ async function refreshRequestedSageStock(event) {
   if (result.failures.length) {
     throw new Error(`Sage stock refresh failed: ${result.failures.slice(0, 3).join('; ')}`);
   }
+  if (result.materialCount !== itemCodes.length || result.synced !== itemCodes.length) {
+    throw new Error(`Incomplete Sage stock refresh: requested ${itemCodes.length} item(s), refreshed ${result.synced}. Check active material/Sage code mappings before retrying.`);
+  }
 
   return {
     message: `Live Sage ${warehouseCodes[0]} stock refreshed for ${itemCodes.length} material${itemCodes.length === 1 ? '' : 's'}.`,

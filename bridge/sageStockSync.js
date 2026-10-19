@@ -30,7 +30,18 @@ async function loadMaterials(itemCodes, { fullSync = false } = {}) {
   if (!itemCodes?.length && !fullSync) {
     query = query.range(nextFullSyncOffset, nextFullSyncOffset + FULL_SYNC_BATCH_SIZE - 1);
   }
-  const { data, error } = await query;
+  // Targeted preflights must not be limited to the first API page of the catalogue.
+  let data, error;
+  if (itemCodes?.length) {
+    const codes = [...new Set(itemCodes.map(code => String(code).trim().toUpperCase()))];
+    const bySage = await query.in('sage_code', codes);
+    const byCode = await supabase.from('raw_materials').select('id, code, sage_code')
+      .eq('is_active', true).in('code', codes);
+    error = bySage.error || byCode.error;
+    data = [...new Map([...(bySage.data || []), ...(byCode.data || [])].map(row => [row.id, row])).values()];
+  } else {
+    ({ data, error } = await query);
+  }
   if (error) throw new Error(`Could not load MES raw materials: ${error.message}`);
   if (!itemCodes?.length && !fullSync) {
     nextFullSyncOffset = (data || []).length < FULL_SYNC_BATCH_SIZE
@@ -83,7 +94,7 @@ async function syncSageStock(itemCodes, { fullSync = false, warehouseCodes } = {
           raw_material_id: material.id,
           sage_code: itemCode,
           warehouse_id: warehouse.id,
-          quantity: Number(stock.quantity || 0),
+          quantity: validatedStockQuantity(stock.quantity),
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'raw_material_id,warehouse_id' });
@@ -171,6 +182,13 @@ async function syncFinishedGoodsStock(itemCodes, warehouseCodes) {
   }
 
   return { formulationCount: (formulations || []).length, synced, failures };
+}
+
+function validatedStockQuantity(value) {
+  if (value === null || value === undefined || value === '' || !Number.isFinite(Number(value))) {
+    throw new Error('Sage did not return a valid numeric stock quantity.');
+  }
+  return Number(value);
 }
 
 module.exports = { syncSageStock, syncFinishedGoodsStock };

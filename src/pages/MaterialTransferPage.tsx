@@ -3,6 +3,7 @@ import { Plus, Search, Factory, Calendar, Eye, CheckCircle, CheckCircle2, ArrowR
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
+import { verifiedTransferBalances } from '../lib/transferStockValidation';
 import { Dialog, DialogContent } from '../components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '../components/ui/command';
@@ -550,6 +551,8 @@ export default function MaterialTransferPage() {
   const [retryingSageId, setRetryingSageId] = useState<string | null>(null);
   const [refreshingTransferStock, setRefreshingTransferStock] = useState(false);
   const [refreshingReturnStock, setRefreshingReturnStock] = useState(false);
+  const [stockCheckStatus, setStockCheckStatus] = useState('');
+  const pendingStockChecks = useRef<Record<string, string>>({});
   const [openMaterialPickerId, setOpenMaterialPickerId] = useState<string | null>(null);
   const fetchInProgress = useRef(false);
   const fetchQueued = useRef(false);
@@ -746,126 +749,71 @@ export default function MaterialTransferPage() {
     }
   }
 
-  async function requestFreshSageTransferStock(materialIds: string[]) {
-    const uniqueMaterialIds = [...new Set(materialIds.filter(Boolean))];
-    setRefreshingTransferStock(true);
-    try {
-      const { data: refreshLogId, error: refreshError } = await withClientTimeout(
-        supabase.rpc('request_material_transfer_sage_refresh', {
-          p_material_ids: uniqueMaterialIds,
-        }),
-        12_000,
-        'Could not start the live Sage stock check within 12 seconds. Check the connection and try again.',
+  async function verifySageStock(materialIds: string[], warehouseId: 18 | 19) {
+    const ids = [...new Set(materialIds.filter(Boolean))].sort();
+    const warehouse = warehouseId === 18 ? 'RM' : 'PD';
+    const key = warehouse + ':' + ids.join(',');
+    setStockCheckStatus('Requesting Sage ' + warehouse + ' stock verification...');
+    let refreshLogId = pendingStockChecks.current[key];
+    if (!refreshLogId) {
+      const { data, error } = await withClientTimeout(
+        supabase.rpc(warehouseId === 18 ? 'request_material_transfer_sage_refresh' : 'request_material_transfer_reversal_sage_refresh',
+          { p_material_ids: ids }),
+        12_000, 'Could not request Sage stock verification. No new transfer was created.',
       );
-      if (refreshError) throw refreshError;
-      if (!refreshLogId) throw new Error('PlantControl did not return a Sage stock refresh reference. No transfer was created.');
-
-      const timeoutAt = Date.now() + 30_000;
-      let refreshCompleted = false;
-      while (Date.now() < timeoutAt) {
-        const { data: refreshLog, error: statusError } = await withClientTimeout(
-          supabase
-            .from('sync_log')
-            .select('status, message')
-            .eq('id', refreshLogId)
-            .maybeSingle(),
-          6_000,
-          'Could not read the Sage stock-check status. Check the connection and try again.',
-        );
-        if (statusError) throw statusError;
-        if (refreshLog?.status === 'success') {
-          refreshCompleted = true;
-          break;
-        }
-        if (refreshLog?.status === 'failed') throw new Error(refreshLog.message || 'Sage stock refresh failed.');
-        await new Promise((resolve) => window.setTimeout(resolve, 750));
-      }
-      if (!refreshCompleted) throw new Error('Live Sage stock refresh did not complete within 30 seconds. No transfer was created.');
-
-      const { data: refreshedBalances, error: balanceError } = await withClientTimeout(
-        supabase
-          .from('sage_stock_balances')
-          .select('raw_material_id, quantity, last_synced_at')
-          .eq('warehouse_id', 18)
-          .in('raw_material_id', uniqueMaterialIds),
-        8_000,
-        'Sage refreshed the stock, but PlantControl could not read the new balances. Try again.',
-      );
-      if (balanceError) throw balanceError;
-      if ((refreshedBalances || []).length !== uniqueMaterialIds.length) {
-        throw new Error('Sage did not return a current RM balance for every selected material.');
-      }
-
-      const currentAt = new Date();
-      const freshBalances = new Map<string, number>();
-      (refreshedBalances || []).forEach((balance: any) => {
-        const syncedAt = balance.last_synced_at ? new Date(balance.last_synced_at) : null;
-        if (!syncedAt || currentAt.getTime() - syncedAt.getTime() > 2 * 60 * 1000) {
-          throw new Error('Sage RM stock did not refresh in time. Please try again.');
-        }
-        freshBalances.set(balance.raw_material_id, Number(balance.quantity || 0));
-      });
-      // Refreshing the background register must not keep the transfer button
-      // disabled after the verified balances have already been returned.
-      void fetchData(true);
-      return freshBalances;
-    } finally {
-      setRefreshingTransferStock(false);
+      if (error) throw error;
+      if (!data) throw new Error('No Sage stock-check reference was returned. No new transfer was created.');
+      refreshLogId = data;
+      pendingStockChecks.current[key] = refreshLogId;
     }
+
+    const timeoutAt = Date.now() + 120_000;
+    let completed = false;
+    while (Date.now() < timeoutAt) {
+      const { data: log, error } = await withClientTimeout(
+        supabase.from('sync_log').select('status, message').eq('id', refreshLogId).maybeSingle(),
+        6_000, 'Could not read the stock-check status. No new transfer was created. Retry will check the same request.',
+      );
+      if (error) throw error;
+      if (log?.status === 'success') { completed = true; break; }
+      if (['failed', 'error'].includes(log?.status || '')) {
+        delete pendingStockChecks.current[key];
+        throw new Error(log?.message || 'Sage stock verification failed. No new transfer was created.');
+      }
+      setStockCheckStatus(log?.status === 'processing'
+        ? 'Reading Sage ' + warehouse + ' stock. Waiting for all selected materials...'
+        : 'Sage stock check is queued. Waiting for the bridge...');
+      await new Promise(resolve => window.setTimeout(resolve, 2_000));
+    }
+    if (!completed) throw new Error('Sage stock verification is still waiting after 2 minutes. No new transfer was created. Check bridge availability; retry will check the same request, not queue another.');
+
+    // Database time is authoritative; a laptop clock must not invalidate fresh stock.
+    delete pendingStockChecks.current[key];
+    setStockCheckStatus('Validating all selected Sage balances...');
+    const { data: rows, error } = await withClientTimeout(
+      supabase.rpc('read_material_transfer_stock', { p_material_ids: ids, p_warehouse_id: warehouseId }),
+      8_000, 'Could not read verified Sage balances. No new transfer was created.',
+    );
+    if (error) throw error;
+    const balances = verifiedTransferBalances(ids, rows || [], warehouse);
+    void fetchData(true);
+    return balances;
+  }
+
+  async function requestFreshSageTransferStock(materialIds: string[]) {
+    setRefreshingTransferStock(true);
+    try { return await verifySageStock(materialIds, 18); }
+    finally { setRefreshingTransferStock(false); setStockCheckStatus(''); }
   }
 
   async function requestFreshSageReturnStock(materialId: string) {
     setRefreshingReturnStock(true);
-    try {
-      const { data: refreshLogId, error: refreshError } = await withClientTimeout(
-        supabase.rpc('request_material_transfer_reversal_sage_refresh', { p_material_ids: [materialId] }),
-        12_000,
-        'Could not start the live Sage PD stock check within 12 seconds. Check the connection and try again.',
-      );
-      if (refreshError) throw refreshError;
-      if (!refreshLogId) throw new Error('PlantControl did not return a Sage PD stock refresh reference. No return was created.');
-
-      const timeoutAt = Date.now() + 30_000;
-      let refreshCompleted = false;
-      while (Date.now() < timeoutAt) {
-        const { data: refreshLog, error: statusError } = await withClientTimeout(
-          supabase.from('sync_log').select('status, message').eq('id', refreshLogId).maybeSingle(),
-          6_000,
-          'Could not read the Sage PD stock-check status. Check the connection and try again.',
-        );
-        if (statusError) throw statusError;
-        if (refreshLog?.status === 'success') {
-          refreshCompleted = true;
-          break;
-        }
-        if (refreshLog?.status === 'failed') throw new Error(refreshLog.message || 'Sage PD stock refresh failed.');
-        await new Promise((resolve) => window.setTimeout(resolve, 750));
-      }
-      if (!refreshCompleted) throw new Error('Live Sage PD stock refresh did not complete within 30 seconds. No return was created.');
-
-      const { data: balance, error: balanceError } = await withClientTimeout(
-        supabase
-          .from('sage_stock_balances')
-          .select('quantity, last_synced_at')
-          .eq('warehouse_id', 19)
-          .eq('raw_material_id', materialId)
-          .maybeSingle(),
-        8_000,
-        'Sage refreshed PD stock, but PlantControl could not read the new balance. Try again.',
-      );
-      if (balanceError) throw balanceError;
-      const syncedAt = balance?.last_synced_at ? new Date(balance.last_synced_at) : null;
-      if (!syncedAt || Date.now() - syncedAt.getTime() > 2 * 60 * 1000) {
-        throw new Error('Sage PD stock did not refresh in time. Please try again.');
-      }
-      void fetchData(true);
-      return Number(balance?.quantity || 0);
-    } finally {
-      setRefreshingReturnStock(false);
-    }
+    try { return (await verifySageStock([materialId], 19)).get(materialId)!; }
+    finally { setRefreshingReturnStock(false); setStockCheckStatus(''); }
   }
 
   async function createTransfers() {
+    if (saving || refreshingTransferStock) return;
     setSaving(true);
     setTransferError(null);
     try {
@@ -1619,6 +1567,7 @@ export default function MaterialTransferPage() {
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-slate-500">A fresh read from Sage RM is required before these transfers can be created.</p>
+                  {refreshingTransferStock && <p role="status" className="mt-2 flex items-center gap-2 text-sm font-semibold text-teal-800"><Loader2 className="h-4 w-4 animate-spin shrink-0" />{stockCheckStatus}</p>}
 
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <div className="min-w-[700px]">
