@@ -13,7 +13,8 @@ function isPackagingItem(item) {
   const description = [item.code, item.name, item.description]
     .map((value) => String(value || '').trim().toUpperCase())
     .join(' ');
-  return description.includes('PACKAGING') || description.includes('PACKADGING') || description.includes('MACRO PACK') || description.includes('MAXIPACK');
+  // Ingredient macro/maxipacks are not evidence of empty packaging.
+  return description.includes('PACKAGING') || description.includes('PACKADGING');
 }
 
 function isInSyncScope(item) {
