@@ -13,7 +13,7 @@ function isPackagingItem(item) {
   const description = [item.code, item.name, item.description]
     .map((value) => String(value || '').trim().toUpperCase())
     .join(' ');
-  return description.includes('PACKAGING') || description.includes('MACRO PACK') || description.includes('MAXIPACK');
+  return description.includes('PACKAGING') || description.includes('PACKADGING') || description.includes('MACRO PACK') || description.includes('MAXIPACK');
 }
 
 function isInSyncScope(item) {

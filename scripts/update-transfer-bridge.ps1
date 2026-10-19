@@ -8,7 +8,7 @@ $taskName = 'PlantControl Sage Bridge'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stage = Join-Path $env:TEMP "transfer-bridge-$stamp"
 $backup = "C:\PlantControl\Production\backups\transfer-bridge-$stamp"
-$files = @('bridgeWorker.js', 'materialTransferSdkAuto.js', 'sageStockSync.js', 'lib/sdkHttp.js')
+  $files = @('bridgeWorker.js', 'materialTransferSdkAuto.js', 'sageStockSync.js', 'syncMasterData.js', 'lib/sdkHttp.js')
 if ($IncludeGrnGuard) { $files += 'goodsReceiptAuto.js' }
 $settings = @{}
 foreach ($line in Get-Content -LiteralPath "$bridge\.env") {
