@@ -7,58 +7,89 @@ interface HyperfeedsLogoProps {
 }
 
 export default function HyperfeedsLogo({ className = '', variant = 'full', height = 48 }: HyperfeedsLogoProps) {
+  const h = typeof height === 'number' ? height : Number.parseFloat(String(height)) || 48;
+  const showSubtitle = variant === 'full';
+  const onLight = variant === 'light' || variant === 'compact';
+  const plantColor = onLight ? '#0b0c36' : '#ffffff';
+  const subtitleColor = onLight ? '#64748b' : 'rgba(255,255,255,0.85)';
+  const uid = React.useId().replace(/:/g, '');
+
   return (
-    <div className={`inline-flex items-center select-none ${className}`}>
+    <div
+      className={`inline-flex items-center gap-3 select-none ${className}`}
+      style={{ height: h }}
+    >
+      {/* Mark — circle wraps the icon only, never the wordmark */}
       <svg
-        viewBox="0 0 400 145"
-        style={{ height, width: 'auto' }}
-        className="drop-shadow-md"
+        viewBox="0 0 64 64"
+        style={{ height: h * 0.92, width: h * 0.92 }}
+        className="shrink-0 drop-shadow-sm"
         xmlns="http://www.w3.org/2000/svg"
+        aria-hidden
       >
         <defs>
-          <linearGradient id="navyGradComp" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0b0b34" />
-            <stop offset="50%" stopColor="#080829" />
-            <stop offset="100%" stopColor="#04041a" />
+          <linearGradient id={`pcMarkNavy-${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#12123a" />
+            <stop offset="100%" stopColor="#06061c" />
           </linearGradient>
-          <linearGradient id="orangeGradComp" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ff9100" />
+          <linearGradient id={`pcMarkOrange-${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ff9a1f" />
             <stop offset="100%" stopColor="#f97316" />
           </linearGradient>
         </defs>
-
-        {/* Outer Accent Arc */}
-        <ellipse cx="200" cy="72" rx="192" ry="56" fill="none" stroke="#ff8a00" strokeWidth="4.5" opacity="0.95" transform="rotate(-1 200 72)"/>
-
-        {/* Deep Navy Oval Body */}
-        <ellipse cx="200" cy="72" rx="188" ry="52" fill="url(#navyGradComp)" stroke="#040418" strokeWidth="2.5"/>
-
-        {/* Wheat Ears Icon */}
-        <g transform="translate(192, 16) scale(0.75)">
-          <path d="M-8,30 C-4,15 -10,5 -18,-5 C-12,0 -4,10 0,25" fill="none" stroke="#ff9100" strokeWidth="2.8" strokeLinecap="round"/>
-          <path d="M-18,-5 C-22,-3 -20,3 -14,5 C-10,6 -12,0 -18,-5 Z" fill="#ff9100"/>
-          <path d="M-14,5 C-18,7 -16,13 -10,15 C-6,16 -8,10 -14,5 Z" fill="#ff9100"/>
-          <path d="M-10,15 C-14,17 -12,23 -6,25 C-2,26 -4,20 -10,15 Z" fill="#ff9100"/>
-
-          <path d="M8,30 C4,15 10,5 18,-5 C12,0 4,10 0,25" fill="none" stroke="#ff9100" strokeWidth="2.8" strokeLinecap="round"/>
-          <path d="M18,-5 C22,-3 20,3 14,5 C10,6 12,0 18,-5 Z" fill="#ff9100"/>
-          <path d="M14,5 C18,7 16,13 10,15 C6,16 8,10 14,5 Z" fill="#ff9100"/>
-          <path d="M10,15 C14,17 12,23 6,25 C2,26 4,20 10,15 Z" fill="#ff9100"/>
-        </g>
-
-        {/* "Plant" Text */}
-        <text x="49" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="53" fill="#ffffff" letterSpacing="-1">Plant</text>
-
-        {/* "Control" Text */}
-        <text x="185" y="83" fontFamily="'Georgia', 'Times New Roman', serif" fontStyle="italic" fontWeight="900" fontSize="46" fill="url(#orangeGradComp)" letterSpacing="-1">Control</text>
-
-        {/* Subtitle */}
-        {variant !== 'compact' && (
-          <text x="200" y="110" fontFamily="'Arial Black', 'Helvetica', sans-serif" fontWeight="900" fontSize="13" fill="#ffffff" letterSpacing="4.5" textAnchor="middle">
-            MANUFACTURING SYSTEM
-          </text>
-        )}
+        <circle cx="32" cy="32" r="30" fill={`url(#pcMarkNavy-${uid})`} />
+        <circle cx="32" cy="32" r="30" fill="none" stroke={`url(#pcMarkOrange-${uid})`} strokeWidth="3.5" />
+        <path
+          d="M32 14c0 10-6 16-12 20 6 0 10-4 12-10 2 6 6 10 12 10-6-4-12-10-12-20z"
+          fill={`url(#pcMarkOrange-${uid})`}
+        />
+        <path
+          d="M32 24v22"
+          fill="none"
+          stroke="#ffb35c"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
       </svg>
+
+      <div className="flex min-w-0 flex-col justify-center leading-none">
+        <div className="flex items-baseline gap-0.5 whitespace-nowrap">
+          <span
+            className="font-black tracking-tight"
+            style={{
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              fontStyle: 'italic',
+              fontSize: Math.round(h * 0.42),
+              color: plantColor,
+            }}
+          >
+            Plant
+          </span>
+          <span
+            className="font-black tracking-tight"
+            style={{
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              fontStyle: 'italic',
+              fontSize: Math.round(h * 0.42),
+              color: '#ff9100',
+            }}
+          >
+            Control
+          </span>
+        </div>
+        {showSubtitle && (
+          <span
+            className="mt-1 font-bold uppercase tracking-[0.18em]"
+            style={{
+              fontFamily: 'Arial, Helvetica, sans-serif',
+              fontSize: Math.max(9, Math.round(h * 0.16)),
+              color: subtitleColor,
+            }}
+          >
+            Manufacturing System
+          </span>
+        )}
+      </div>
     </div>
   );
 }

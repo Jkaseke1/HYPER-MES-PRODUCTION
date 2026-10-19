@@ -50,24 +50,24 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-tr from-[#06061c] via-[#0b0c36]/90 to-transparent" />
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div>
-            <HyperfeedsLogo height={65} />
+            <HyperfeedsLogo height={56} />
           </div>
 
-          <div className="space-y-4">
-            <div className="inline-block px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs font-mono font-bold uppercase tracking-wider">
-              Manufacturing Execution System (MES)
+          <div className="space-y-5 max-w-lg">
+            <div className="inline-flex items-center rounded-full border border-orange-400/35 bg-orange-500/15 px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-orange-300">
+              Hyper Plant Control System
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight leading-tight">
+            <h1 className="text-[2rem] font-extrabold text-white tracking-tight leading-[1.15]">
               Precision Animal Nutrition & Feed Manufacturing
             </h1>
-            <p className="text-slate-300 text-base max-w-md leading-relaxed font-medium">
+            <p className="text-slate-300/95 text-[15px] leading-relaxed font-medium">
               Enterprise-grade manufacturing lifecycle management — from raw material intake to automated micro-dosing, batching, QC, and multi-branch dispatch.
             </p>
           </div>
 
-          <div className="text-xs text-slate-500 border-t border-slate-800/80 pt-4 flex justify-between items-center font-mono">
+          <div className="text-xs text-slate-500 border-t border-white/10 pt-4 flex justify-between items-center">
             <span>Hyperfeeds Animal Nutrition © {new Date().getFullYear()}</span>
-            <span className="text-orange-400 font-bold">v2.4.7</span>
+            <span className="text-orange-400/90 font-semibold tracking-wide">v2.4.7</span>
           </div>
         </div>
       </div>
@@ -76,26 +76,30 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-[#06061e]">
         <div className="w-full max-w-md space-y-6">
           {/* Mobile Header Logo */}
-          <div className="lg:hidden flex flex-col items-center gap-2 mb-6 text-center">
-            <HyperfeedsLogo height={52} />
-            <p className="text-xs text-orange-400 font-bold uppercase tracking-wider font-mono">Manufacturing Execution System</p>
+          <div className="lg:hidden flex flex-col items-center gap-3 mb-4 text-center">
+            <HyperfeedsLogo height={48} />
+            <p className="text-[11px] text-orange-300 font-semibold uppercase tracking-[0.14em]">
+              Hyper Plant Control System
+            </p>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-slate-100 relative overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)] p-8 border border-slate-100/90 relative overflow-hidden">
             {/* Top Corporate Accent Strip */}
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-500 via-amber-500 to-[#0b0c36]" />
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-500 via-amber-500 to-[#0b0c36]" />
 
-            <div className="mb-6 pt-2 flex items-center justify-between">
-              <div>
+            <div className="mb-7 pt-1 flex items-start justify-between gap-4">
+              <div className="min-w-0">
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">
                   {isLogin ? 'Sign In' : 'Create Account'}
                 </h2>
-                <p className="text-xs text-slate-500 font-medium mt-1">
-                  {isLogin ? 'Enter your credentials to access PlantControl' : 'Register a new employee user account'}
+                <p className="text-sm text-slate-500 font-medium mt-1.5 leading-snug">
+                  {isLogin
+                    ? 'Enter your credentials to access Plant Control'
+                    : 'Register a new employee user account'}
                 </p>
               </div>
-              <div className="hidden sm:block">
-                <HyperfeedsLogo variant="compact" height={36} />
+              <div className="hidden sm:block shrink-0">
+                <HyperfeedsLogo variant="compact" height={40} />
               </div>
             </div>
 
@@ -132,10 +136,8 @@ export default function LoginPage() {
                       <option value="md">Managing Director (MD)</option>
                       <option value="production_manager">Production Manager</option>
                       <option value="warehouse_manager">Warehouse Manager</option>
-                      <option value="warehouse_clerk">Warehouse Clerk</option>
                       <option value="logistics">Logistics Officer</option>
                       <option value="finance">Finance / Accountant</option>
-                      <option value="finance_viewer">Finance Viewer (Read Only)</option>
                       <option value="supervisor">Supervisor</option>
                       <option value="operator">Operator</option>
                       <option value="quality_controller">Quality Controller</option>
@@ -182,10 +184,10 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl text-sm font-black tracking-wide shadow-lg shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2 hover:scale-[1.01]"
+                className="w-full py-3.5 mt-1 bg-gradient-to-r from-orange-500 via-amber-600 to-orange-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold tracking-wide shadow-lg shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isLogin ? 'SIGN IN TO MES' : 'CREATE ACCOUNT'}
+                {isLogin ? 'Sign into Plant Control' : 'Create Account'}
               </button>
             </form>
 
