@@ -20,8 +20,14 @@ for (const status of ['success', 'pending', 'processing', 'failed', 'retry']) {
 }
 assert.match(incomingReceiptBlockReason(pending, {}, { [pending[0].id]: { status: 'posted' } }), /return record/);
 assert.equal(incomingReceiptBlockReason(pending, {}, { [pending[0].id]: { status: 'cancelled' } }), null);
-const page = fs.readFileSync('src/pages/ProductionWarehousePage.tsx', 'utf8');
+const page = fs.readFileSync('src/pages/ProductionWarehousePage.tsx', 'utf8').replace(/\r\n/g, '\n');
 assert.match(page, /for \(const transfer of bundle\.pendingTransfers\)/);
 assert.match(page, /Resume \$\{bundle\.pendingTransfers\.length\}/);
 assert.match(page, /setReceiptChecksReady\(!pendingError && !incomingSyncError && !incomingReversalsError\)/);
+const fetchStart = page.slice(page.indexOf('async function fetchTransfers'), page.indexOf('const [\n', page.indexOf('async function fetchTransfers')));
+assert.doesNotMatch(fetchStart, /setReceiptChecksReady\(false\)/);
+assert.match(page, /if \(refreshInFlight.current\) return/);
+assert.match(page, /setReceiptChecksError\(error\?\.message/);
+assert.match(page, /label: 'Checking receipt'/);
+assert.match(page, /Boolean\(receivingBundleKey\) \|\| receiptChecksRefreshing/);
 console.log('PASS: HFIST11965 seven received lines excluded, five remaining resumable; receipt/queue/return ambiguities blocked; failed safety reads disable receipt.');

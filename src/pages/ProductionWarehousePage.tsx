@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle2, Loader2, Truck, UserRound, X, SlidersHorizontal, Radio, Activity, BarChart3, ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
@@ -152,10 +152,16 @@ export default function ProductionWarehousePage() {
   const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
   const [incomingReversalsByTransferId, setIncomingReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
   const [receiptChecksReady, setReceiptChecksReady] = useState(false);
+  const [receiptChecksError, setReceiptChecksError] = useState<string | null>(null);
+  const [receiptChecksRefreshing, setReceiptChecksRefreshing] = useState(false);
+  const refreshInFlight = useRef(false);
 
   async function fetchTransfers(silent = false) {
-    setReceiptChecksReady(false);
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setReceiptChecksRefreshing(true);
     if (!silent) setLoading(true);
+    try {
     const [
       { data: smData, error: smError },
       { data: wbData, error: wbError },
@@ -189,6 +195,7 @@ export default function ProductionWarehousePage() {
     if (sagePdError) console.error('Failed to load Sage Production balances:', sagePdError);
     if (pendingError) console.error('Failed to load incoming production transfers:', pendingError);
     if (settingsError) console.error('Failed to load production stock thresholds:', settingsError);
+    if (pendingError) throw new Error('Incoming transfer checks failed. Refresh before receiving.');
 
     setTransfers((smData as any) || []);
     const nextIncomingTransfers = (incomingData as any) || [];
@@ -245,10 +252,12 @@ export default function ProductionWarehousePage() {
         setIncomingReversalsByTransferId(nextIncomingReversals);
       }
       setReceiptChecksReady(!pendingError && !incomingSyncError && !incomingReversalsError);
+      setReceiptChecksError(incomingSyncError || incomingReversalsError ? 'Sage queue or return checks failed. Refresh before receiving.' : null);
     } else {
       setIncomingSyncByTransferId({});
       setIncomingReversalsByTransferId({});
       setReceiptChecksReady(!pendingError);
+      setReceiptChecksError(null);
     }
 
     setMaterialSettings((settingsData as ProductionMaterialSetting[]) || []);
@@ -266,7 +275,14 @@ export default function ProductionWarehousePage() {
     });
     setSageProductionBalances(sagePdMap);
     setLastRefresh(new Date());
-    if (!silent) setLoading(false);
+    } catch (error: any) {
+      setReceiptChecksReady(false);
+      setReceiptChecksError(error?.message || 'Receipt checks failed. Refresh before receiving.');
+    } finally {
+      refreshInFlight.current = false;
+      setReceiptChecksRefreshing(false);
+      if (!silent) setLoading(false);
+    }
   }
 
   async function handleAcceptToProduction(transfer: PendingTransfer) {
@@ -432,7 +448,9 @@ export default function ProductionWarehousePage() {
   const getIncomingStage = (bundle: IncomingBundle): IncomingStage => {
     const waitingLines = bundle.pendingTransfers;
     if (waitingLines.length > 0) {
-      if (!receiptChecksReady) return { label: 'Receipt checks unavailable', detail: 'Refresh and wait for transfer, Sage queue and return checks before receiving.', tone: 'rose', canReceive: false };
+      if (!receiptChecksReady) return receiptChecksError
+        ? { label: 'Receipt checks unavailable', detail: receiptChecksError, tone: 'rose', canReceive: false }
+        : { label: 'Checking receipt', detail: 'Loading transfer, Sage queue and return checks.', tone: 'slate', canReceive: false };
       const blockReason = incomingReceiptBlockReason(waitingLines, incomingSyncByTransferId, incomingReversalsByTransferId);
       if (blockReason) return { label: 'Verify outstanding lines', detail: blockReason, tone: 'rose', canReceive: false };
       if (waitingLines.length !== bundle.transfers.length) {
@@ -550,6 +568,10 @@ export default function ProductionWarehousePage() {
 
   async function handleReceiveBundle(bundle: IncomingBundle) {
     if (receivingBundleKey) return;
+    if (refreshInFlight.current) {
+      setReceiptNotice({ tone: 'error', message: 'Receipt checks are refreshing. Wait for them to finish before receiving.' });
+      return;
+    }
     const stage = getIncomingStage(bundle);
     if (!stage.canReceive) {
       setReceiptNotice({ tone: 'error', message: stage.detail });
@@ -754,11 +776,11 @@ export default function ProductionWarehousePage() {
                     <div className="incoming-action flex justify-end">
                     {canApproveMaterialTransfer && stage.canReceive && (
                       selectedIncomingBundleKey === bundle.key ? (
-                        <button type="button" title={`Receive only ${bundle.pendingTransfers.length} outstanding lines into Production`} disabled={Boolean(receivingBundleKey)} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                        <button type="button" title={`Receive only ${bundle.pendingTransfers.length} outstanding lines into Production`} disabled={Boolean(receivingBundleKey) || receiptChecksRefreshing} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:cursor-wait">
                           {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing</> : <><CheckCircle2 className="h-4 w-4" />{bundle.pendingTransfers.length < bundle.transfers.length ? `Receive ${bundle.pendingTransfers.length}` : 'Approve'}</>}
                         </button>
                       ) : (
-                      <button type="button" title={hasProcessedIncomingIst ? 'Select the next IST to approve' : 'Select this IST for approval'} disabled={Boolean(selectedIncomingBundleKey)} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">
+                      <button type="button" title={hasProcessedIncomingIst ? 'Select the next IST to approve' : 'Select this IST for approval'} disabled={Boolean(selectedIncomingBundleKey) || receiptChecksRefreshing} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed">
                           <CheckCircle2 className="h-4 w-4" /> {bundle.pendingTransfers.length < bundle.transfers.length ? `Resume ${bundle.pendingTransfers.length}` : hasProcessedIncomingIst ? 'Next' : 'Select'}
                         </button>
                       )
