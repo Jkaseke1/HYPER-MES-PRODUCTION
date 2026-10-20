@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
+import { Plus, Trash2, Search, Eye, Package, Calendar, FileText, Hash, DollarSign, Scale, X, ChevronDown, ChevronUp, CheckCircle, AlertCircle, Loader2, RefreshCw, RotateCcw, ShieldCheck, Truck } from 'lucide-react';
 import GRNApprovalButtons from '../components/approval/GRNApprovalButtons';
 import TransporterPicker from '../components/grn/TransporterPicker';
 import PendingTransporterDetails from '../components/grn/PendingTransporterDetails';
@@ -106,7 +106,7 @@ export default function GoodsReceivedPage() {
   const { profile } = useAuth();
   const canViewInboundTransportDetails = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'weighbridge', 'weigh_bridge'].includes(profile?.role || '');
   const canCaptureTransportCost = ['admin', 'raw_material_manager', 'rm_manager', 'warehouse_manager'].includes(profile?.role || '');
-  const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager'].includes(profile?.role || '');
+  const canCompleteGrnCosting = ['admin', 'finance', 'production_receiver', 'supervisor', 'production_manager', 'raw_material_manager', 'rm_manager'].includes(profile?.role || '');
   const canManageGrnCorrections = ['admin', 'finance', 'accountant', 'raw_material_manager', 'rm_manager', 'warehouse_manager', 'production_manager'].includes(profile?.role || '');
   const [grns, setGrns] = useState<GoodsReceivedNote[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -135,6 +135,10 @@ export default function GoodsReceivedPage() {
   const [editReceivedDate, setEditReceivedDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editItems, setEditItems] = useState<any[]>([]);
+  const [originalEditItems, setOriginalEditItems] = useState<any[]>([]);
+  const [loadingGrnEdit, setLoadingGrnEdit] = useState(false);
+  const [editLoadError, setEditLoadError] = useState('');
+  const [editReferences, setEditReferences] = useState({ supplier_invoice_no: '', supplier_delivery_note_no: '', supplier_order_no: '', external_reference: '' });
   const [savingGrnEdit, setSavingGrnEdit] = useState(false);
   const [missingGrvReference, setMissingGrvReference] = useState('');
   const [savingReference, setSavingReference] = useState(false);
@@ -763,24 +767,43 @@ export default function GoodsReceivedPage() {
     };
   }, [viewModalOpen, viewing?.id]);
 
-  const openGrnCorrection = () => {
+  const openGrnCorrection = async () => {
     if (!viewing || !canManageGrnCorrections) return;
     if (!['pending', 'pending_costing', 'pending_finance'].includes(viewing.status)) {
       toast.error('Approved or rejected GRNs are locked. Correct the GRN before final approval.');
       return;
     }
-    setEditingGrn(viewing);
-    setEditSupplierId(viewing.supplier_id || 'other');
-    setEditUnregisteredSupplierName(viewing.unregistered_supplier_name || '');
-    setEditWeighBridgeTicketId((viewing as any).weigh_bridge_ticket_id || 'none');
-    setEditManualGrvNumber((viewing as any).manual_grv_number || '');
-    setEditReceivedDate(viewing.received_date || localDateInputValue());
-    setEditNotes(viewing.notes || '');
-    setEditItems(viewItems.map((item) => ({ ...item })));
+    setEditingGrn(null);
+    setEditItems([]);
+    setOriginalEditItems([]);
+    setEditLoadError('');
+    setLoadingGrnEdit(true);
     setGrnEditOpen(true);
+    try {
+      const header = await supabase.from('goods_received_notes').select('*').eq('id', viewing.id).single();
+      if (header.error) throw header.error;
+      if (!['pending', 'pending_costing', 'pending_finance'].includes(header.data.status)) throw new Error('This GRV is no longer editable. Refresh the register.');
+      const lines = await supabase.from('grn_items').select('*, raw_materials(code, name, unit)').eq('grn_id', viewing.id).order('id');
+      if (lines.error) throw lines.error;
+      if (!lines.data?.length) throw new Error('No GRV lines were returned. Check line access before editing; nothing has been saved.');
+      const grn = header.data;
+      setEditingGrn(grn);
+      setEditSupplierId(grn.supplier_id || 'other');
+      setEditUnregisteredSupplierName(grn.unregistered_supplier_name || '');
+      setEditWeighBridgeTicketId(grn.weigh_bridge_ticket_id || 'none');
+      setEditManualGrvNumber(grn.manual_grv_number || '');
+      setEditReceivedDate(grn.received_date || '');
+      setEditNotes(grn.notes || '');
+      setEditReferences({ supplier_invoice_no: grn.supplier_invoice_no || '', supplier_delivery_note_no: grn.supplier_delivery_note_no || '', supplier_order_no: grn.supplier_order_no || '', external_reference: grn.external_reference || '' });
+      setEditItems(lines.data.map(item => ({ ...item })));
+      setOriginalEditItems(lines.data.map(item => ({ ...item })));
+    } catch (error: any) {
+      setEditLoadError(error.message || 'Could not load the complete GRV.');
+    } finally { setLoadingGrnEdit(false); }
   };
 
   const saveGrnCorrection = async () => {
+    if (savingGrnEdit || loadingGrnEdit || editLoadError) return;
     if (!editingGrn || !canManageGrnCorrections) {
       toast.error('You do not have permission to correct this GRV.');
       return;
@@ -793,12 +816,16 @@ export default function GoodsReceivedPage() {
       toast.error('Manual GRV number and supplier are required.');
       return;
     }
+    if (!editReceivedDate || !editItems.length || editItems.some(item =>
+      !item.raw_material_id || item.received_qty === '' || !Number.isFinite(Number(item.received_qty)) || Number(item.received_qty) <= 0 ||
+      item.unit_cost === '' || !Number.isFinite(Number(item.unit_cost)) || Number(item.unit_cost) < 0 ||
+      item.ordered_qty === '' || !Number.isFinite(Number(item.ordered_qty)) || Number(item.ordered_qty) < 0)) {
+      toast.error('Enter a receipt date, a positive received quantity, and non-negative ordered quantity and unit cost on every line.');
+      return;
+    }
     setSavingGrnEdit(true);
     try {
-      const oldTicketId = (editingGrn as any).weigh_bridge_ticket_id || null;
       const newTicketId = editWeighBridgeTicketId === 'none' ? null : editWeighBridgeTicketId;
-      const ticketSupplierId = editSupplierId === 'other' ? null : editSupplierId;
-      const ticketSupplierName = editSupplierId === 'other' ? editUnregisteredSupplierName.trim() : null;
       const selectedTicket = newTicketId
         ? correctionWbTickets.find((ticket) => ticket.id === newTicketId)
         : null;
@@ -807,60 +834,30 @@ export default function GoodsReceivedPage() {
         throw new Error('The selected weighbridge ticket is no longer available for correction. Refresh and try again.');
       }
 
-      // Keep the source ticket and GRN aligned. A replaced ticket is released,
-      // while the selected ticket is reserved for this GRN until approval.
-      if (oldTicketId && oldTicketId !== newTicketId) {
-        const { error } = await supabase
-          .from('weigh_bridge_tickets')
-          .update({ status: 'open', updated_at: new Date().toISOString() })
-          .eq('id', oldTicketId)
-          .in('status', ['in_grn', 'linked']);
-        if (error) throw error;
-      }
-
-      if (newTicketId) {
-        const { error } = await supabase
-          .from('weigh_bridge_tickets')
-          .update({
-            status: 'in_grn',
-            supplier_id: ticketSupplierId,
-            unregistered_supplier_name: ticketSupplierName,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', newTicketId)
-          .in('status', ['open', 'in_grn', 'linked']);
-        if (error) throw error;
-      }
-
-      const { error: headerError } = await supabase
-        .from('goods_received_notes')
-        .update({
+      const serializeLines = (lines: any[]) => lines.map(item => ({
+        id: item.id?.startsWith('new-') ? null : item.id,
+        raw_material_id: item.raw_material_id,
+        ordered_qty: Number(item.ordered_qty ?? 0), received_qty: Number(item.received_qty), unit_cost: Number(item.unit_cost ?? 0),
+        batch_number: item.batch_number || null, expiry_date: item.expiry_date || null,
+      }));
+      const { error: headerError } = await supabase.rpc('save_grn_correction', {
+        p_grn_id: editingGrn.id,
+        p_expected_updated_at: editingGrn.updated_at,
+        p_expected_lines: serializeLines(originalEditItems),
+        p_header: {
           supplier_id: editSupplierId === 'other' ? null : editSupplierId,
           unregistered_supplier_name: editSupplierId === 'other' ? editUnregisteredSupplierName.trim() : null,
           weigh_bridge_ticket_id: newTicketId,
           manual_grv_number: editManualGrvNumber.trim(),
           received_date: editReceivedDate,
           notes: editNotes.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingGrn.id);
+          ...Object.fromEntries(Object.entries(editReferences).map(([key, value]) => [key, value.trim() || null])),
+        },
+        p_lines: serializeLines(editItems),
+      });
       if (headerError) throw headerError;
 
-      const updates = editItems.map((item) => supabase
-        .from('grn_items')
-        .update({
-          received_qty: Number(item.received_qty) || 0,
-          unit_cost: Number(item.unit_cost) || 0,
-          batch_number: item.batch_number || null,
-          expiry_date: item.expiry_date || null,
-        })
-        .eq('id', item.id)
-        .eq('grn_id', editingGrn.id));
-      const results = await Promise.all(updates);
-      const itemError = results.find((result) => result.error)?.error;
-      if (itemError) throw itemError;
-
-      toast.success(`${editingGrn.grn_number} corrected successfully.`);
+      toast.success(`${editingGrn.grn_number} corrected. Complete costing again before Finance approval.`);
       setGrnEditOpen(false);
       setViewModalOpen(false);
       setEditingGrn(null);
@@ -2766,21 +2763,23 @@ export default function GoodsReceivedPage() {
       </Dialog>
 
       {/* Pre-approval GRV correction modal */}
-      <Dialog open={grnEditOpen} onOpenChange={setGrnEditOpen}>
-        <DialogContent className="max-w-[1100px] w-[96vw] max-h-[92vh] overflow-hidden p-0 [&>button.absolute]:hidden">
+      <Dialog open={grnEditOpen} onOpenChange={open => { if (!savingGrnEdit && !loadingGrnEdit) setGrnEditOpen(open); }}>
+        <DialogContent className="flex max-w-[min(1200px,96vw)] w-[96vw] h-[92vh] min-h-0 min-w-0 flex-col gap-0 overflow-hidden p-0 [&>button.absolute]:hidden">
           <DialogHeader className="shrink-0 bg-slate-900 px-5 py-4 text-white">
-            <div className="flex items-center justify-between pr-10">
-              <div>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pr-10">
+              <div className="min-w-0">
                 <DialogTitle className="text-lg font-extrabold text-white">Correct GRV {editingGrn?.grn_number}</DialogTitle>
                 <DialogDescription className="mt-1 text-xs text-slate-300">Finance and manager correction window before approval. The original initiator remains unchanged.</DialogDescription>
               </div>
               <Badge className="border border-orange-300/30 bg-orange-500/15 text-orange-200">Pre-approval only</Badge>
             </div>
-            <button onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
+            <button disabled={savingGrnEdit || loadingGrnEdit} onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
               <X className="h-4 w-4" />
             </button>
           </DialogHeader>
-          <div className="max-h-[calc(92vh-74px)] overflow-y-auto bg-slate-50 p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-5">
+            {loadingGrnEdit ? <div role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-5 w-5 animate-spin" />Loading GRV lines...</div> : editLoadError ? <div role="alert" className="border border-red-200 bg-red-50 p-4 text-red-800">{editLoadError}<Button variant="outline" onClick={openGrnCorrection} className="ml-3">Retry</Button></div> : <>
+            <fieldset disabled={savingGrnEdit} className="min-w-0">
             <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Supplier *</Label>
@@ -2819,6 +2818,10 @@ export default function GoodsReceivedPage() {
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Received Date *</Label>
                 <Input type="date" value={editReceivedDate} onChange={(e) => setEditReceivedDate(e.target.value)} />
               </div>
+              {Object.entries(editReferences).map(([key, value]) => <div key={key} className="space-y-1.5">
+                <Label>{({ supplier_invoice_no: 'Supplier invoice', supplier_delivery_note_no: 'Delivery note', supplier_order_no: 'Supplier order', external_reference: 'External reference' } as Record<string, string>)[key]}</Label>
+                <Input value={value} onChange={e => setEditReferences(current => ({ ...current, [key]: e.target.value }))} />
+              </div>)}
               <div className="md:col-span-3 space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correction note</Label>
                 <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Explain the correction for the audit trail" rows={2} />
@@ -2828,33 +2831,37 @@ export default function GoodsReceivedPage() {
             <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white">
               <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm font-extrabold text-slate-900">GRV line corrections</p>
-                <p className="mt-1 text-xs text-slate-500">Correct received quantity, unit cost, batch, or expiry. Material identity remains fixed.</p>
               </div>
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader><TableRow className="bg-white"><TableHead>Material</TableHead><TableHead className="w-28 text-right">Received kg</TableHead><TableHead className="w-28 text-right">Unit cost</TableHead><TableHead className="w-36">Batch</TableHead><TableHead className="w-40">Expiry</TableHead></TableRow></TableHeader>
+                <Table className="min-w-[1040px]">
+                  <TableHeader><TableRow className="bg-white"><TableHead className="min-w-64">Material</TableHead><TableHead>Ordered</TableHead><TableHead>Received</TableHead><TableHead>Unit cost</TableHead><TableHead>Line value</TableHead><TableHead>Batch</TableHead><TableHead>Expiry</TableHead><TableHead /></TableRow></TableHeader>
                   <TableBody>
                     {editItems.map((item) => (
                       <TableRow key={item.id}>
-                        <TableCell><p className="text-xs font-bold text-slate-900">{item.raw_materials?.name || 'Material'}</p><p className="font-mono text-[10px] text-slate-500">{item.raw_materials?.code || '-'}</p></TableCell>
+                        <TableCell><GRNMaterialPicker materials={materials} finishedCodes={finishedCodes} value={item.raw_material_id} disabled={!inputCatalogueReady} onSelect={id => setEditItems(current => current.map(line => line.id === item.id ? { ...line, raw_material_id: id, raw_materials: materials.find(material => material.id === id) } : line))} /><span className="text-xs text-slate-500">{item.raw_materials?.unit || '-'}</span></TableCell>
+                        <TableCell><Input aria-label="Ordered quantity" type="number" min="0" step="0.001" value={item.ordered_qty ?? 0} onChange={e => setEditItems(current => current.map(line => line.id === item.id ? { ...line, ordered_qty: e.target.value } : line))} className="min-w-24" /></TableCell>
                         <TableCell><Input type="number" min="0" step="0.001" value={item.received_qty ?? ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, received_qty: e.target.value === '' ? '' : Number(e.target.value) } : line))} className="h-8 text-right text-xs" /></TableCell>
                         <TableCell><Input type="number" min="0" step="0.0001" value={item.unit_cost ?? ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, unit_cost: e.target.value === '' ? '' : Number(e.target.value) } : line))} className="h-8 text-right text-xs" /></TableCell>
+                        <TableCell className="whitespace-nowrap font-mono text-xs">{formatMoney(Number(item.received_qty) * Number(item.unit_cost))}</TableCell>
                         <TableCell><Input value={item.batch_number || ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, batch_number: e.target.value } : line))} className="h-8 text-xs" /></TableCell>
                         <TableCell><Input type="date" value={item.expiry_date || ''} onChange={(e) => setEditItems((current) => current.map((line) => line.id === item.id ? { ...line, expiry_date: e.target.value } : line))} className="h-8 text-xs" /></TableCell>
+                        <TableCell><Button variant="ghost" size="icon" title="Remove line" aria-label="Remove line" disabled={editItems.length <= 1} onClick={() => setEditItems(current => current.filter(line => line.id !== item.id))}><Trash2 className="h-4 w-4" /></Button></TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
+              <div className="flex items-center justify-between border-t p-3"><Button variant="outline" onClick={() => setEditItems(current => [...current, { ...emptyItem, id: `new-${crypto.randomUUID()}`, ordered_qty: 0, unit_cost: 0 }])}><Plus className="mr-2 h-4 w-4" />Add line</Button><span className="font-semibold">Total: {formatMoney(editItems.reduce((sum, item) => sum + Number(item.received_qty || 0) * Number(item.unit_cost || 0), 0))}</span></div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setGrnEditOpen(false)} disabled={savingGrnEdit}>Cancel</Button>
-              <Button type="button" onClick={saveGrnCorrection} disabled={savingGrnEdit} className="bg-orange-600 text-white hover:bg-orange-700">
+            </fieldset></>}
+          </div>
+            <div className="flex shrink-0 justify-end gap-2 border-t bg-white p-4">
+              <Button type="button" variant="outline" onClick={() => setGrnEditOpen(false)} disabled={savingGrnEdit || loadingGrnEdit}>Cancel</Button>
+              <Button type="button" onClick={saveGrnCorrection} disabled={savingGrnEdit || loadingGrnEdit || !!editLoadError || !editingGrn || !editItems.length} className="bg-orange-600 text-white hover:bg-orange-700">
                 {savingGrnEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 {savingGrnEdit ? 'Saving correction...' : 'Save GRV correction'}
               </Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
