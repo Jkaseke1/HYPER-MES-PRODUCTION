@@ -3,6 +3,7 @@ import { Boxes, Search, RefreshCw, AlertTriangle, Package, Calendar, CheckCircle
 import { supabase } from '../lib/supabase';
 import { transferSyncStatus } from '../lib/transferSyncStatus';
 import { incomingIstDate } from '../lib/incomingIstDate';
+import { incomingReceiptBlockReason } from '../lib/incomingReceiptSafety';
 import { transferQuantitySummary } from '../lib/transferQuantitySummary';
 import SageTransferHistory from '../components/SageTransferHistory';
 import { format } from 'date-fns';
@@ -150,8 +151,10 @@ export default function ProductionWarehousePage() {
   const [lastAlertSignature, setLastAlertSignature] = useState('');
   const [incomingSyncByTransferId, setIncomingSyncByTransferId] = useState<Record<string, IncomingSyncStage>>({});
   const [incomingReversalsByTransferId, setIncomingReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
+  const [receiptChecksReady, setReceiptChecksReady] = useState(false);
 
   async function fetchTransfers(silent = false) {
+    setReceiptChecksReady(false);
     if (!silent) setLoading(true);
     const [
       { data: smData, error: smError },
@@ -241,9 +244,11 @@ export default function ProductionWarehousePage() {
         });
         setIncomingReversalsByTransferId(nextIncomingReversals);
       }
+      setReceiptChecksReady(!pendingError && !incomingSyncError && !incomingReversalsError);
     } else {
       setIncomingSyncByTransferId({});
       setIncomingReversalsByTransferId({});
+      setReceiptChecksReady(!pendingError);
     }
 
     setMaterialSettings((settingsData as ProductionMaterialSetting[]) || []);
@@ -427,8 +432,11 @@ export default function ProductionWarehousePage() {
   const getIncomingStage = (bundle: IncomingBundle): IncomingStage => {
     const waitingLines = bundle.pendingTransfers;
     if (waitingLines.length > 0) {
+      if (!receiptChecksReady) return { label: 'Receipt checks unavailable', detail: 'Refresh and wait for transfer, Sage queue and return checks before receiving.', tone: 'rose', canReceive: false };
+      const blockReason = incomingReceiptBlockReason(waitingLines, incomingSyncByTransferId, incomingReversalsByTransferId);
+      if (blockReason) return { label: 'Verify outstanding lines', detail: blockReason, tone: 'rose', canReceive: false };
       if (waitingLines.length !== bundle.transfers.length) {
-        return { label: 'Partly received', detail: `${waitingLines.length} line${waitingLines.length === 1 ? '' : 's'} remain in the Buffer awaiting Production receipt.`, tone: 'amber', canReceive: false };
+        return { label: 'Partly received', detail: `${waitingLines.length} line${waitingLines.length === 1 ? '' : 's'} remain in Buffer. Resume receives only these lines; already received lines are excluded.`, tone: 'amber', canReceive: true };
       }
       return { label: 'Ready for production receipt', detail: 'All lines are allocated in Buffer and can now be received into Production Warehouse 19.', tone: 'amber', canReceive: true };
     }
@@ -541,6 +549,7 @@ export default function ProductionWarehousePage() {
 
 
   async function handleReceiveBundle(bundle: IncomingBundle) {
+    if (receivingBundleKey) return;
     const stage = getIncomingStage(bundle);
     if (!stage.canReceive) {
       setReceiptNotice({ tone: 'error', message: stage.detail });
@@ -745,12 +754,12 @@ export default function ProductionWarehousePage() {
                     <div className="incoming-action flex justify-end">
                     {canApproveMaterialTransfer && stage.canReceive && (
                       selectedIncomingBundleKey === bundle.key ? (
-                        <button type="button" title="Approve selected IST for Production receipt" disabled={isReceiving} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
-                          {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing</> : <><CheckCircle2 className="h-4 w-4" /> Approve</>}
+                        <button type="button" title={`Receive only ${bundle.pendingTransfers.length} outstanding lines into Production`} disabled={Boolean(receivingBundleKey)} onClick={() => handleReceiveBundle(bundle)} className="inline-flex min-h-10 items-center justify-center gap-2 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-teal-800 disabled:opacity-60">
+                          {isReceiving ? <><Loader2 className="h-4 w-4 animate-spin" /> Processing</> : <><CheckCircle2 className="h-4 w-4" />{bundle.pendingTransfers.length < bundle.transfers.length ? `Receive ${bundle.pendingTransfers.length}` : 'Approve'}</>}
                         </button>
                       ) : (
                       <button type="button" title={hasProcessedIncomingIst ? 'Select the next IST to approve' : 'Select this IST for approval'} disabled={Boolean(selectedIncomingBundleKey)} onClick={() => setSelectedIncomingBundleKey(bundle.key)} className="inline-flex min-h-10 items-center justify-center gap-2 border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-800 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50">
-                          <CheckCircle2 className="h-4 w-4" /> {hasProcessedIncomingIst ? 'Next' : 'Select'}
+                          <CheckCircle2 className="h-4 w-4" /> {bundle.pendingTransfers.length < bundle.transfers.length ? `Resume ${bundle.pendingTransfers.length}` : hasProcessedIncomingIst ? 'Next' : 'Select'}
                         </button>
                       )
                     )}
