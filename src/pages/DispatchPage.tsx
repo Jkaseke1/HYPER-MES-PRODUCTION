@@ -31,6 +31,11 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
+type CrmCustomerOption = { id: string; legal_name: string; trading_name: string | null; sage_customer_code: string | null; tax_number: string | null };
+type CrmWonDeal = { id: string; title: string; customer_id: string | null };
+const crmCustomerName = (c: CrmCustomerOption) => c.trading_name || c.legal_name;
+const crmCustomerLabel = (c: CrmCustomerOption) => `${crmCustomerName(c)}${c.sage_customer_code ? ` · ${c.sage_customer_code}` : ''}`;
+
 type DispatchDraftItem = { formulation_id: string; batch_number: string; quantity: number; quantity_bags: number; bag_size_kg: number; unit: string };
 const EMPTY_ITEM: DispatchDraftItem = { formulation_id: '', batch_number: '', quantity: 0, quantity_bags: 0, bag_size_kg: 50, unit: 'kg' };
 
@@ -95,6 +100,37 @@ export default function DispatchPage() {
   const [batchNumbers, setBatchNumbers] = useState<{ [key: string]: string[] }>({});
   const [stockBalances, setStockBalances] = useState<Record<string, number>>({});
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [crmCustomers, setCrmCustomers] = useState<CrmCustomerOption[]>([]);
+  const [crmWonDeals, setCrmWonDeals] = useState<CrmWonDeal[]>([]);
+  const [crmLink, setCrmLink] = useState<{ customerId: string; opportunityId: string }>({ customerId: '', opportunityId: '' });
+
+  // CRM is optional for Logistics: a failed lookup leaves the form fully manual.
+  const loadCrmOptions = useCallback(async () => {
+    const customers: CrmCustomerOption[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('crm_customers').select('id, legal_name, trading_name, sage_customer_code, tax_number').order('legal_name').range(from, from + 999);
+      if (error || !data) break;
+      customers.push(...(data as CrmCustomerOption[]));
+      if (data.length < 1000) break;
+    }
+    setCrmCustomers(customers);
+    const { data: deals } = await supabase.from('crm_opportunities').select('id, title, customer_id').eq('status', 'won').order('updated_at', { ascending: false }).limit(200);
+    const { data: linked, error: linkError } = await supabase.from('dispatch_orders').select('crm_opportunity_id').not('crm_opportunity_id', 'is', null);
+    if (linkError) { setCrmWonDeals([]); return; }
+    const used = new Set((linked || []).map((row: { crm_opportunity_id: string | null }) => row.crm_opportunity_id));
+    setCrmWonDeals(((deals || []) as CrmWonDeal[]).filter((deal) => !used.has(deal.id)));
+  }, []);
+
+  const applyCrmCustomer = (customer: CrmCustomerOption, opportunityId = '') => {
+    setCrmLink({ customerId: customer.id, opportunityId });
+    setForm((prev) => ({
+      ...prev,
+      dispatch_type: 'customer_direct',
+      customer_name: crmCustomerName(customer),
+      customer_code: customer.sage_customer_code || prev.customer_code,
+      vat_number: prev.vat_number || customer.tax_number || '',
+    }));
+  };
 
   const getFormulationBagSize = (formulationId: string) => {
     const formulation = formulations.find((f) => f.id === formulationId);
@@ -217,8 +253,12 @@ export default function DispatchPage() {
         toast.success('Dispatch order updated!');
       } else {
         const generatedNumber = await generateDispatchNumber();
+        const crmFields = form.dispatch_type === 'customer_direct' && crmLink.customerId
+          ? { crm_customer_id: crmLink.customerId, ...(crmLink.opportunityId ? { crm_opportunity_id: crmLink.opportunityId } : {}) }
+          : {};
         const { data, error } = await supabase.from('dispatch_orders').insert({ 
           ...form, 
+          ...crmFields,
           branch_id: form.dispatch_type === 'branch_transfer' ? form.branch_id : null,
           dispatch_number: generatedNumber, 
           status: 'pending', 
@@ -229,6 +269,16 @@ export default function DispatchPage() {
         if (!error && data) {
           const rows = dispatchItems.map((i) => ({ dispatch_order_id: data.id, formulation_id: i.formulation_id, batch_number: i.batch_number, quantity: i.quantity, quantity_bags: i.quantity_bags, bag_size_kg: i.bag_size_kg, unit: 'kg', unit_price: 0, line_total: 0 }));
           if (rows.length) await supabase.from('dispatch_items').insert(rows);
+          if ('crm_customer_id' in crmFields) {
+            const deal = crmWonDeals.find((d) => d.id === crmLink.opportunityId);
+            await supabase.from('crm_activities').insert({
+              customer_id: crmLink.customerId,
+              activity_type: 'note',
+              subject: `Dispatch ${generatedNumber} created${deal ? ` for won deal "${deal.title}"` : ''}`,
+              completed_at: new Date().toISOString(),
+              created_by: profile?.id || null,
+            });
+          }
           toast.success('Dispatch order created & D-Note generated!');
         }
         if (error) throw error;
@@ -248,6 +298,7 @@ export default function DispatchPage() {
 
   const resetForm = () => {
     setForm(initForm);
+    setCrmLink({ customerId: '', opportunityId: '' });
     setItems([{ ...EMPTY_ITEM }]);
     const defaultWarehouse = warehouses.find(wh => wh.code === 'DEB') || warehouses.find(wh => wh.code === 'DSP');
     if (defaultWarehouse) {
@@ -715,7 +766,7 @@ export default function DispatchPage() {
                 <RefreshCw className="w-4 h-4" />
               </button>
               <button
-                onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); }}
+                onClick={() => { resetForm(); setEditingOrderId(null); setShowCreate(true); loadCrmOptions(); }}
                 className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-500/20 transition-all active:scale-95 text-xs"
               >
                 <Plus className="w-4 h-4" />
@@ -1106,15 +1157,46 @@ export default function DispatchPage() {
                   </div>
                 ) : (
                   <>
+                    {crmWonDeals.length > 0 && (
+                      <div className="space-y-1 md:col-span-4">
+                        <label className="text-[11px] font-bold text-slate-600 uppercase">Won CRM deal (optional)</label>
+                        <select
+                          value={crmLink.opportunityId}
+                          onChange={(e) => {
+                            const deal = crmWonDeals.find((d) => d.id === e.target.value);
+                            const customer = deal && crmCustomers.find((c) => c.id === deal.customer_id);
+                            if (customer) applyCrmCustomer(customer, deal.id);
+                            else setCrmLink((prev) => ({ ...prev, opportunityId: '' }));
+                          }}
+                          className="w-full border border-teal-300 rounded-xl px-3 py-2 text-xs font-semibold bg-teal-50/40"
+                        >
+                          <option value="">Not from a CRM deal</option>
+                          {crmWonDeals.map((deal) => {
+                            const customer = crmCustomers.find((c) => c.id === deal.customer_id);
+                            return <option key={deal.id} value={deal.id}>{deal.title}{customer ? ` — ${crmCustomerName(customer)}` : ''}</option>;
+                          })}
+                        </select>
+                      </div>
+                    )}
                     <div className="space-y-1 md:col-span-2">
                       <label className="text-[11px] font-bold text-slate-600 uppercase">Customer Name *</label>
                       <input
                         type="text"
+                        list="dispatch-crm-customers"
                         value={form.customer_name}
-                        onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                        placeholder="e.g. Farmer Direct Ltd"
+                        onChange={(e) => {
+                          const customer = crmCustomers.find((c) => crmCustomerLabel(c) === e.target.value);
+                          if (customer) { applyCrmCustomer(customer); return; }
+                          setCrmLink({ customerId: '', opportunityId: '' });
+                          setForm({ ...form, customer_name: e.target.value });
+                        }}
+                        placeholder={crmCustomers.length ? 'Type to search CRM customers, or enter a name' : 'e.g. Farmer Direct Ltd'}
                         className="w-full border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold bg-white"
                       />
+                      <datalist id="dispatch-crm-customers">
+                        {crmCustomers.map((c) => <option key={c.id} value={crmCustomerLabel(c)} />)}
+                      </datalist>
+                      {crmLink.customerId && <p className="text-[10px] font-semibold text-teal-700">Linked to CRM customer{crmLink.opportunityId ? ' and won deal' : ''}</p>}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[11px] font-bold text-slate-600 uppercase">Customer Code</label>
