@@ -272,6 +272,14 @@ function getLegacyPermissions(role: string): string[] {
         'reconciliation.view',
       ];
     
+    case 'sales_manager':
+      return [
+        ...basePermissions,
+        'sales.view', 'sales.create', 'sales.edit',
+        'dispatch.view',
+        'reports.view', 'reports.export',
+      ];
+
     case 'logistics':
       return [
         ...basePermissions,

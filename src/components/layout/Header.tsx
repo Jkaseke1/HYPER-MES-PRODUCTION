@@ -389,6 +389,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     raw_material_manager: 'Raw Material Manager',
     weighbridge: 'Weighbridge Operator',
     logistics: 'Logistics Officer',
+    sales_manager: 'Sales Manager',
     operator: 'Operator',
     finance: 'Finance / Accountant',
     finance_viewer: 'Finance Viewer (Read Only)',
