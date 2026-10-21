@@ -315,7 +315,7 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
                           onChange('wb_inbound_currency_code', transporter.default_currency || 'USD');
                         }} />
                       </Field>
-                      <p className="text-[11px] text-slate-600">The GRN Raw Materials Manager will enter the rate, invoice or waybill, and transport notes after linking this signed ticket to the GRN.</p>
+                      <p className="text-[11px] text-slate-600">The GRN Raw Materials Manager records the flat delivery amount, invoice or waybill, and transport notes on the linked GRN.</p>
                     </div>
                   )}
                 </div>
