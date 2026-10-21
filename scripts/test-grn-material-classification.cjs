@@ -11,6 +11,12 @@ const material = { code: 'PARR0025', sage_code: '', name: 'PACKADGING ROAD RUNNE
 assert.equal(grnMaterialGroup(material), 'Packaging');
 assert.equal(isGrnInput(material, new Set()), true);
 assert.equal(isGrnInput(material, new Set(['PARR0025'])), false, 'Finished-good exclusion remains authoritative');
+const soya = { code: 'FFS0001', sage_code: '', name: 'Full Fat Soya Meal', category: 'protein' };
+assert.equal(isGrnInput(soya, new Set(['FFS0001'])), true, 'Purchased Full Fat Soya remains receivable despite its formulation');
+assert.equal(isGrnInput({ ...soya, code: 'OTHER' }, new Set(['OTHER'])), false);
+assert.equal(isGrnInput({ ...soya, category: 'finished_goods' }, new Set(['FFS0001'])), false);
+assert.equal(isGrnInput({ ...soya, name: 'Broiler Grower Feed' }, new Set(['FFS0001'])), false);
+assert.equal(isGrnInput({ ...soya, sage_code: 'OTHER' }, new Set(['OTHER'])), false);
 assert.equal(grnMaterialGroup({ name: 'PACKAGING BROILER FINISHER 50KG' }), 'Packaging');
 assert.equal(grnMaterialGroup({ name: 'Wheat Bran' }), 'Raw materials');
 assert.equal(grnMaterialGroup({ name: 'Broiler Starter Premix' }), 'Premixes');

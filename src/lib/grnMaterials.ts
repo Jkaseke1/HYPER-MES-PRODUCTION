@@ -31,7 +31,11 @@ export function grnMaterialGroup(material: { name: string; category?: string | n
 }
 
 export function isGrnInput(material: { name: string; code: string; sage_code?: string; category?: string }, finishedCodes: Set<string>) {
-  if ([material.code, material.sage_code].some((code) => code && finishedCodes.has(code.trim().toUpperCase()))) return false;
+  // This purchased protein also has a manufacturing formulation in Sage.
+  const purchasedSoya = (material.sage_code?.trim() || material.code.trim()).toUpperCase() === 'FFS0001'
+    && (material.category || '').trim().toLowerCase() === 'protein'
+    && material.name.trim().replace(/\s+/g, ' ').toLowerCase() === 'full fat soya meal';
+  if (!purchasedSoya && [material.code, material.sage_code].some((code) => code && finishedCodes.has(code.trim().toUpperCase()))) return false;
   const text = `${material.category || ''} ${material.name}`.toLowerCase();
   if (/packaging|premix|pre-mix/.test(text)) return true;
   return !/^(feed|feeds|finished_goods|finished goods)$/i.test(material.category || '')
