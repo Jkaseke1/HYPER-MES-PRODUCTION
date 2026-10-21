@@ -26,6 +26,7 @@ import StickyOperationsPanel from '../components/layout/StickyOperationsPanel';
 import toast from 'react-hot-toast';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { isGrnInput } from '../lib/grnMaterials';
+import { grnLineFromWeighbridge } from '../lib/grnWeighbridgeDraft';
 import GRNMaterialPicker from '../components/grn/GRNMaterialPicker';
 
 interface GRNItem {
@@ -252,6 +253,7 @@ export default function GoodsReceivedPage() {
   const [weighBridgeTicketId, setWeighBridgeTicketId] = useState('');
   const [wbTickets, setWbTickets] = useState<any[]>([]);
   const [correctionWbTickets, setCorrectionWbTickets] = useState<any[]>([]);
+  const [loadingTicketProduct, setLoadingTicketProduct] = useState(false);
   const [wbExpanded, setWbExpanded] = useState(false);
   const [transportAmount, setTransportAmount] = useState('');
   const [transportCurrency, setTransportCurrency] = useState('USD');
@@ -829,6 +831,24 @@ export default function GoodsReceivedPage() {
     } catch (error: any) {
       setEditLoadError(error.message || 'Could not load the complete GRV.');
     } finally { setLoadingGrnEdit(false); }
+  };
+
+  const loadCorrectionTicketProduct = async () => {
+    if (!editingGrn || !canManageGrnCorrections || editItems.length || originalEditItems.length || loadingTicketProduct || !inputCatalogueReady) return;
+    if (editWeighBridgeTicketId === 'none') { toast.error('Select the linked weighbridge ticket first.'); return; }
+    setLoadingTicketProduct(true);
+    try {
+      const { data: ticket, error } = await supabase.from('weigh_bridge_tickets')
+        .select('id, ticket_no, product_code, status, driver_signed, nett_mass').eq('id', editWeighBridgeTicketId).single();
+      if (error) throw error;
+      if (!ticket) throw new Error('The linked weighbridge ticket could not be loaded.');
+      const { material, receivedQty } = grnLineFromWeighbridge(ticket, materials.filter(candidate => isGrnInput(candidate, finishedCodes)));
+      setEditItems(current => current.length ? current : [{ ...emptyItem, id: `new-${crypto.randomUUID()}`,
+        raw_material_id: material.id, raw_materials: material, ordered_qty: 0, received_qty: receivedQty }]);
+      toast.success(receivedQty === '' ? 'Product loaded. Enter received quantity and unit cost from the receipt documents.'
+        : 'Product and signed net weight loaded. Verify the quantity and enter the unit cost.');
+    } catch (error: any) { toast.error(error.message || 'Could not load the weighbridge product.'); }
+    finally { setLoadingTicketProduct(false); }
   };
 
   const saveGrnCorrection = async () => {
@@ -2771,7 +2791,7 @@ export default function GoodsReceivedPage() {
       </Dialog>
 
       {/* Pre-approval GRV correction modal */}
-      <Dialog open={grnEditOpen} onOpenChange={open => { if (!savingGrnEdit && !loadingGrnEdit) setGrnEditOpen(open); }}>
+      <Dialog open={grnEditOpen} onOpenChange={open => { if (!savingGrnEdit && !loadingGrnEdit && !loadingTicketProduct) setGrnEditOpen(open); }}>
         <DialogContent className="flex max-w-[min(1200px,96vw)] w-[96vw] h-[92vh] min-h-0 min-w-0 flex-col gap-0 overflow-hidden p-0 [&>button.absolute]:hidden">
           <DialogHeader className="shrink-0 bg-slate-900 px-5 py-4 text-white">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 pr-10">
@@ -2781,7 +2801,7 @@ export default function GoodsReceivedPage() {
               </div>
               <Badge className="border border-orange-300/30 bg-orange-500/15 text-orange-200">Pre-approval only</Badge>
             </div>
-            <button disabled={savingGrnEdit || loadingGrnEdit} onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
+            <button disabled={savingGrnEdit || loadingGrnEdit || loadingTicketProduct} onClick={() => setGrnEditOpen(false)} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20" aria-label="Close">
               <X className="h-4 w-4" />
             </button>
           </DialogHeader>
@@ -2809,7 +2829,7 @@ export default function GoodsReceivedPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Linked weighbridge</Label>
-                <Select value={editWeighBridgeTicketId} onValueChange={setEditWeighBridgeTicketId}>
+                <Select value={editWeighBridgeTicketId} onValueChange={setEditWeighBridgeTicketId} disabled={loadingTicketProduct}>
                   <SelectTrigger><SelectValue placeholder="Select ticket" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No weighbridge ticket</SelectItem>
@@ -2842,7 +2862,7 @@ export default function GoodsReceivedPage() {
               <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm font-extrabold text-slate-900">GRV line corrections</p>
               </div>
-              {!editItems.length && <div role="status" className="border-b border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No material lines are saved on this draft. Add the missing lines from the original receipt documents.</div>}
+              {!editItems.length && <div className="space-y-3 border-b border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p role="status">No material lines are saved on this draft. Add the missing lines from the original receipt documents.</p>{editWeighBridgeTicketId !== 'none' && <Button type="button" variant="outline" onClick={() => void loadCorrectionTicketProduct()} disabled={!inputCatalogueReady || loadingTicketProduct || savingGrnEdit}><Scale className="mr-2 h-4 w-4" />{loadingTicketProduct ? 'Loading product...' : 'Load from weighbridge'}</Button>}</div>}
               <div className="overflow-x-auto">
                 <Table className="min-w-[1040px]">
                   <TableHeader><TableRow className="bg-white"><TableHead className="min-w-64">Material</TableHead><TableHead>Ordered</TableHead><TableHead>Received</TableHead><TableHead>Unit cost</TableHead><TableHead>Line value</TableHead><TableHead>Batch</TableHead><TableHead>Expiry</TableHead><TableHead /></TableRow></TableHeader>
@@ -2867,7 +2887,7 @@ export default function GoodsReceivedPage() {
             </fieldset></>}
           </div>
             <div className="flex shrink-0 justify-end gap-2 border-t bg-white p-4">
-              <Button type="button" variant="outline" onClick={() => setGrnEditOpen(false)} disabled={savingGrnEdit || loadingGrnEdit}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setGrnEditOpen(false)} disabled={savingGrnEdit || loadingGrnEdit || loadingTicketProduct}>Cancel</Button>
               <Button type="button" onClick={saveGrnCorrection} disabled={savingGrnEdit || loadingGrnEdit || !!editLoadError || !editingGrn || !editItems.length} className="bg-orange-600 text-white hover:bg-orange-700">
                 {savingGrnEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 {savingGrnEdit ? 'Saving correction...' : 'Save GRV correction'}
