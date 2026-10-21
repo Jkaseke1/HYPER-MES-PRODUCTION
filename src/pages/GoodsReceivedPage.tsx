@@ -117,6 +117,7 @@ export default function GoodsReceivedPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [createdGrnRecovery, setCreatedGrnRecovery] = useState<{ id: string; number: string; message: string } | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewing, setViewing] = useState<GoodsReceivedNote | null>(null);
   const [viewItems, setViewItems] = useState<any[]>([]);
@@ -539,6 +540,7 @@ export default function GoodsReceivedPage() {
   };
 
   const handleSaveGRN = async () => {
+    if (createdGrnRecovery) { toast.error('This GRN draft already exists. Open the saved GRN to complete it.'); return; }
     if (!inputCatalogueReady || items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.raw_material_id);
       return !material || !isGrnInput(material, finishedCodes);
@@ -587,6 +589,7 @@ export default function GoodsReceivedPage() {
       }
     }
 
+    let createdReceipt: { id: string; grn_number: string } | null = null;
     setSaving(true);
     try {
       const grnNumber = await generateGRNNumber();
@@ -626,6 +629,7 @@ export default function GoodsReceivedPage() {
         .single();
 
       if (grnError) throw grnError;
+      createdReceipt = { id: grn.id, grn_number: grn.grn_number };
 
       // Create GRN items
       const grnItems = items.map(item => ({
@@ -674,7 +678,12 @@ export default function GoodsReceivedPage() {
       fetchData();
     } catch (error: any) {
       console.error('Error creating GRN:', error);
-      if (String(error?.message || '').includes('uq_grn_weighbridge_ticket')) {
+      if (createdReceipt) {
+        setCreatedGrnRecovery({ id: createdReceipt.id, number: createdReceipt.grn_number,
+          message: error.message || 'A remaining receipt step failed.' });
+        toast.error(`${createdReceipt.grn_number} already exists. Complete that draft; do not create it again.`);
+        await fetchData(false);
+      } else if (String(error?.message || '').includes('uq_grn_weighbridge_ticket')) {
         toast.error('This weighbridge ticket is already linked to a GRN. Refresh the list and open the existing GRN instead.');
         await fetchData(false);
       } else {
@@ -686,6 +695,7 @@ export default function GoodsReceivedPage() {
   };
 
   const resetForm = () => {
+    setCreatedGrnRecovery(null);
     setSupplierId('');
     setSupplierSearch('');
     setSupplierPickerOpen(false);
@@ -742,6 +752,30 @@ export default function GoodsReceivedPage() {
     setTransportWaybill(transportClaim?.waybill_reference || '');
     setTransportNotes(transportClaim?.notes || '');
     setViewModalOpen(true);
+    return transportClaim;
+  };
+
+  const openCreatedGrnRecovery = async () => {
+    if (!createdGrnRecovery || saving) return;
+    const enteredTransport = { amount: transportAmount, currency: transportCurrency,
+      invoice: transportInvoice, waybill: transportWaybill, notes: transportNotes };
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.from('goods_received_notes')
+        .select('*, suppliers(name, code, sage_code), warehouses(name), weigh_bridge_tickets(*, inbound_transporters(name, transporter_code))')
+        .eq('id', createdGrnRecovery.id).single();
+      if (error) throw error;
+      if (!data) throw new Error('The saved GRN could not be loaded. Reopen it from the register.');
+      const savedClaim = await handleViewGRN(data as GoodsReceivedNote);
+      setModalOpen(false);
+      resetForm();
+      if (!savedClaim) {
+        setTransportAmount(enteredTransport.amount); setTransportCurrency(enteredTransport.currency);
+        setTransportInvoice(enteredTransport.invoice); setTransportWaybill(enteredTransport.waybill);
+        setTransportNotes(enteredTransport.notes);
+      }
+    } catch (error: any) { toast.error(error.message || 'Could not open the saved GRN.'); }
+    finally { setSaving(false); }
   };
 
   const saveMissingTransportCost = async () => {
@@ -1543,6 +1577,7 @@ export default function GoodsReceivedPage() {
             </button>
           </DialogHeader>
 
+          {createdGrnRecovery && <div role="alert" className="shrink-0 space-y-2 border-b border-amber-300 bg-amber-50 px-5 py-3 text-sm text-amber-950"><p className="font-bold">{createdGrnRecovery.number} is already saved as a draft.</p><p>{createdGrnRecovery.message}</p><p>Complete the existing draft. Do not create this receipt again.</p><Button type="button" variant="outline" disabled={saving} onClick={() => void openCreatedGrnRecovery()}><Eye className="mr-2 h-4 w-4" />Open saved GRN</Button></div>}
           <div className="flex-1 overflow-y-auto bg-[#f3f6f9]" style={{ scrollbarWidth: 'thin' }}>
             <div className="border-b border-slate-200 bg-white px-4 py-2.5">
               <div className="mx-auto grid max-w-[1380px] grid-cols-2 gap-2 md:grid-cols-4">
@@ -2195,7 +2230,7 @@ export default function GoodsReceivedPage() {
               </button>
               <button
                 onClick={handleSaveGRN}
-                disabled={saving}
+                disabled={saving || Boolean(createdGrnRecovery)}
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-[#f97316] hover:bg-[#ea580c] rounded-lg shadow-sm transition-all disabled:opacity-50"
               >
                 {saving ? (

@@ -104,7 +104,10 @@ const { PGlite } = require(process.env.PGLITE_MODULE || require.resolve('@electr
     await db.exec(`
       ALTER TABLE weigh_bridge_tickets ADD COLUMN inbound_transport_mode text DEFAULT 'company_hired',
         ADD COLUMN driver_signed boolean DEFAULT true, ADD COLUMN nett_mass numeric DEFAULT 20000,
-        ADD COLUMN inbound_transporter_id uuid DEFAULT '${material}';
+        ADD COLUMN inbound_transporter_id uuid DEFAULT '${material}',
+        ADD COLUMN inbound_rate_per_tonne numeric, ADD COLUMN inbound_currency_code text,
+        ADD COLUMN inbound_invoice_number text, ADD COLUMN inbound_waybill_reference text,
+        ADD COLUMN inbound_transport_notes text;
       CREATE TABLE inbound_transporters(id uuid PRIMARY KEY, is_active boolean);
       INSERT INTO inbound_transporters VALUES ('${material}', true);
       ALTER TABLE inbound_transport_claims ADD COLUMN id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -120,8 +123,9 @@ const { PGlite } = require(process.env.PGLITE_MODULE || require.resolve('@electr
         to_status text, note text, changed_by uuid);
       CREATE FUNCTION next_inbound_transport_claim_number() RETURNS text LANGUAGE sql AS $$ SELECT 'TEST-FREIGHT' $$;
     `);
+    await db.exec(fs.readFileSync('supabase/migrations/20260930181000_restrict_inbound_transport_to_admin.sql', 'utf8'));
     await db.exec(fs.readFileSync('supabase/migrations/20261019170000_guard_grn_transport_detail_edits.sql', 'utf8'));
-    await db.exec(fs.readFileSync('docs/sql/apply-live-grv-editor-flat-transport.sql', 'utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations/20261021110000_flat_grv_transport_and_editor_access.sql', 'utf8'));
     const freight = (id, amount = 125) => db.query('SELECT save_inbound_transport_flat_claim($1,$2,$3,$4,$5,$6,$7,$8) id',
       [id, ticket, material, amount, 'USD', 'FREIGHT-1', 'WB-1', 'Flat delivery']);
     for (const role of ['admin', 'raw_material_manager', 'rm_manager']) {
@@ -136,11 +140,16 @@ const { PGlite } = require(process.env.PGLITE_MODULE || require.resolve('@electr
     await db.exec(`SET test.role = 'raw_material_manager'`);
     await assert.rejects(freight(null, 0), /positive flat/);
     await assert.rejects(freight(null, 'NaN'), /positive flat/);
+    // The newer RPC permits RM, but the actual legacy BEFORE trigger still vetoes it.
+    await assert.rejects(freight(null), /Admin-only/);
+    await db.exec(fs.readFileSync('supabase/migrations/20261021150000_rm_transport_cost_guard_permissions.sql', 'utf8'));
     const claimId = (await freight(null)).rows[0].id;
     let claim = (await db.query('SELECT * FROM inbound_transport_claims')).rows[0];
     assert.equal(claim.calculated_amount, '125.00'); // 20 tonnes must NOT multiply the delivery amount.
     assert.equal(claim.rate_per_tonne, '0.0000');
     assert.equal(claim.pricing_basis, 'flat');
+    await db.exec(`SET test.role = 'rm_manager'`);
+    await freight(claimId, 125);
     await assert.rejects(freight(null), /claim changed/);
     await db.exec(`SET test.role = 'admin'`);
     await freight(claimId, 200);
@@ -155,7 +164,7 @@ const { PGlite } = require(process.env.PGLITE_MODULE || require.resolve('@electr
     await assert.rejects(freight(claimId), /Sage queue history/);
     await db.exec(`DELETE FROM sync_log; UPDATE inbound_transport_claims SET pricing_basis='per_tonne', rate_per_tonne=7, calculated_amount=140`);
     // Applying the additive migration again must not reinterpret legacy freight.
-    await db.exec(fs.readFileSync('supabase/migrations/20261021110000_flat_grv_transport_and_editor_access.sql', 'utf8'));
+    await db.exec(fs.readFileSync('docs/sql/apply-live-grv-editor-flat-transport.sql', 'utf8'));
     claim = (await db.query('SELECT * FROM inbound_transport_claims')).rows[0];
     assert.equal(claim.pricing_basis, 'per_tonne');
     assert.equal(claim.calculated_amount, '140.00');
@@ -164,6 +173,20 @@ const { PGlite } = require(process.env.PGLITE_MODULE || require.resolve('@electr
     assert.equal((await db.query('SELECT * FROM grn_items')).rows.length, 0);
     assert.equal((await db.query('SELECT get_grn_correction($1) snapshot', [grn])).rows[0].snapshot.lines.length, 1);
     await db.exec('RESET ROLE');
+    await db.exec(`ALTER TABLE inbound_transport_claims ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE inbound_transporters ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE inbound_transport_claim_history ENABLE ROW LEVEL SECURITY;
+      GRANT SELECT ON inbound_transport_claims, inbound_transporters, inbound_transport_claim_history TO authenticated;
+      GRANT INSERT, UPDATE, DELETE ON inbound_transport_claims TO authenticated;
+      SET ROLE authenticated; SET test.role='raw_material_manager'`);
+    assert.equal((await db.query('SELECT * FROM inbound_transport_claims')).rows.length, 1);
+    assert.equal((await db.query('SELECT * FROM inbound_transporters')).rows.length, 1);
+    assert.equal((await db.query('UPDATE inbound_transport_claims SET calculated_amount=999 RETURNING id')).rows.length, 0);
+    assert.equal((await db.query('SELECT calculated_amount FROM inbound_transport_claims')).rows[0].calculated_amount, '140.00');
+    await db.exec(`SET test.role='operator'`);
+    assert.equal((await db.query('SELECT * FROM inbound_transport_claims')).rows.length, 0);
+    await db.exec('RESET ROLE');
+    console.log('PASS: reproduced actual legacy Admin-only trigger failure; RM and alias can save after repair; RLS reads restored without allowing direct UPDATE.');
     console.log('PASS: admin/RM editor snapshot bypasses hidden-line ambiguity; flat freight, legacy preservation, audit, roles, duplicate claim and approval/Sage locks.');
     console.log('PASS: RM roles, full receipt edits, costs, line replacement, totals, audit, stale/empty/invalid/approved/queued rejection and atomic rollback.');
   } finally { await db.close(); }

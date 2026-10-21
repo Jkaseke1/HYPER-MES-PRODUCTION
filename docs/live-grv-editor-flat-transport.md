@@ -13,6 +13,15 @@ move stock, or queue Sage postings. An error rolls back the whole script.
 
 Pushing GitHub Pages deploys the frontend only; it does not apply this SQL.
 
+If the original bundle was already applied before the receiving-manager permission
+repair, run `supabase/migrations/20261021150000_rm_transport_cost_guard_permissions.sql`
+in LIVE. Older databases can still have an Admin-only claim trigger even though
+the flat-cost RPC permits Raw Materials Manager. This follow-up repairs that
+trigger and read policies without changing receipt data or approval permissions.
+For the failed HFGRV10421 attempt, first run the read-only
+`docs/sql/check-HFGRV10421-after-transport-error.sql` and reopen any existing draft;
+do not create another receipt to retry its transport charge.
+
 Read-only verification after applying:
 
 ```sql
