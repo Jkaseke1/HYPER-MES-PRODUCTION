@@ -387,7 +387,7 @@ export default function GoodsReceivedPage() {
       if (!document.hidden && grns.length > 0) {
         fetchSageSyncStatuses(grns as any[]);
       }
-    }, 15000);
+    }, 60000);
 
     return () => window.clearInterval(timer);
   }, [grns]);

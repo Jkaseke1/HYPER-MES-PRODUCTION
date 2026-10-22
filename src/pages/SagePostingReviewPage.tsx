@@ -450,7 +450,7 @@ export default function SagePostingReviewPage() {
 
   useEffect(() => {
     fetchData(false);
-    const interval = setInterval(() => fetchData(true), 15000);
+    const interval = setInterval(() => fetchData(true), 120000);
     return () => clearInterval(interval);
   }, [fetchData]);
 

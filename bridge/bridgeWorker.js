@@ -19,8 +19,8 @@ const { syncSageSoldTonnage } = require('./sageSoldTonnageSync');
 const { syncRawMaterials } = require('./syncMasterData');
 const { syncCrmCustomersFromSage } = require('./syncCrmCustomersFromSage');
 
-const DEFAULT_POLL_INTERVAL_MS = 5000;
-const MINIMUM_POLL_INTERVAL_MS = 2000;
+const DEFAULT_POLL_INTERVAL_MS = 15000;
+const MINIMUM_POLL_INTERVAL_MS = 15000;
 const configuredPollInterval = Number(process.env.BRIDGE_POLL_INTERVAL_MS);
 const POLL_INTERVAL_MS = Number.isFinite(configuredPollInterval)
   ? Math.max(configuredPollInterval, MINIMUM_POLL_INTERVAL_MS)
@@ -337,7 +337,7 @@ async function refreshCrmCustomerSales(reason) {
 async function processPendingEvents() {
   // Do not let a timer tick overlap a slow Sage post; the atomic claim remains
   // the safeguard when another worker instance is ever started accidentally.
-  if (eventProcessingInProgress) return;
+  if (eventProcessingInProgress) return { busy: true };
   eventProcessingInProgress = true;
   const deferredTransferStockCodes = new Set();
 
@@ -357,10 +357,10 @@ async function processPendingEvents() {
 
   if (error) {
     console.error('❌ Failed to read sync_log:', error.message);
-    return;
+    return { readFailed: true };
   }
 
-  if (!pending || pending.length === 0) return;
+  if (!pending || pending.length === 0) return { idle: true };
 
   console.log(`\n[${new Date().toISOString()}] Found ${pending.length} pending event(s)`);
 
@@ -696,8 +696,9 @@ async function startWorker() {
     void refreshCrmCustomerSales('startup refresh');
   }
 
-  await processPendingEvents();
-  setInterval(processPendingEvents, POLL_INTERVAL_MS);
+  const { startAdaptiveQueuePolling } = require('./lib/adaptiveQueuePoller');
+  console.log('Queue reads: active >=15s; idle up to 60s; database errors back off up to 5 minutes.');
+  startAdaptiveQueuePolling(processPendingEvents, { intervalMs: POLL_INTERVAL_MS });
   if (STOCK_SYNC_ENABLED && !DRY_RUN) {
     setInterval(() => { refreshSageStock(undefined, 'scheduled refresh'); }, STOCK_SYNC_INTERVAL_MS);
   }

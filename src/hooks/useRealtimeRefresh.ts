@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { canRefreshInBackground } from '../lib/backendAvailability';
 
 type RefreshCallback = () => void | Promise<void>;
 
@@ -19,12 +20,31 @@ export function useRealtimeRefresh(
 
   useEffect(() => {
     let timeoutId: number | undefined;
+    let refreshing = false;
+    let refreshQueued = false;
+    let stopped = false;
+    let nextReadAt = Date.now() + 60000;
     const scheduleRefresh = () => {
-      if (timeoutId) window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(() => {
+      if (stopped || !canRefreshInBackground()) return;
+      if (refreshing) { refreshQueued = true; return; }
+      if (timeoutId) return;
+      timeoutId = window.setTimeout(async () => {
         timeoutId = undefined;
-        void refreshRef.current();
-      }, debounceMs);
+        if (stopped || !canRefreshInBackground()) return;
+        refreshing = true;
+        nextReadAt = Date.now() + 60000;
+        try {
+          await refreshRef.current();
+        } catch (error) {
+          console.warn('Live refresh failed:', error);
+        } finally {
+          refreshing = false;
+          if (refreshQueued) {
+            refreshQueued = false;
+            scheduleRefresh();
+          }
+        }
+      }, Math.max(debounceMs, nextReadAt - Date.now()));
     };
 
     const channel = supabase.channel(channelName);
@@ -43,6 +63,7 @@ export function useRealtimeRefresh(
     window.addEventListener('plantcontrol:data-changed', refreshWhenActive);
 
     return () => {
+      stopped = true;
       if (timeoutId) window.clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
       window.removeEventListener('focus', refreshWhenActive);

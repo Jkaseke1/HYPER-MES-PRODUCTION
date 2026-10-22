@@ -467,7 +467,7 @@ export default function ProductionOrdersPage() {
 
   // Reconcile the list even when a browser misses a Supabase Realtime event.
   useEffect(() => {
-    const interval = window.setInterval(() => { void fetchOrders(true); }, 3000);
+    const interval = window.setInterval(() => { void fetchOrders(true); }, 60000);
     return () => window.clearInterval(interval);
   }, [fetchOrders]);
 
@@ -532,7 +532,7 @@ export default function ProductionOrdersPage() {
     const interval = window.setInterval(() => {
       loadSageIssueStatuses(orderIds);
       loadFinishedGoodsTransferStatuses(orderIds);
-    }, 10000);
+    }, 60000);
     return () => window.clearInterval(interval);
   }, [orders, loadSageIssueStatuses, loadFinishedGoodsTransferStatuses]);
 
@@ -576,7 +576,7 @@ export default function ProductionOrdersPage() {
     }
 
     loadSageIssueStatus(selected.id);
-    const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 10000);
+    const interval = window.setInterval(() => loadSageIssueStatus(selected.id, true), 60000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageIssueStatus]);
 
@@ -625,7 +625,7 @@ export default function ProductionOrdersPage() {
       return;
     }
     loadSageCompletionStatus(selected.id);
-    const interval = window.setInterval(() => loadSageCompletionStatus(selected.id), 5000);
+    const interval = window.setInterval(() => loadSageCompletionStatus(selected.id), 30000);
     return () => window.clearInterval(interval);
   }, [selected?.id, loadSageCompletionStatus]);
 
@@ -651,7 +651,7 @@ export default function ProductionOrdersPage() {
     };
 
     void refreshCompletion();
-    const interval = window.setInterval(refreshCompletion, 1500);
+    const interval = window.setInterval(refreshCompletion, 30000);
     return () => window.clearInterval(interval);
   }, [selected?.id, selected?.status, sageCompletionStatus?.status, loadSageCompletionStatus]);
 
@@ -1613,7 +1613,7 @@ export default function ProductionOrdersPage() {
     
     const interval = setInterval(() => {
       refreshSageStock(false);
-    }, 5000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [selected?.id, detailMaterials.length]);

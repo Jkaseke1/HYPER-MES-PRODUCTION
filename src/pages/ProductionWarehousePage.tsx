@@ -339,7 +339,7 @@ export default function ProductionWarehousePage() {
 
     const intervalId = window.setInterval(() => {
       fetchTransfers(true);
-    }, 12000);
+    }, 60000);
 
     return () => {
       window.clearInterval(intervalId);

@@ -120,7 +120,7 @@ export default function SyncLogPage() {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchLogs();
-    }, 30000); // Auto-refresh every 30 seconds
+    }, 120000); // Background review data does not need a rapid polling loop.
 
     return () => clearInterval(interval);
   }, [statusFilter, eventTypeFilter]);

@@ -69,7 +69,7 @@ export default function WarehousePage() {
       fetchData(true);
       if (tab === 'buffer') fetchBufferBalances();
       if (tab === 'movements') fetchMovements();
-    }, 12000);
+    }, 60000);
 
     return () => {
       window.clearInterval(intervalId);

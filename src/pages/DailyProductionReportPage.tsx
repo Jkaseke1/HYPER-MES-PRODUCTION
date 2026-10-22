@@ -72,7 +72,7 @@ export default function DailyProductionReportPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_materials' }, () => fetchReport(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'production_order_downtime' }, () => fetchReport(true))
       .subscribe();
-    const interval = window.setInterval(() => fetchReport(true), 30000);
+    const interval = window.setInterval(() => fetchReport(true), 120000);
     return () => { window.clearInterval(interval); supabase.removeChannel(channel); };
   }, [fetchReport]);
 
