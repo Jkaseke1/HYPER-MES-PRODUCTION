@@ -31,7 +31,7 @@ function cleanChangedSince(value) {
   return normalized;
 }
 
-const changedSince = cleanChangedSince(process.env.SAGE_CRM_CUSTOMER_CHANGED_SINCE);
+const configuredChangedSince = cleanChangedSince(process.env.SAGE_CRM_CUSTOMER_CHANGED_SINCE);
 
 function enforceSdkIdentity(body) {
   if (process.env.BRIDGE_ENFORCE_SAGE_IDENTITY !== 'true') return;
@@ -48,7 +48,7 @@ function enforceSdkIdentity(body) {
   }
 }
 
-async function createSyncRun() {
+async function createSyncRun(changedSince) {
   const { data, error } = await supabase
     .from('crm_sage_sync_runs')
     .insert({ source_endpoint: '/api/v1/crm/customers', changed_since: changedSince })
@@ -56,6 +56,21 @@ async function createSyncRun() {
     .single();
   if (error) throw error;
   return data.id;
+}
+
+async function mostRecentSuccessfulSync() {
+  if (configuredChangedSince) return configuredChangedSince;
+
+  const { data, error } = await supabase
+    .from('crm_sage_sync_runs')
+    .select('finished_at')
+    .eq('status', 'success')
+    .not('finished_at', 'is', null)
+    .order('finished_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.finished_at || null;
 }
 
 async function completeSyncRun(id, update) {
@@ -80,7 +95,11 @@ async function syncCrmCustomersFromSage() {
     throw new Error('CRM customer sync is disabled. Set SAGE_CRM_CUSTOMER_SYNC_ENABLED=true after the audit migration is applied.');
   }
 
-  const syncRunId = await createSyncRun();
+  // The initial run seeds the customer master. Every later run uses the last
+  // successful completion time as its Sage cursor, avoiding repeated full
+  // reads and upserts of the complete live customer catalogue.
+  const changedSince = await mostRecentSuccessfulSync();
+  const syncRunId = await createSyncRun(changedSince);
   const customers = [];
   let synced = 0;
   let source;
@@ -159,7 +178,7 @@ async function syncCrmCustomersFromSage() {
       customers_read: customers.length,
       customers_synced: synced,
     });
-    return { read: rows.length, synced };
+    return { read: rows.length, synced, changedSince };
   } catch (error) {
     await completeSyncRun(syncRunId, {
       status: 'failed',
