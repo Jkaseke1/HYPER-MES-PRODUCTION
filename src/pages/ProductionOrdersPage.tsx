@@ -133,6 +133,7 @@ export default function ProductionOrdersPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showOptionalSchedule, setShowOptionalSchedule] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showEditQty, setShowEditQty] = useState(false);
   const [showFinishedGoodsTransfer, setShowFinishedGoodsTransfer] = useState(false);
@@ -2031,16 +2032,16 @@ export default function ProductionOrdersPage() {
 
       {/* Create Order Modal */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-[1320px] w-[98vw] h-[94vh] max-h-[94vh] p-0 sm:!max-w-[1320px] flex flex-col [&>button.absolute]:hidden">
-          <div className="shrink-0 border-b bg-slate-900 text-white px-5 py-3 rounded-t-lg relative">
+        <DialogContent className="max-w-[1120px] w-[96vw] h-[90vh] max-h-[900px] p-0 sm:!max-w-[1120px] flex flex-col overflow-hidden [&>button.absolute]:hidden">
+          <div className="shrink-0 border-b-2 border-orange-500 bg-slate-950 text-white px-5 py-3 relative">
             <div className="flex items-center justify-between pr-10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-teal-500 rounded-lg flex items-center justify-center shadow-lg">
                   <Factory className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold tracking-tight">Create Production Order</h2>
-                  <p className="text-slate-400 text-xs">Set up batch details, scheduling and review the BOM before submitting</p>
+                  <h2 className="text-lg font-bold">New production order</h2>
+                  <p className="text-slate-300 text-xs">Choose the approved formula, line and batch size, then review packaging.</p>
                 </div>
               </div>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/15 text-white border border-white/20">Draft</span>
@@ -2054,7 +2055,7 @@ export default function ProductionOrdersPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 py-4 bg-gradient-to-b from-slate-200/80 via-slate-100 to-slate-300/70 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 py-4 bg-[#e8f2f1] space-y-4">
           {workflowError && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
               <div className="flex items-center gap-2 text-red-800">
@@ -2064,54 +2065,18 @@ export default function ProductionOrdersPage() {
             </div>
           )}
 
-          {/* Top Summary Cards Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            <div className="rounded-2xl border border-teal-200/80 bg-gradient-to-br from-teal-500/10 via-emerald-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
-              <div className="w-10 h-10 rounded-xl bg-teal-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-teal-500/20">
-                <Package className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-teal-800">Expected Output</p>
-                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
-                  {Number(form.planned_qty || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-semibold text-teal-700">kg</span>
-                </p>
-                <p className="text-[11px] font-medium text-slate-500">{(Number(form.planned_qty || 0) / 1000).toFixed(3)} Tonnes</p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/20">
-                <Layers className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-blue-800">Estimated Bags</p>
-                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
-                  {Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 50) || 0)} <span className="text-xs font-semibold text-blue-700">Bags</span>
-                </p>
-                <p className="text-[11px] font-medium text-slate-500">Bag Unit Size: {form.unit_size || 50} kg</p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-br from-purple-500/10 via-slate-500/5 to-white p-4 shadow-sm flex items-center gap-3.5 relative overflow-hidden">
-              <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-purple-500/20">
-                <ClipboardList className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-wider text-purple-800">BOM Ingredients</p>
-                <p className="text-2xl font-black text-slate-900 font-mono tracking-tight mt-0.5">
-                  {bomPreview.filter(ing => !ing.isPackaging).length} <span className="text-xs font-semibold text-purple-700">Raw Items</span>
-                </p>
-                <p className="text-[11px] font-medium text-slate-500">Auto-scaled to batch size</p>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-md border-b-2 border-orange-500 bg-[#10283d] px-4 py-3 text-sm shadow-sm">
+            <div><span className="text-teal-100/75">Planned output</span><strong className="ml-2 text-white">{Number(form.planned_qty || 0).toLocaleString()} kg</strong></div>
+            <div><span className="text-teal-100/75">Bags</span><strong className="ml-2 text-white">{Math.ceil(Number(form.planned_qty || 0) / (parseInt(form.unit_size, 10) || 50) || 0)} × {form.unit_size || 50} kg</strong></div>
+            <div><span className="text-teal-100/75">Formula items</span><strong className="ml-2 text-orange-300">{bomPreview.length}</strong></div>
           </div>
 
           {/* Core Order Setup Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="border border-teal-200 bg-[#f2f8f7] p-4 sm:p-5 space-y-4 rounded-md shadow-sm">
+            <div className="flex items-center justify-between border-b border-teal-200 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs">1</div>
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Primary Production Batch Details</h3>
+                <h3 className="text-sm font-bold text-slate-900">Batch details</h3>
               </div>
               <span className="text-xs font-semibold text-teal-700 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
                 Auto-Sequenced
@@ -2233,17 +2198,15 @@ export default function ProductionOrdersPage() {
             </div>
           </div>
 
-          {/* Scheduling & Workforce Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold text-xs">2</div>
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Scheduling, Shift & Workforce Allocation</h3>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">Optional Shift Setup</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="overflow-hidden rounded-md border border-teal-200 bg-[#f2f8f7] shadow-sm">
+            <button type="button" aria-expanded={showOptionalSchedule} onClick={() => setShowOptionalSchedule((shown) => !shown)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-teal-50">
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">Schedule &amp; crew</span>
+                <span className="mt-0.5 block text-xs text-slate-500">Optional. Add a shift, operator, dates or crew size.</span>
+              </span>
+              <span className="text-xs font-semibold text-teal-700">{showOptionalSchedule ? 'Hide details' : 'Add details'}</span>
+            </button>
+            {showOptionalSchedule && <div className="grid grid-cols-1 gap-4 border-t border-teal-200 px-4 py-4 md:grid-cols-3">
               <div>
                 <label className={labelCls}>Priority</label>
                 <select
@@ -2315,11 +2278,11 @@ export default function ProductionOrdersPage() {
                   placeholder="e.g. 5 workers"
                 />
               </div>
-            </div>
+            </div>}
           </div>
 
           {bomPreview.length > 0 && selectedFormulation && (
-            <div className="space-y-3 rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4">
+            <div className="space-y-3 rounded-md border border-teal-200 bg-[#f2f8f7] shadow-sm p-4">
               {(() => {
                 const premixLines = bomPreview.filter((ingredient: any) =>
                   /premix/i.test(`${ingredient.code || ''} ${ingredient.name || ''}`)

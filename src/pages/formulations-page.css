@@ -164,3 +164,16 @@
   .formula-stat p:last-child { font-size: 1.6rem; }
   .formula-search { min-width: 0; width: 100%; }
 }
+
+.formula-register { min-width: 980px; }
+.formula-register th, .formula-register td { padding: 12px 8px; overflow-wrap: anywhere; }
+.formula-register th { white-space: normal; letter-spacing: 0; }
+.formula-register th:first-child { width: 19%; }
+.formula-register th:last-child { width: 16%; }
+.formula-register th:nth-last-child(3) { width: 15%; }
+.formula-register button, .formula-register select { max-width: 100%; }
+.formula-register td:last-child > div { flex-wrap: wrap; }
+.formula-register select { width: 100%; padding-left: 4px; padding-right: 0; }
+.formula-register-empty th:nth-last-child(3) { width: auto; }
+.formula-register-empty th:nth-child(5) { width: 16%; }
+.formula-register-empty th:last-child { width: 8%; }
