@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Search, ChevronRight, GitCompare, X, CheckCircle2, FileText, Archive, AlertTriangle, ClipboardCheck, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { Formulation, FormulationIngredient, RawMaterial } from '../types/database';
 import { supabase } from '../lib/supabase';
 import Modal from '../components/ui/Modal';
@@ -104,6 +105,7 @@ const DEFAULT_CATEGORIES = [
 
 import { useAuth } from '../context/AuthContext';
 import { Star, Lock, ShieldCheck } from 'lucide-react';
+import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 
 export function isMacropackMaterial(item?: { name?: string; code?: string; category?: string | null }) {
   if (!item) return false;
@@ -143,6 +145,7 @@ export function getIngredientTypeCode(name: string, code: string): { isPremix: b
 }
 
 export default function FormulationsPage() {
+  const activationInFlight = useRef(new Set<string>());
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
   const [categories, setCategories] = useState<{ code: string; name: string }[]>(DEFAULT_CATEGORIES);
@@ -178,6 +181,7 @@ export default function FormulationsPage() {
   const [detailTab, setDetailTab] = useState<'ingredients' | 'packaging'>('ingredients');
   const [detailPkgItems, setDetailPkgItems] = useState<{ id: string; item_code: string; description: string; unit: string; expected_qty_per_tonne: number }[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [activatingFormulationId, setActivatingFormulationId] = useState<string | null>(null);
   const currentFormulaMaterialIds = new Set(detailIngs.map((ingredient) => ingredient.raw_material_id));
   const draftFormulaMaterialIds = new Set(ings.map((ingredient) => ingredient.raw_material_id).filter(Boolean));
 
@@ -195,9 +199,11 @@ export default function FormulationsPage() {
     return true;
   });
 
-  const fetchFormulations = useCallback(async () => {
-    setLoading(true);
-    const { data } = await supabase.from('formulations').select('*').order('name');
+  const fetchFormulations = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+    const { data, error: formulationsError } = await supabase.from('formulations').select('*').order('name');
+    if (formulationsError) throw formulationsError;
     setFormulations(data || []);
     
     // Fetch ingredient counts for each formulation
@@ -249,7 +255,11 @@ export default function FormulationsPage() {
       setFormulaReadiness({});
     }
     
-    setLoading(false);
+    } catch (error) {
+      console.error('Failed to refresh formulations:', error);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, []);
 
   const fetchMaterials = useCallback(async () => {
@@ -271,7 +281,14 @@ export default function FormulationsPage() {
     setCategories((data as { code: string; name: string }[]) || []);
   }, []);
 
-  useEffect(() => { fetchFormulations(); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
+  useEffect(() => { fetchFormulations(true); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
+  useRealtimeRefresh(
+    'formulations-page-live-refresh',
+    ['formulations', 'formulation_ingredients', 'formula_specs', 'formula_spec_lines', 'production_bom_packaging'],
+    () => fetchFormulations(),
+    500,
+    1200,
+  );
   
   const formulaGroups: FormulaGroup[] = Array.from(
     filtered.reduce((groups, formulation) => {
@@ -282,9 +299,12 @@ export default function FormulationsPage() {
       return groups;
     }, new Map<string, FormulaGroup>()).values(),
   ).map(group => {
-    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    const versions = [...group.versions].sort((a, b) => {
+      const versionDifference = Number(b.version || 0) - Number(a.version || 0);
+      return versionDifference || new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+    });
     return { ...group, current: versions[0], versions };
-  });
+  }).sort((a, b) => new Date(b.current.updated_at || b.current.created_at).getTime() - new Date(a.current.updated_at || a.current.created_at).getTime());
 
   // The version picker should show one product/formula entry at a time. Older
   // versions remain available from the history control after a formula is
@@ -298,9 +318,12 @@ export default function FormulationsPage() {
       return groups;
     }, new Map<string, FormulaGroup>()).values(),
   ).map(group => {
-    const versions = [...group.versions].sort((a, b) => Number(b.version || 0) - Number(a.version || 0));
+    const versions = [...group.versions].sort((a, b) => {
+      const versionDifference = Number(b.version || 0) - Number(a.version || 0);
+      return versionDifference || new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime();
+    });
     return { ...group, current: versions[0], versions };
-  });
+  }).sort((a, b) => new Date(b.current.updated_at || b.current.created_at).getTime() - new Date(a.current.updated_at || a.current.created_at).getTime());
 
   const withIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) > 0);
   const withoutIngredients = formulaGroups.filter(group => (formulationIngredientCounts[group.current.id] || 0) === 0);
@@ -1140,11 +1163,16 @@ export default function FormulationsPage() {
                                 return (
                                   <button
                                     onClick={async () => {
+                                      if (activationInFlight.current.has(f.id)) return;
+                                      activationInFlight.current.add(f.id);
+                                      const notificationId = `formula-activation-${f.id}`;
                                       try {
                                         if (!isFinanceUser) {
-                                          alert('Only Finance can approve a formula for production.');
+                                          toast.error('Only Finance can approve a formula for production.', { id: notificationId });
                                           return;
                                         }
+                                        setActivatingFormulationId(f.id);
+                                        toast.loading(`Activating ${f.code} v${f.version}…`, { id: notificationId });
                                         const { error: updateErr } = await supabase.rpc('activate_formula_revision', { p_id: f.id });
                                         if (updateErr) throw updateErr;
 
@@ -1154,19 +1182,29 @@ export default function FormulationsPage() {
                                           localStorage.setItem('daily_active_formulations', JSON.stringify(activeIds));
                                         }
 
-                                        setToastMessage(`✨ "${f.name} (v${f.version})" is now ACTIVE for Today's Production!`);
-                                        setTimeout(() => setToastMessage(null), 4000);
-                                        await fetchFormulations();
+                                        toast.success(`${f.name} v${f.version} is active and available to Production.`, {
+                                          id: notificationId,
+                                          duration: 5000,
+                                        });
+                                        void fetchFormulations();
                                       } catch (err: any) {
                                         console.error('Set active error:', err);
-                                        alert(`Could not activate formula: ${err.message || err}`);
-                                        await fetchFormulations();
+                                        toast.error(`Could not activate formula: ${err.message || err}`, {
+                                          id: notificationId,
+                                          duration: 6000,
+                                        });
+                                      } finally {
+                                        activationInFlight.current.delete(f.id);
+                                        setActivatingFormulationId(null);
                                       }
                                     }}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-md transition-colors whitespace-nowrap"
+                                    disabled={activatingFormulationId !== null}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-md transition-colors whitespace-nowrap disabled:cursor-wait disabled:opacity-70"
                                     title="Set as Finance-Approved Active Formulation for Today"
                                   >
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Activate
+                                    {activatingFormulationId === f.id
+                                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Activating…</>
+                                      : <><CheckCircle2 className="h-3.5 w-3.5" /> Activate</>}
                                   </button>
                                 );
                               })()}

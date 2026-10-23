@@ -10,6 +10,7 @@ export function useRealtimeRefresh(
   tables: string[],
   refresh: RefreshCallback,
   debounceMs = 450,
+  minimumIntervalMs = 60000,
 ) {
   const refreshRef = useRef(refresh);
   const tableKey = tables.join('|');
@@ -23,7 +24,7 @@ export function useRealtimeRefresh(
     let refreshing = false;
     let refreshQueued = false;
     let stopped = false;
-    let nextReadAt = Date.now() + 60000;
+    let nextReadAt = Date.now() + minimumIntervalMs;
     const scheduleRefresh = () => {
       if (stopped || !canRefreshInBackground()) return;
       if (refreshing) { refreshQueued = true; return; }
@@ -32,7 +33,7 @@ export function useRealtimeRefresh(
         timeoutId = undefined;
         if (stopped || !canRefreshInBackground()) return;
         refreshing = true;
-        nextReadAt = Date.now() + 60000;
+        nextReadAt = Date.now() + minimumIntervalMs;
         try {
           await refreshRef.current();
         } catch (error) {
@@ -72,5 +73,5 @@ export function useRealtimeRefresh(
       supabase.removeChannel(channel);
     };
     // tableKey intentionally stabilizes the subscription against equivalent array literals.
-  }, [channelName, tableKey, debounceMs]);
+  }, [channelName, tableKey, debounceMs, minimumIntervalMs]);
 }
