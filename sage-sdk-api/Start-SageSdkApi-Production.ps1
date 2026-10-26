@@ -40,7 +40,7 @@ $env:HYPER_SAGE_LIVE_COMPANY_DATABASE = $liveDatabase
 $env:HYPER_SAGE_WRITE_MODE = if ($EnableGrnWrites -or $EnableManufacturingWrites) { "Enabled" } else { "Disabled" }
 $allowedOperations = @()
 if ($EnableGrnWrites -and $EnableFullGrnWorkflow) {
-  $allowedOperations += @("goods-receipts", "warehouse-transfers", "returns", "supplier-returns")
+  $allowedOperations += @("goods-receipts", "warehouse-transfers", "returns")
 }
 if ($EnableManufacturingWrites -and $ConfirmFinanceReady) {
   $allowedOperations += @("warehouse-transfers", "material-issues", "finished-goods-receipts", "manufacturing-processes")
