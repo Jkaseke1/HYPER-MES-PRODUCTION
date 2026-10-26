@@ -1,15 +1,29 @@
 $ErrorActionPreference = "Stop"
 
-# A long-lived PowerShell can retain older process values after connector keys
-# are corrected in Windows. Prefer the current User settings for a fresh API.
-foreach ($name in @(
-  "HYPER_SAGE_COMMON_SERVER",
-  "HYPER_SAGE_SDK_SERIAL",
-  "HYPER_SAGE_SDK_AUTH_CODE"
-)) {
-  $value = [Environment]::GetEnvironmentVariable($name, "User")
-  if (-not [string]::IsNullOrWhiteSpace($value)) {
-    Set-Item -Path "Env:$name" -Value $value
+# A long-lived PowerShell can retain stale values. Refresh saved server settings
+# without overriding the environment/URL/write scope chosen by the UAT or
+# Production launcher that called this script.
+$launcherOwnedNames = @(
+  "HYPER_SAGE_ENVIRONMENT",
+  "HYPER_SAGE_API_URL",
+  "HYPER_SAGE_LIVE_COMPANY_DATABASE",
+  "HYPER_SAGE_WRITE_MODE",
+  "HYPER_SAGE_ALLOWED_OPERATIONS",
+  "HYPER_SAGE_FULL_GRN_WORKFLOW",
+  "HYPER_SAGE_PRODUCTION_GRN_WRITES"
+)
+$userSettings = [Environment]::GetEnvironmentVariables("User")
+$machineSettings = [Environment]::GetEnvironmentVariables("Machine")
+$settingNames = @($userSettings.Keys) + @($machineSettings.Keys) | Select-Object -Unique
+
+foreach ($name in $settingNames) {
+  if (-not $name.StartsWith("HYPER_SAGE_", [StringComparison]::OrdinalIgnoreCase)) { continue }
+  if ($launcherOwnedNames -contains $name) { continue }
+
+  $value = $userSettings[$name]
+  if ([string]::IsNullOrWhiteSpace([string]$value)) { $value = $machineSettings[$name] }
+  if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+    Set-Item -Path "Env:$name" -Value ([string]$value)
   }
 }
 

@@ -78,11 +78,18 @@ GRN write switch is supplied.
 .\sage-sdk-api\Start-SageSdkApi-Production.ps1
 
 # One approved Production GRN posting window only
-.\sage-sdk-api\Start-SageSdkApi-Production.ps1 -EnableGrnWrites
+.\sage-sdk-api\Start-SageSdkApi-Production.ps1 -EnableGrnWrites -EnableFullGrnWorkflow
+
+# Manufacturing requires explicit Finance approval; do not run during preflight
+.\sage-sdk-api\Start-SageSdkApi-Production.ps1 -EnableManufacturingWrites -ConfirmFinanceReady
 ```
 
-Do not use the Production write switch for health checks, connection checks,
-stock reads, or dry runs.
+With no switches, Production starts with writes disabled and an empty operation
+allowlist. Manufacturing remains blocked unless both manufacturing switches are
+explicitly passed. Do not use a Production write switch for health checks,
+connection checks, stock reads, or dry runs. Keep the bridge stopped or scoped
+away from manufacturing events until Finance approves the Live manufacturing
+window.
 
 ```powershell
 Start-Process `
@@ -94,7 +101,12 @@ Start-Process `
 ## Health check
 
 ```powershell
+# UAT
 Invoke-RestMethod http://127.0.0.1:5088/api/v1/health
+
+# Production read-only preflight
+Invoke-RestMethod http://127.0.0.1:5090/api/v1/health
+Invoke-RestMethod http://127.0.0.1:5090/api/v1/sdk/connection
 ```
 
 ## Current posted endpoints
