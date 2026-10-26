@@ -71,6 +71,7 @@ const navGroups: NavGroup[] = [
       { to: '/material-transfer', icon: ArrowRightLeft, label: 'Material Transfer' },
       // Analytics
       { to: '/rm-stock-dashboard', icon: LayoutDashboard, label: 'Stock Dashboard (DRS)' },
+      { to: '/reports/bulk-rm-position', icon: ClipboardList, label: 'Bulk RM Position' },
       { to: '/rm-receipts-matrix', icon: PackageCheck, label: 'Monthly Receipts' },
       { to: '/rm-issues-matrix', icon: ArrowRightLeft, label: 'Monthly Issues' },
       { to: '/rm-history', icon: History, label: 'Historical Snapshots' },
@@ -86,6 +87,7 @@ const navGroups: NavGroup[] = [
       { to: '/production-planning', icon: ClipboardList, label: 'Production Planning' },
       // Execution
       { to: '/production-orders', icon: Factory, label: 'Production Orders' },
+      { to: '/reports/bulk-rm-position', icon: Factory, label: 'RM & Manufacturing' },
       { to: '/production-control', icon: ClipboardCheck, label: 'Production Control Centre' },
       { to: '/production-warehouse', icon: ArrowRightLeft, label: 'Incoming Materials' },
       { to: '/macropack', icon: Beaker, label: 'Macropack Manufacturing' },
@@ -140,6 +142,7 @@ const navGroups: NavGroup[] = [
       { to: '/reports/process-loss', icon: BarChart3Icon2, label: 'Process Loss & Yield' },
       { to: '/reports/raw-materials', icon: PackageIcon2, label: 'Raw Materials' },
       { to: '/reports/intake-movement', icon: Scale, label: 'Intake & Movement' },
+      { to: '/reports/bulk-rm-position', icon: ClipboardList, label: 'Bulk RM Position' },
       // Reconciliation
       { to: '/reconciliation', icon: FileCheck, label: 'Reconciliation' },
       { to: '/reports/rm-reconciliation', icon: PackageIcon2, label: 'RM Reconciliation' },
