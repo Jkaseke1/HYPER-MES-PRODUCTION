@@ -814,9 +814,9 @@ export default function BulkRMPositionReportPage() {
                     </summary>
                     <dl className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100">
                       {metrics.map(([label, value]) => (
-                        <div key={label} className="min-w-0 bg-white px-3 py-2.5">
+                        <div key={label} className={`min-w-0 px-3 py-2.5 ${label === 'Variance' ? 'col-span-2 bg-slate-50' : 'bg-white'}`}>
                           <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
-                          <dd className={`mt-0.5 truncate text-xs font-semibold tabular-nums ${label === 'Variance' && highlight ? 'text-rose-700' : 'text-slate-700'}`}>{qty(value)} kg</dd>
+                          <dd className={`mt-0.5 truncate text-xs font-semibold tabular-nums ${label === 'Variance' && highlight ? 'text-rose-700' : 'text-slate-700'}`}>{value === null ? '—' : `${qty(value)} kg`}</dd>
                         </div>
                       ))}
                     </dl>
