@@ -14,6 +14,13 @@ const BULK_ORDER = [
   'Salt Fine', 'Salt Course',
 ];
 
+const REPORT_SECTIONS = [
+  { id: 'report-overview', label: 'Overview', icon: TrendingUp },
+  { id: 'stock-position', label: 'Stock position', icon: Boxes },
+  { id: 'material-costs', label: 'Material costs', icon: CircleDollarSign },
+  { id: 'manufacturing-batches', label: 'Manufacturing', icon: Factory },
+];
+
 interface Material {
   id: string;
   name: string;
@@ -129,6 +136,7 @@ export default function BulkRMPositionReportPage() {
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [openingAsAt, setOpeningAsAt] = useState<string | null>(null);
   const [purchaseLinesWithoutCost, setPurchaseLinesWithoutCost] = useState(0);
+  const [activeSection, setActiveSection] = useState(REPORT_SECTIONS[0].id);
 
   const period = months[monthIndex];
 
@@ -438,6 +446,23 @@ export default function BulkRMPositionReportPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    const sections = REPORT_SECTIONS
+      .map(({ id }) => document.getElementById(id))
+      .filter((section): section is HTMLElement => section !== null);
+    if (!sections.length) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      const visibleSections = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visibleSections[0]) setActiveSection(visibleSections[0].target.id);
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
   const withCalcs = useMemo(() => rows.map((row) => {
     const total = row.opening + row.grn;
     const theo = total - row.issues;
@@ -629,17 +654,25 @@ export default function BulkRMPositionReportPage() {
       </section>
 
       <nav aria-label="Report sections" className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        {[
-          { href: '#report-overview', label: 'Overview', icon: TrendingUp },
-          { href: '#stock-position', label: 'Stock position', icon: Boxes },
-          { href: '#material-costs', label: 'Material costs', icon: CircleDollarSign },
-          { href: '#manufacturing-batches', label: 'Manufacturing', icon: Factory },
-        ].map(({ href, label, icon: Icon }, index) => (
-          <a key={href} href={href} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${index === 0 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>
-            <Icon className={`h-4 w-4 ${index === 0 ? 'text-teal-300' : 'text-slate-400'}`} />
-            {label}
-          </a>
-        ))}
+        {REPORT_SECTIONS.map(({ id, label, icon: Icon }) => {
+          const isActive = activeSection === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-controls={id}
+              aria-current={isActive ? 'location' : undefined}
+              onClick={() => {
+                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                setActiveSection(id);
+              }}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 sm:px-4 sm:text-sm ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            >
+              <Icon className={`h-4 w-4 ${isActive ? 'text-teal-300' : 'text-slate-400'}`} />
+              {label}
+            </button>
+          );
+        })}
       </nav>
 
       <section id="report-overview" className="space-y-3 scroll-mt-24">
