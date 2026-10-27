@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth, endOfMonth, subDays, subMonths } from 'date-fns';
-import { AlertTriangle, Download, RefreshCw, Scale, FileText, ArrowRightLeft, Factory, PackageCheck } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, CalendarDays, CircleDollarSign, ClipboardList, Download, Factory, FileText, PackageCheck, RefreshCw, Scale, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
@@ -549,34 +549,60 @@ export default function BulkRMPositionReportPage() {
   }
 
   return (
-    <div className="space-y-5 pb-6">
-      <header className="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-[#0b0b30] px-5 py-6 text-white shadow-sm sm:px-7 lg:px-8">
-        <div className="pointer-events-none absolute -right-10 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-orange-500/25 to-amber-400/5 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-1/3 h-48 w-64 rounded-full bg-gradient-to-br from-teal-400/15 to-emerald-500/5 blur-3xl" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-400/25 bg-orange-400/10 text-orange-300 shadow-lg shadow-orange-500/10 sm:flex">
-              <Factory className="h-6 w-6" />
+    <div className="mx-auto max-w-[1680px] space-y-5 pb-8">
+      <header className="relative isolate overflow-hidden rounded-[1.75rem] bg-[#0b1220] text-white shadow-xl shadow-slate-900/10">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_15%,rgba(249,115,22,0.22),transparent_35%),radial-gradient(ellipse_at_12%_100%,rgba(20,184,166,0.17),transparent_38%)]" />
+        <div className="pointer-events-none absolute right-[-4rem] top-[-7rem] h-80 w-80 rounded-full border border-white/[0.06]" />
+        <div className="pointer-events-none absolute right-[-1rem] top-[-4rem] h-56 w-56 rounded-full border border-white/[0.06]" />
+        <div className="relative grid gap-8 px-5 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-10 lg:py-9">
+          <div className="min-w-0">
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-orange-300/20 bg-orange-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-orange-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-orange-300" />
+                Executive operations
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-slate-300">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {format(new Date(`${period.start}T00:00:00`), 'MMMM yyyy')}
+              </span>
             </div>
-            <div className="min-w-0">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Executive operations report</span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-slate-300">{format(new Date(`${period.start}T00:00:00`), 'MMMM yyyy')}</span>
+            <div className="flex items-start gap-4">
+              <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-teal-300/20 bg-teal-300/10 text-teal-200 sm:flex">
+                <Factory className="h-6 w-6" />
               </div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Raw materials to manufacturing</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-                Follow purchases from weighbridge and GRN through stock, production issues, batch consumption and finished output.
-              </p>
+              <div className="min-w-0">
+                <h1 className="max-w-3xl text-2xl font-bold leading-tight tracking-tight sm:text-3xl lg:text-[2.1rem]">Raw materials to manufacturing</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  One clear view of what came in, what it cost, what went into production, and what came out.
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-70">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+          <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-stretch">
+            <button onClick={load} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-70">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Refreshing report' : 'Refresh report'}
             </button>
-            <button onClick={exportWorkbook} className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-orange-300">
+            <button onClick={exportWorkbook} className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-400 px-4 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-orange-950/20 transition hover:bg-orange-300">
               <Download className="h-4 w-4" /> Export workbook
             </button>
           </div>
+        </div>
+        <div className="relative grid grid-cols-2 border-t border-white/10 bg-white/[0.035] sm:grid-cols-4">
+          {[
+            { label: 'Weighbridge', value: `${qty(totals.weighbridge)} kg`, icon: Scale },
+            { label: 'Received on GRN', value: `${qty(totals.grn)} kg`, icon: ClipboardList },
+            { label: 'Issued to production', value: `${qty(totals.issues)} kg`, icon: ArrowRightLeft },
+            { label: 'Finished output', value: `${qty(manufacturing.produced)} kg`, icon: PackageCheck },
+          ].map(({ label, value, icon: Icon }, index) => (
+            <div key={label} className={`flex min-w-0 items-center gap-3 px-4 py-3.5 sm:px-6 ${index > 0 ? 'border-l border-white/10' : ''} ${index > 1 ? 'border-t border-white/10 sm:border-t-0' : ''}`}>
+              <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-teal-200 sm:flex"><Icon className="h-4 w-4" /></span>
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                <p className="mt-0.5 truncate text-sm font-bold tabular-nums text-white">{loading ? '—' : value}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </header>
 
@@ -602,31 +628,51 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <nav aria-label="Report sections" className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
         {[
-          { label: 'Weighbridge intake', value: qty(totals.weighbridge), note: 'Nett mass received at the bridge', icon: Scale },
-          { label: 'GRN receipts', value: qty(totals.grn), note: 'Purchased quantity booked in', icon: FileText },
-          { label: 'Transfers to production', value: qty(totals.transfers), note: 'Moved from RM warehouse', icon: ArrowRightLeft },
-          { label: 'BOM issues', value: qty(totals.issues), note: `${qty(totals.consumed)} consumed · ${qty(totals.inManufacturing)} still in batches`, icon: Factory },
-          { label: 'Finished goods produced', value: qty(manufacturing.produced), note: `${manufacturing.completed} completed batches`, icon: PackageCheck },
-          { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: Factory },
-          { label: 'Sage manufacturing', value: `${manufacturing.sageGi}/${manufacturing.total}`, note: `${manufacturing.sageDone} batch completions posted`, icon: FileText },
-          { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: PackageCheck },
-        ].map(({ label, value, note, icon: Icon }) => (
-          <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">{label}</p>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-                <Icon className="h-4 w-4" />
-              </span>
-            </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900">{value}</p>
-            <p className="mt-1 text-xs text-slate-400">{note}</p>
-          </div>
+          { href: '#report-overview', label: 'Overview', icon: TrendingUp },
+          { href: '#stock-position', label: 'Stock position', icon: Boxes },
+          { href: '#material-costs', label: 'Material costs', icon: CircleDollarSign },
+          { href: '#manufacturing-batches', label: 'Manufacturing', icon: Factory },
+        ].map(({ href, label, icon: Icon }, index) => (
+          <a key={href} href={href} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${index === 0 ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>
+            <Icon className={`h-4 w-4 ${index === 0 ? 'text-teal-300' : 'text-slate-400'}`} />
+            {label}
+          </a>
         ))}
-      </div>
+      </nav>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section id="report-overview" className="space-y-3 scroll-mt-24">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-teal-700">Period overview</p>
+            <h2 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Operations at a glance</h2>
+          </div>
+          <span className="text-xs text-slate-500">{loading ? 'Updating report…' : `${manufacturing.total} batch records in this view`}</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Transfers to production', value: qty(totals.transfers), note: 'Moved from raw material stores', icon: ArrowRightLeft, tone: 'violet' },
+            { label: 'Raw material issued', value: qty(totals.issues), note: `${qty(totals.consumed)} consumed · ${qty(totals.inManufacturing)} in open batches`, icon: Factory, tone: 'amber' },
+            { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: ClipboardList, tone: 'sky' },
+            { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: TrendingUp, tone: 'teal' },
+          ].map(({ label, value, note, icon: Icon, tone }) => (
+            <div key={label} className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone === 'violet' ? 'bg-violet-50 text-violet-700' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : tone === 'sky' ? 'bg-sky-50 text-sky-700' : 'bg-teal-50 text-teal-700'}`}>
+                  <Icon className="h-[18px] w-[18px]" />
+                </div>
+                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-4 ring-emerald-50" />
+              </div>
+              <p className="mt-4 text-xs font-semibold text-slate-500">{label}</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-slate-900">{loading ? '—' : value}</p>
+              <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-400">{note}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="material-costs" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -683,19 +729,26 @@ export default function BulkRMPositionReportPage() {
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section id="stock-position" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-bold text-slate-900">Bulk raw material position</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Inventory control</p>
+              <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Bulk raw material position</h2>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold text-slate-500">
+              Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}
+            </span>
+          </div>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}.
             THEO closing = opening + GRN − BOM issues. Consumed is completed manufacturing; in manufacturing is still on an open batch.
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="w-full min-w-[1120px] text-[13px]">
             <thead>
-              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-3 font-medium">Raw material</th>
+              <tr className="sticky top-0 bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
+                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-3 font-semibold">Raw material</th>
                 <th className="px-3 py-3 text-right font-medium">Opening</th>
                 <th className="px-3 py-3 text-right font-medium">Weighbridge</th>
                 <th className="px-3 py-3 text-right font-medium">GRN receipts</th>
@@ -719,8 +772,8 @@ export default function BulkRMPositionReportPage() {
                 const highlight = row.variance !== null && Math.abs(row.variance) > 0.1;
                 const wbWarn = Math.abs(row.wbGap) > 0.5 && (row.weighbridge > 0 || row.grn > 0);
                 return (
-                  <tr key={row.key} className={`border-t border-slate-100 ${highlight ? 'bg-red-50/40' : 'hover:bg-slate-50'}`}>
-                    <td className="px-3 py-2.5 font-medium text-slate-900">
+                  <tr key={row.key} className={`border-t border-slate-100 transition-colors ${highlight ? 'bg-red-50/60 hover:bg-red-50' : 'odd:bg-white even:bg-slate-50/40 hover:bg-teal-50/50'}`}>
+                    <td className={`sticky left-0 z-[1] px-3 py-2.5 font-semibold text-slate-900 ${highlight ? 'bg-red-50' : 'bg-inherit'}`}>
                       {row.name}
                       {row.code ? <span className="ml-2 font-mono text-[10px] text-slate-400">{row.code}</span> : null}
                     </td>
@@ -761,25 +814,26 @@ export default function BulkRMPositionReportPage() {
             )}
           </table>
         </div>
-      </div>
+      </section>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
-          <h2 className="text-sm font-bold text-slate-900">Cost by raw material</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Currency is shown per material so unlike amounts are never totalled together. Master unit cost is the current raw-material cost; purchase spend uses period GRNs.</p>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-orange-700">Cost breakdown</p>
+          <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Cost by raw material</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Currency is shown per material so unlike amounts are never totalled together. Master unit cost is current; purchase spend uses period GRNs.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-[13px]">
             <thead>
-              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-3 font-medium">Raw material</th>
-                <th className="px-3 py-3 text-center font-medium">Currency</th>
-                <th className="px-3 py-3 text-right font-medium">Purchase spend</th>
-                <th className="px-3 py-3 text-right font-medium">Master cost / unit</th>
-                <th className="px-3 py-3 text-right font-medium">Issued cost</th>
-                <th className="px-3 py-3 text-right font-medium">Consumed cost</th>
-                <th className="px-3 py-3 text-right font-medium">Open batch cost</th>
-                <th className="px-3 py-3 text-right font-medium">Stock valuation</th>
+              <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
+                <th className="px-3 py-3 font-semibold">Raw material</th>
+                <th className="px-3 py-3 text-center font-semibold">Currency</th>
+                <th className="px-3 py-3 text-right font-semibold">Purchase spend</th>
+                <th className="px-3 py-3 text-right font-semibold">Master cost / unit</th>
+                <th className="px-3 py-3 text-right font-semibold">Issued cost</th>
+                <th className="px-3 py-3 text-right font-semibold">Consumed cost</th>
+                <th className="px-3 py-3 text-right font-semibold">Open batch cost</th>
+                <th className="px-3 py-3 text-right font-semibold">Stock valuation</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -788,8 +842,8 @@ export default function BulkRMPositionReportPage() {
               ) : costRows.length === 0 ? (
                 <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400">No material cost data for this period.</td></tr>
               ) : costRows.map((row) => (
-                <tr key={row.key} className="hover:bg-slate-50/80">
-                  <td className="px-3 py-2.5 font-medium text-slate-900">
+                <tr key={row.key} className="transition-colors odd:bg-white even:bg-slate-50/40 hover:bg-teal-50/50">
+                  <td className="px-3 py-3 font-semibold text-slate-900">
                     {row.name}
                     {row.code ? <span className="ml-2 font-mono text-[10px] text-slate-400">{row.code}</span> : null}
                   </td>
@@ -807,9 +861,10 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-bold text-slate-900">Manufacturing batches</h2>
+      <section id="manufacturing-batches" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-700">Production execution</p>
+          <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Manufacturing batches</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
             Orders created or completed this month, plus open batches still on the floor. Sage GI is materials issued; Sage complete is the finished-goods receipt.
           </p>
@@ -817,17 +872,17 @@ export default function BulkRMPositionReportPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-3 font-medium">Batch</th>
-                <th className="px-3 py-3 font-medium">Formula</th>
-                <th className="px-3 py-3 font-medium">Line</th>
-                <th className="px-3 py-3 font-medium">Status</th>
-                <th className="px-3 py-3 text-right font-medium">Planned</th>
-                <th className="px-3 py-3 text-right font-medium">Produced</th>
-                <th className="px-3 py-3 text-right font-medium">RM issued</th>
-                <th className="px-3 py-3 font-medium">Sage GI</th>
-                <th className="px-3 py-3 font-medium">Sage complete</th>
-                <th className="px-3 py-3 font-medium">FG transfer</th>
+              <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
+                <th className="px-3 py-3 font-semibold">Batch</th>
+                <th className="px-3 py-3 font-semibold">Formula</th>
+                <th className="px-3 py-3 font-semibold">Line</th>
+                <th className="px-3 py-3 font-semibold">Status</th>
+                <th className="px-3 py-3 text-right font-semibold">Planned</th>
+                <th className="px-3 py-3 text-right font-semibold">Produced</th>
+                <th className="px-3 py-3 text-right font-semibold">RM issued</th>
+                <th className="px-3 py-3 font-semibold">Sage GI</th>
+                <th className="px-3 py-3 font-semibold">Sage complete</th>
+                <th className="px-3 py-3 font-semibold">FG transfer</th>
               </tr>
             </thead>
             <tbody>
@@ -836,11 +891,15 @@ export default function BulkRMPositionReportPage() {
               ) : batches.length === 0 ? (
                 <tr><td colSpan={10} className="px-3 py-16 text-center text-slate-400">No manufacturing batches in this month.</td></tr>
               ) : batches.map((row) => (
-                <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-900">{row.batch}</td>
+                <tr key={row.id} className="border-t border-slate-100 transition-colors odd:bg-white even:bg-slate-50/40 hover:bg-teal-50/50">
+                  <td className="px-3 py-2.5 font-mono text-xs font-bold text-slate-900">{row.batch}</td>
                   <td className="px-3 py-2.5 text-slate-800">{row.formula}</td>
                   <td className="px-3 py-2.5 text-slate-600">{row.line}</td>
-                  <td className="px-3 py-2.5 capitalize text-slate-700">{row.status.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${row.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : row.status === 'failed' || row.status === 'cancelled' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {row.status.replace(/_/g, ' ')}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.planned)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{qty(row.actual)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{qty(row.issuedKg)}</td>
@@ -852,7 +911,7 @@ export default function BulkRMPositionReportPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
