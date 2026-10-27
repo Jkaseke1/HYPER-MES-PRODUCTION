@@ -446,23 +446,6 @@ export default function BulkRMPositionReportPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    const sections = REPORT_SECTIONS
-      .map(({ id }) => document.getElementById(id))
-      .filter((section): section is HTMLElement => section !== null);
-    if (!sections.length) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      const visibleSections = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (visibleSections[0]) setActiveSection(visibleSections[0].target.id);
-    }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
-
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
-  }, []);
-
   const withCalcs = useMemo(() => rows.map((row) => {
     const total = row.opening + row.grn;
     const theo = total - row.issues;
