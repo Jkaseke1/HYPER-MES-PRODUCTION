@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth, endOfMonth, subDays, subMonths } from 'date-fns';
-import { AlertTriangle, ArrowRightLeft, Boxes, CalendarDays, CircleDollarSign, ClipboardList, Download, Factory, FileText, PackageCheck, RefreshCw, Scale, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, CalendarDays, ChevronDown, CircleDollarSign, ClipboardList, Download, Factory, FileText, PackageCheck, RefreshCw, Scale, TrendingUp } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
@@ -556,15 +556,25 @@ export default function BulkRMPositionReportPage() {
     XLSX.writeFile(book, `Bulk-RM-position-${period.start}-to-${period.end}.xlsx`);
   }
 
+  const mobilePositionTotals: Array<[string, number]> = [
+    ['Weighbridge', totals.weighbridge],
+    ['GRN receipts', totals.grn],
+    ['Transfers', totals.transfers],
+    ['BOM issues', totals.issues],
+    ['Consumed', totals.consumed],
+    ['In manufacturing', totals.inManufacturing],
+    ['THEO close', totals.theo],
+  ];
+
   return (
     <div className="mx-auto max-w-[1680px] space-y-5 pb-8">
-      <header className="relative isolate overflow-hidden rounded-[1.75rem] bg-[#0b1220] text-white shadow-xl shadow-slate-900/10">
+      <header className="relative isolate overflow-hidden rounded-[1.5rem] bg-[#0b1220] text-white shadow-xl shadow-slate-900/10 sm:rounded-[1.75rem]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_15%,rgba(249,115,22,0.22),transparent_35%),radial-gradient(ellipse_at_12%_100%,rgba(20,184,166,0.17),transparent_38%)]" />
         <div className="pointer-events-none absolute right-[-4rem] top-[-7rem] h-80 w-80 rounded-full border border-white/[0.06]" />
         <div className="pointer-events-none absolute right-[-1rem] top-[-4rem] h-56 w-56 rounded-full border border-white/[0.06]" />
-        <div className="relative grid gap-8 px-5 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-10 lg:py-9">
+        <div className="relative grid gap-5 px-4 py-5 sm:px-7 sm:py-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:px-9 lg:py-8">
           <div className="min-w-0">
-            <div className="mb-5 flex flex-wrap items-center gap-2">
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full border border-orange-300/20 bg-orange-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-orange-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-orange-300" />
                 Executive operations
@@ -579,20 +589,20 @@ export default function BulkRMPositionReportPage() {
                 <Factory className="h-6 w-6" />
               </div>
               <div className="min-w-0">
-                <h1 className="max-w-3xl text-2xl font-bold leading-tight tracking-tight sm:text-3xl lg:text-[2.1rem]">Raw materials to manufacturing</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                  One clear view of what came in, what it cost, what went into production, and what came out.
+                <h1 className="max-w-3xl text-[1.65rem] font-bold leading-tight tracking-tight sm:text-3xl lg:text-[2.1rem]">Raw materials to manufacturing</h1>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                  Follow every delivery from weighbridge and GRN through stock, production and finished output.
                 </p>
               </div>
             </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-stretch">
-            <button onClick={load} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-70">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:flex-col lg:items-stretch">
+            <button onClick={load} disabled={loading} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-2.5 py-3 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-70 sm:px-4 sm:text-sm">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              {loading ? 'Refreshing report' : 'Refresh report'}
+              <span className="truncate">{loading ? 'Refreshing' : 'Refresh'}</span>
             </button>
-            <button onClick={exportWorkbook} className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-400 px-4 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-orange-950/20 transition hover:bg-orange-300">
-              <Download className="h-4 w-4" /> Export workbook
+            <button onClick={exportWorkbook} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-xl bg-orange-400 px-2.5 py-3 text-xs font-bold text-slate-950 shadow-lg shadow-orange-950/20 transition hover:bg-orange-300 sm:px-4 sm:text-sm">
+              <Download className="h-4 w-4 shrink-0" /> <span className="truncate">Export workbook</span>
             </button>
           </div>
         </div>
@@ -614,7 +624,7 @@ export default function BulkRMPositionReportPage() {
         </div>
       </header>
 
-      <section aria-label="Report filters" className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
+      <section aria-label="Report filters" className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><FileText className="h-4 w-4" /></span>
           Report period
@@ -636,7 +646,7 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <nav aria-label="Report sections" className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      <nav aria-label="Report sections" className="sticky top-16 z-20 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur-md sm:gap-2 sm:p-2">
         {REPORT_SECTIONS.map(({ id, label, icon: Icon }) => {
           const isActive = activeSection === id;
           return (
@@ -649,7 +659,7 @@ export default function BulkRMPositionReportPage() {
                 document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 setActiveSection(id);
               }}
-              className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 sm:px-4 sm:text-sm ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 sm:gap-2 sm:px-4 sm:text-sm ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
             >
               <Icon className={`h-4 w-4 ${isActive ? 'text-teal-300' : 'text-slate-400'}`} />
               {label}
@@ -666,23 +676,23 @@ export default function BulkRMPositionReportPage() {
           </div>
           <span className="text-xs text-slate-500">{loading ? 'Updating report…' : `${manufacturing.total} batch records in this view`}</span>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
           {[
-            { label: 'Transfers to production', value: qty(totals.transfers), note: 'Moved from raw material stores', icon: ArrowRightLeft, tone: 'violet' },
-            { label: 'Raw material issued', value: qty(totals.issues), note: `${qty(totals.consumed)} consumed · ${qty(totals.inManufacturing)} in open batches`, icon: Factory, tone: 'amber' },
+            { label: 'Transfers to production', value: `${qty(totals.transfers)} kg`, note: 'Moved from raw material stores', icon: ArrowRightLeft, tone: 'violet' },
+            { label: 'Raw material issued', value: `${qty(totals.issues)} kg`, note: `${qty(totals.consumed)} kg consumed · ${qty(totals.inManufacturing)} kg in open batches`, icon: Factory, tone: 'amber' },
             { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: ClipboardList, tone: 'sky' },
             { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: TrendingUp, tone: 'teal' },
           ].map(({ label, value, note, icon: Icon, tone }) => (
-            <div key={label} className="group rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
+            <div key={label} className="group min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone === 'violet' ? 'bg-violet-50 text-violet-700' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : tone === 'sky' ? 'bg-sky-50 text-sky-700' : 'bg-teal-50 text-teal-700'}`}>
                   <Icon className="h-[18px] w-[18px]" />
                 </div>
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-4 ring-emerald-50" />
               </div>
-              <p className="mt-4 text-xs font-semibold text-slate-500">{label}</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-slate-900">{loading ? '—' : value}</p>
-              <p className="mt-1 min-h-8 text-[11px] leading-4 text-slate-400">{note}</p>
+              <p className="mt-3 text-[11px] font-semibold leading-4 text-slate-500 sm:mt-4 sm:text-xs">{label}</p>
+              <p className="mt-1 break-words text-xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-2xl">{loading ? '—' : value}</p>
+              <p className="mt-1 min-h-8 text-[10px] leading-4 text-slate-400 sm:text-[11px]">{note}</p>
             </div>
           ))}
         </div>
@@ -701,7 +711,7 @@ export default function BulkRMPositionReportPage() {
         {financialTotals.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-slate-500">No recorded material costs for this period.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5 sm:p-5">
+          <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-3 sm:gap-3 sm:p-5 2xl:grid-cols-5">
             {financialTotals.flatMap(([currency, values]) => [
               { label: `Purchase spend · ${currency}`, value: values.purchaseSpend, note: 'Recorded on received GRN lines' },
               { label: `Material issued · ${currency}`, value: values.issueCost, note: 'Cost assigned to production issues' },
@@ -709,10 +719,10 @@ export default function BulkRMPositionReportPage() {
               { label: `Open batch cost · ${currency}`, value: values.wipCost, note: 'Issued to batches not yet completed' },
               { label: `Stock value · ${currency}`, value: values.inventoryValue, note: 'System quantity × current unit cost' },
             ].map((item) => (
-              <div key={item.label} className="min-w-0 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3.5">
-                <p className="text-[11px] font-semibold leading-4 text-slate-500">{item.label}</p>
-                <p className="mt-2 break-words text-lg font-bold tabular-nums tracking-tight text-slate-900">{money(item.value, currency)}</p>
-                <p className="mt-1 text-[10px] leading-4 text-slate-500">{item.note}</p>
+              <div key={item.label} className="min-w-0 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3 sm:p-3.5">
+                <p className="text-[10px] font-semibold leading-4 text-slate-500 sm:text-[11px]">{item.label}</p>
+                <p className="mt-1.5 break-all text-base font-bold tabular-nums tracking-tight text-slate-900 sm:mt-2 sm:text-lg">{money(item.value, currency)}</p>
+                <p className="mt-1 text-[9px] leading-4 text-slate-500 sm:text-[10px]">{item.note}</p>
               </div>
             )))}
           </div>
@@ -752,31 +762,98 @@ export default function BulkRMPositionReportPage() {
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-700">Inventory control</p>
               <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Bulk raw material position</h2>
             </div>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold text-slate-500">
-              Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold text-slate-500">
+                {visible.length} materials shown
+              </span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-semibold text-slate-500">
+                Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}
+              </span>
+            </div>
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            THEO closing = opening + GRN − BOM issues. Consumed is completed manufacturing; in manufacturing is still on an open batch.
+            THEO closing = opening + GRN − BOM issues. Consumed is completed manufacturing; in manufacturing is still on an open batch. Expand a material on smaller screens for the full movement breakdown.
           </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-[13px]">
+        <div className="space-y-2.5 p-3 xl:hidden">
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">Building material positions…</div>
+          ) : visible.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">No bulk movement in this month.</div>
+          ) : (
+            <>
+              {visible.map((row) => {
+                const highlight = row.variance !== null && Math.abs(row.variance) > 0.1;
+                const metrics: Array<[string, number | null]> = [
+                  ['Opening', row.opening],
+                  ['Weighbridge', row.weighbridge],
+                  ['GRN receipts', row.grn],
+                  ['Total received', row.total],
+                  ['Transfers', row.transfers],
+                  ['BOM issues', row.issues],
+                  ['Consumed', row.consumed],
+                  ['In manufacturing', row.inManufacturing],
+                  ['Physical stock', row.physical],
+                  ['System stock', row.system],
+                  ['Variance', row.variance],
+                ];
+                return (
+                  <details key={row.key} className={`group overflow-hidden rounded-xl border ${highlight ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-white'}`}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold text-slate-900">{row.name}</span>
+                        {row.code && <span className="mt-0.5 block font-mono text-[10px] text-slate-400">{row.code}</span>}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="text-right">
+                          <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">THEO close</span>
+                          <span className="block text-sm font-bold tabular-nums text-slate-900">{qty(row.theo)} kg</span>
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+                      </span>
+                    </summary>
+                    <dl className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100">
+                      {metrics.map(([label, value]) => (
+                        <div key={label} className="min-w-0 bg-white px-3 py-2.5">
+                          <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
+                          <dd className={`mt-0.5 truncate text-xs font-semibold tabular-nums ${label === 'Variance' && highlight ? 'text-rose-700' : 'text-slate-700'}`}>{qty(value)} kg</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </details>
+                );
+              })}
+              <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+                <p className="px-1 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Period totals</p>
+                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-200">
+                  {mobilePositionTotals.map(([label, value]) => (
+                    <div key={label} className="bg-white px-3 py-2.5">
+                      <dt className="text-[10px] font-medium text-slate-400">{label}</dt>
+                      <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800">{qty(value)} kg</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="hidden overflow-x-auto xl:block">
+          <table className="w-full min-w-[1360px] text-[13px]">
             <thead>
-              <tr className="sticky top-0 bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
-                <th className="sticky left-0 z-20 bg-slate-50 px-3 py-3 font-semibold">Raw material</th>
-                <th className="px-3 py-3 text-right font-medium">Opening</th>
-                <th className="px-3 py-3 text-right font-medium">Weighbridge</th>
-                <th className="px-3 py-3 text-right font-medium">GRN receipts</th>
-                <th className="px-3 py-3 text-right font-medium">Total</th>
-                <th className="px-3 py-3 text-right font-medium">Transfers</th>
-                <th className="px-3 py-3 text-right font-medium">Issues</th>
-                <th className="px-3 py-3 text-right font-medium">Consumed</th>
-                <th className="px-3 py-3 text-right font-medium">In mfg</th>
-                <th className="px-3 py-3 text-right font-medium">THEO closing</th>
-                <th className="px-3 py-3 text-right font-medium">Physical</th>
-                <th className="px-3 py-3 text-right font-medium">System</th>
-                <th className="px-3 py-3 text-right font-medium">Variance</th>
+              <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
+                <th className="min-w-56 px-4 py-3 font-semibold">Raw material</th>
+                <th className="px-3 py-3 text-right font-semibold">Opening</th>
+                <th className="px-3 py-3 text-right font-semibold">Weighbridge</th>
+                <th className="px-3 py-3 text-right font-semibold">GRN receipts</th>
+                <th className="px-3 py-3 text-right font-semibold">Total</th>
+                <th className="px-3 py-3 text-right font-semibold">Transfers</th>
+                <th className="px-3 py-3 text-right font-semibold">Issues</th>
+                <th className="px-3 py-3 text-right font-semibold">Consumed</th>
+                <th className="px-3 py-3 text-right font-semibold">In mfg</th>
+                <th className="px-3 py-3 text-right font-semibold">THEO closing</th>
+                <th className="px-3 py-3 text-right font-semibold">Physical</th>
+                <th className="px-3 py-3 text-right font-semibold">System</th>
+                <th className="px-3 py-3 text-right font-semibold">Variance</th>
               </tr>
             </thead>
             <tbody>
@@ -789,7 +866,7 @@ export default function BulkRMPositionReportPage() {
                 const wbWarn = Math.abs(row.wbGap) > 0.5 && (row.weighbridge > 0 || row.grn > 0);
                 return (
                   <tr key={row.key} className={`border-t border-slate-100 transition-colors ${highlight ? 'bg-red-50/60 hover:bg-red-50' : 'odd:bg-white even:bg-slate-50/40 hover:bg-teal-50/50'}`}>
-                    <td className={`sticky left-0 z-[1] px-3 py-2.5 font-semibold text-slate-900 ${highlight ? 'bg-red-50' : 'bg-inherit'}`}>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
                       {row.name}
                       {row.code ? <span className="ml-2 font-mono text-[10px] text-slate-400">{row.code}</span> : null}
                     </td>
@@ -838,8 +915,49 @@ export default function BulkRMPositionReportPage() {
           <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Cost by raw material</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">Currency is shown per material so unlike amounts are never totalled together. Master unit cost is current; purchase spend uses period GRNs.</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-[13px]">
+        <div className="space-y-2.5 p-3 xl:hidden">
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">Loading material costs…</div>
+          ) : costRows.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">No material cost data for this period.</div>
+          ) : costRows.map((row) => {
+            const metrics: Array<[string, number]> = [
+              ['Purchase spend', row.purchaseSpend],
+              ['Master cost / unit', row.unitCost],
+              ['Material issued', row.issueCost],
+              ['Consumed', row.consumedCost],
+              ['Open batch cost', row.wipCost],
+              ['Stock valuation', row.inventoryValue],
+            ];
+            return (
+            <details key={row.key} className="group overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3.5 [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0">
+                  <h3 className="break-words text-sm font-bold text-slate-900">{row.name}</h3>
+                  {row.code && <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.code}</p>}
+                </div>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-right">
+                    <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">{row.currency} purchase</span>
+                    <span className="block text-xs font-bold tabular-nums text-slate-800">{money(row.purchaseSpend, row.currency)}</span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+                </span>
+              </summary>
+              <dl className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100">
+                {metrics.map(([label, value]) => (
+                  <div key={label} className="min-w-0 bg-white px-3 py-2.5">
+                    <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
+                    <dd className="mt-0.5 break-all text-xs font-semibold tabular-nums text-slate-800">{money(value, row.currency)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+            );
+          })}
+        </div>
+        <div className="hidden overflow-x-auto xl:block">
+          <table className="w-full min-w-[1080px] text-[13px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <th className="px-3 py-3 font-semibold">Raw material</th>
@@ -885,8 +1003,56 @@ export default function BulkRMPositionReportPage() {
             Orders created or completed this month, plus open batches still on the floor. Sage GI is materials issued; Sage complete is the finished-goods receipt.
           </p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+        <div className="space-y-2.5 p-3 xl:hidden">
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">Loading manufacturing…</div>
+          ) : batches.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">No manufacturing batches in this month.</div>
+          ) : batches.map((row) => {
+            const productionMetrics: Array<[string, number]> = [
+              ['Planned', row.planned],
+              ['Produced', row.actual],
+              ['RM issued', row.issuedKg],
+            ];
+            const sageStages: Array<[string, string]> = [
+              ['Sage GI', row.sageIssue],
+              ['Sage complete', row.sageComplete],
+              ['FG transfer', row.fgTransfer],
+            ];
+            return (
+            <article key={row.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="flex items-start justify-between gap-3 p-3.5">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold text-slate-900">{row.batch}</p>
+                  <h3 className="mt-1 truncate text-sm font-semibold text-slate-800">{row.formula}</h3>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">{row.line}</p>
+                </div>
+                <span className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ${row.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : row.status === 'failed' || row.status === 'cancelled' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {row.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <dl className="grid grid-cols-3 gap-px border-y border-slate-100 bg-slate-100">
+                {productionMetrics.map(([label, value]) => (
+                  <div key={label} className="min-w-0 bg-slate-50 px-3 py-2.5">
+                    <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
+                    <dd className="mt-0.5 truncate text-xs font-bold tabular-nums text-slate-800">{qty(value)} kg</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex flex-wrap gap-2 p-3">
+                {sageStages.map(([label, value]) => (
+                  <span key={label} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[10px]">
+                    <span className="font-semibold text-slate-400">{label}</span>
+                    <span className={`font-bold capitalize ${value === 'success' ? 'text-emerald-700' : value === 'failed' ? 'text-rose-700' : 'text-slate-600'}`}>{value.replace(/_/g, ' ')}</span>
+                  </span>
+                ))}
+              </div>
+            </article>
+            );
+          })}
+        </div>
+        <div className="hidden overflow-x-auto xl:block">
+          <table className="w-full min-w-[1120px] text-[13px]">
             <thead>
               <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <th className="px-3 py-3 font-semibold">Batch</th>
