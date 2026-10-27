@@ -646,7 +646,7 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <nav aria-label="Report sections" className="sticky top-16 z-20 flex gap-1 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur-md sm:gap-2 sm:p-2">
+      <nav aria-label="Report sections" className="sticky top-16 z-20 grid grid-cols-2 gap-1 rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-sm backdrop-blur-md sm:flex sm:flex-wrap sm:gap-2 sm:p-2">
         {REPORT_SECTIONS.map(({ id, label, icon: Icon }) => {
           const isActive = activeSection === id;
           return (
@@ -659,7 +659,7 @@ export default function BulkRMPositionReportPage() {
                 document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 setActiveSection(id);
               }}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 sm:gap-2 sm:px-4 sm:text-sm ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+              className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-2.5 py-2.5 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-2 sm:px-4 sm:text-sm ${isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
             >
               <Icon className={`h-4 w-4 ${isActive ? 'text-teal-300' : 'text-slate-400'}`} />
               {label}
