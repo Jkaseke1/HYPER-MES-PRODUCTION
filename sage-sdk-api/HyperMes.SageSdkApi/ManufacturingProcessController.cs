@@ -20,6 +20,7 @@ namespace SDK_Test
 
             try
             {
+                ValidateManufacturingProcedureAvailable();
                 ValidateSageMasters(request);
                 return Ok(Response(request, "validated", "Validated Sage BOM manufacturing process. No Sage process document was created."));
             }
@@ -39,6 +40,7 @@ namespace SDK_Test
 
             try
             {
+                ValidateManufacturingProcedureAvailable();
                 ValidateSageMasters(request);
                 var existing = FindProcess(request.ProcessReference, request.ExternalReference);
                 if (existing != null) return Ok(Response(request, "already-posted", "Sage already contains this manufacturing process document.", existing));
@@ -70,7 +72,7 @@ namespace SDK_Test
                         command.Parameters.Add("@WarehouseID", SqlDbType.Int).Value = request.WarehouseId;
                         command.Parameters.Add("@UnitCost", SqlDbType.Float).Value = (double)request.UnitCost;
                         command.Parameters.Add("@TransactionDate", SqlDbType.DateTime).Value = request.TransactionDate == default(DateTime) ? DateTime.Today : request.TransactionDate.Date;
-                        command.Parameters.Add("@Description", SqlDbType.VarChar, 255).Value = request.Description ?? "";
+                        command.Parameters.Add("@Description", SqlDbType.VarChar, 50).Value = FitDescription(request.Description);
                         command.Parameters.Add("@Components", SqlDbType.Xml).Value = ComponentsXml(request);
                         command.Parameters.Add("@ProjectID", SqlDbType.Int).Value = 0;
                         command.ExecuteNonQuery();
@@ -84,6 +86,17 @@ namespace SDK_Test
             catch (Exception ex)
             {
                 return Content(HttpStatusCode.InternalServerError, new { status = "failed", action = "manufacturing-process", message = "Sage could not record this manufacturing process document.", exceptionMessage = ex.Message });
+            }
+        }
+
+        private static void ValidateManufacturingProcedureAvailable()
+        {
+            using (var connection = new SqlConnection(GetCompanyConnectionString()))
+            using (var command = new SqlCommand("SELECT OBJECT_ID(N'dbo.PostManufacturingProcessDocumentV1', N'P')", connection))
+            {
+                connection.Open();
+                if (command.ExecuteScalar() == null)
+                    throw new InvalidOperationException("Required Sage manufacturing procedure dbo.PostManufacturingProcessDocumentV1 is missing. No manufacturing process was posted.");
             }
         }
 
@@ -165,7 +178,13 @@ namespace SDK_Test
                 new XAttribute("quantity", component.Quantity),
                 new XAttribute("unit_cost", component.UnitCost),
                 new XAttribute("warehouse_id", component.WarehouseId),
-                new XAttribute("description", component.Description ?? "")))).ToString(SaveOptions.DisableFormatting);
+                new XAttribute("description", FitDescription(component.Description))))).ToString(SaveOptions.DisableFormatting);
+        }
+
+        private static string FitDescription(string description)
+        {
+            var value = description ?? "";
+            return value.Length <= 50 ? value : value.Substring(0, 50);
         }
 
         private static string ValidateRequest(ManufacturingProcessRequest request)
@@ -182,7 +201,7 @@ namespace SDK_Test
 
         private static object Response(ManufacturingProcessRequest request, string status, string message, string processReference = null)
         {
-            return new { status = status, environment = "UAT", action = "manufacturing-process", processReference = (processReference ?? request.ProcessReference ?? "").Trim(), externalReference = request.ExternalReference, finishedGoodCode = request.FinishedGoodCode.Trim().ToUpperInvariant(), message = message };
+            return new { status = status, environment = SageRuntime.EnvironmentName, action = "manufacturing-process", processReference = (processReference ?? request.ProcessReference ?? "").Trim(), externalReference = request.ExternalReference, finishedGoodCode = request.FinishedGoodCode.Trim().ToUpperInvariant(), message = message };
         }
 
         private static string GetCompanyConnectionString()

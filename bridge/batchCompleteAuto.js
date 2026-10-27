@@ -134,6 +134,9 @@ async function handleBatchComplete(syncEvent) {
   console.log(`  Product: ${itemCode} - ${quantity}kg (${sageUnits} Sage unit(s) x ${kgPerSageUnit}kg) to ${FINISHED_GOODS_WAREHOUSE}`);
   console.log(`  MES cost: ${unitCost} per kg; Sage valuation mode: ${postingCostMode}; reference ${body.reference}`);
 
+  await postJson(`${SDK_BASE_URL}/api/v1/finished-goods-receipts/validate`, { ...body, confirmPost: false });
+  await postJson(`${SDK_BASE_URL}/api/v1/manufacturing-processes/validate`, { ...manufacturingProcessBody, confirmPost: false });
+
   if (DRY_RUN) {
     return { dryRun: true, message: `DRY RUN: ${body.reference} would post finished goods through Sage SDK`, details: { sdkFinishedGoodsReceipt: { ...body, confirmPost: false } } };
   }

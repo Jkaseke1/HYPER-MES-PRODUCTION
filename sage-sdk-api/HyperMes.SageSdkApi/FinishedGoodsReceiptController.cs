@@ -35,10 +35,10 @@ namespace SDK_Test
                             return Ok(new
                             {
                                 status = "validated",
-                                environment = "UAT",
+                                environment = SageRuntime.EnvironmentName,
                                 action = "finished-goods-receipt",
                                 sagePosting = "not performed",
-                                message = "Validated against Sage UAT. No finished-goods receipt was created.",
+                                message = "Validated against Sage " + SageRuntime.EnvironmentName + ". No finished-goods receipt was created.",
                                 receipt = ReceiptSummary(request, transaction)
                             });
                         }
@@ -80,11 +80,11 @@ namespace SDK_Test
                             return Ok(new
                             {
                                 status = "posted",
-                                environment = "UAT",
+                                environment = SageRuntime.EnvironmentName,
                                 action = "finished-goods-receipt",
                                 postingMode = "sdk-inventory-transaction",
                                 sagePosting = "completed",
-                                message = "Finished-goods receipt posted to Sage UAT through the Evolution SDK.",
+                                message = "Finished-goods receipt posted to Sage " + SageRuntime.EnvironmentName + " through the Evolution SDK.",
                                 receipt = ReceiptSummary(request, transaction)
                             });
                         }
@@ -96,7 +96,7 @@ namespace SDK_Test
             {
                 bool removed;
                 PostedReferences.TryRemove(reference, out removed);
-                return Content(HttpStatusCode.InternalServerError, new { status = "failed", action = "finished-goods-receipt", message = "Sage UAT could not post the finished-goods receipt.", exceptionMessage = ex.Message });
+                return Content(HttpStatusCode.InternalServerError, new { status = "failed", environment = SageRuntime.EnvironmentName, action = "finished-goods-receipt", message = "Sage " + SageRuntime.EnvironmentName + " could not post the finished-goods receipt.", exceptionMessage = ex.Message });
             }
         }
 
