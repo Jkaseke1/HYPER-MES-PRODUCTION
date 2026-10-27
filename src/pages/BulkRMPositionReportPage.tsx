@@ -668,7 +668,7 @@ export default function BulkRMPositionReportPage() {
         })}
       </nav>
 
-      <section id="report-overview" className="space-y-3 scroll-mt-24">
+      <section id="report-overview" className="scroll-mt-44 space-y-3 sm:scroll-mt-32">
         <div className="flex flex-wrap items-end justify-between gap-2 px-1">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-teal-700">Period overview</p>
@@ -698,7 +698,7 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <section id="material-costs" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section id="material-costs" className="scroll-mt-44 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:scroll-mt-32">
         <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -755,7 +755,7 @@ export default function BulkRMPositionReportPage() {
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-      <section id="stock-position" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section id="stock-position" className="scroll-mt-44 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:scroll-mt-32">
         <div className="border-b border-slate-100 px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -995,7 +995,7 @@ export default function BulkRMPositionReportPage() {
         </div>
       </section>
 
-      <section id="manufacturing-batches" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section id="manufacturing-batches" className="scroll-mt-44 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:scroll-mt-32">
         <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-700">Production execution</p>
           <h2 className="mt-1 text-base font-bold tracking-tight text-slate-900">Manufacturing batches</h2>
