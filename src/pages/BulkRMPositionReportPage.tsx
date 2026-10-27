@@ -19,6 +19,8 @@ interface Material {
   name: string;
   code: string;
   current_stock: number;
+  cost_per_unit: number;
+  currency_code: string;
 }
 
 interface PositionRow {
@@ -33,6 +35,13 @@ interface PositionRow {
   issues: number;
   consumed: number;
   inManufacturing: number;
+  purchaseSpend: number;
+  issueCost: number;
+  consumedCost: number;
+  wipCost: number;
+  unitCost: number;
+  currency: string;
+  inventoryValue: number;
   physical: number | null;
   system: number;
 }
@@ -70,6 +79,14 @@ function qty(v: number | null | undefined) {
   return v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function money(value: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
+  } catch {
+    return `${currency} ${value.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+}
+
 function monthOptions() {
   const now = new Date();
   return Array.from({ length: 12 }, (_, i) => {
@@ -82,7 +99,7 @@ function monthOptions() {
   });
 }
 
-async function fetchPaged<T>(build: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>) {
+async function fetchPaged<T>(build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>) {
   const page = 1000;
   const rows: T[] = [];
   let from = 0;
@@ -111,6 +128,7 @@ export default function BulkRMPositionReportPage() {
   const [rows, setRows] = useState<PositionRow[]>([]);
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [openingAsAt, setOpeningAsAt] = useState<string | null>(null);
+  const [purchaseLinesWithoutCost, setPurchaseLinesWithoutCost] = useState(0);
 
   const period = months[monthIndex];
 
@@ -122,7 +140,7 @@ export default function BulkRMPositionReportPage() {
       const endTs = `${period.end}T23:59:59`;
 
       const [materialsRes, openingSnapsRes, physicalSnapsRes, sageRes, tickets, grns, transfers, issues, createdOrders, completedOrders, openOrders] = await Promise.all([
-        supabase.from('raw_materials').select('id, name, code, current_stock').eq('is_active', true).order('name'),
+        supabase.from('raw_materials').select('id, name, code, current_stock, cost_per_unit, currency_code').eq('is_active', true).order('name'),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock, opening_stock').lte('snapshot_date', openingDate).order('snapshot_date', { ascending: false }).limit(4000),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock').lte('snapshot_date', period.end).order('snapshot_date', { ascending: false }).limit(4000),
         supabase.from('sage_stock_balances').select('*'),
@@ -136,7 +154,7 @@ export default function BulkRMPositionReportPage() {
         ),
         fetchPaged<any>((from, to) =>
           supabase.from('goods_received_notes')
-            .select('id, status, received_date, grn_items(received_qty, raw_material_id, raw_materials(id, name, code))')
+            .select('id, status, received_date, grn_items(received_qty, unit_cost, raw_material_id, raw_materials(id, name, code))')
             .gte('received_date', period.start)
             .lte('received_date', period.end)
             .neq('status', 'rejected')
@@ -152,7 +170,7 @@ export default function BulkRMPositionReportPage() {
         ),
         fetchPaged<any>((from, to) =>
           supabase.from('production_order_materials')
-            .select('production_order_id, raw_material_id, planned_qty, actual_qty, issued, issued_at, raw_materials(id, name, code)')
+            .select('production_order_id, raw_material_id, planned_qty, actual_qty, unit_cost, total_cost, issued, issued_at, raw_materials(id, name, code)')
             .eq('issued', true)
             .gte('issued_at', period.start)
             .lte('issued_at', endTs)
@@ -256,6 +274,11 @@ export default function BulkRMPositionReportPage() {
       const issueQty: Record<string, number> = {};
       const consumedQty: Record<string, number> = {};
       const wipQty: Record<string, number> = {};
+      const purchaseSpend: Record<string, number> = {};
+      const issueCost: Record<string, number> = {};
+      const consumedCost: Record<string, number> = {};
+      const wipCost: Record<string, number> = {};
+      let missingCostLines = 0;
       const issuedByOrder: Record<string, number> = {};
       const unmatchedWb: Record<string, number> = {};
 
@@ -271,7 +294,13 @@ export default function BulkRMPositionReportPage() {
         items.forEach((item: any) => {
           const rm = rel(item.raw_materials);
           const mat = matchMaterial(item.raw_material_id || rm?.id, rm?.code, rm?.name);
-          if (mat) add(grnQty, mat.id, n(item.received_qty));
+          if (mat) {
+            const quantity = n(item.received_qty);
+            const unitCost = n(item.unit_cost);
+            add(grnQty, mat.id, quantity);
+            if (unitCost > 0) add(purchaseSpend, mat.id, quantity * unitCost);
+            else if (quantity > 0) missingCostLines += 1;
+          }
         });
       });
 
@@ -285,11 +314,18 @@ export default function BulkRMPositionReportPage() {
         const rm = rel(row.raw_materials);
         const mat = matchMaterial(row.raw_material_id || rm?.id, rm?.code, rm?.name);
         const amount = n(row.actual_qty) || n(row.planned_qty);
+        const cost = n(row.total_cost) || amount * n(row.unit_cost);
         const order = orderMap.get(row.production_order_id);
         if (mat) {
           add(issueQty, mat.id, amount);
-          if (order?.status === 'completed') add(consumedQty, mat.id, amount);
-          else add(wipQty, mat.id, amount);
+          add(issueCost, mat.id, cost);
+          if (order?.status === 'completed') {
+            add(consumedQty, mat.id, amount);
+            add(consumedCost, mat.id, cost);
+          } else {
+            add(wipQty, mat.id, amount);
+            add(wipCost, mat.id, cost);
+          }
         }
         if (row.production_order_id) add(issuedByOrder, row.production_order_id, amount);
       });
@@ -365,6 +401,13 @@ export default function BulkRMPositionReportPage() {
           issues: mat ? issueQty[mat.id] || 0 : 0,
           consumed: mat ? consumedQty[mat.id] || 0 : 0,
           inManufacturing: mat ? wipQty[mat.id] || 0 : 0,
+          purchaseSpend: mat ? purchaseSpend[mat.id] || 0 : 0,
+          issueCost: mat ? issueCost[mat.id] || 0 : 0,
+          consumedCost: mat ? consumedCost[mat.id] || 0 : 0,
+          wipCost: mat ? wipCost[mat.id] || 0 : 0,
+          unitCost: mat ? n(mat.cost_per_unit) : 0,
+          currency: mat?.currency_code || 'USD',
+          inventoryValue: mat ? system * n(mat.cost_per_unit) : 0,
           physical: physical === undefined ? null : physical,
           system,
           ...extra,
@@ -382,10 +425,12 @@ export default function BulkRMPositionReportPage() {
 
       setOpeningAsAt(usedOpeningDate);
       setRows(next);
+      setPurchaseLinesWithoutCost(missingCostLines);
     } catch (err: any) {
       setError(err.message || 'Could not build the bulk raw materials position.');
       setRows([]);
       setBatches([]);
+      setPurchaseLinesWithoutCost(0);
     } finally {
       setLoading(false);
     }
@@ -422,6 +467,24 @@ export default function BulkRMPositionReportPage() {
     physical: acc.physical + (row.physical || 0),
   }), { opening: 0, weighbridge: 0, grn: 0, transfers: 0, issues: 0, consumed: 0, inManufacturing: 0, theo: 0, system: 0, physical: 0 }), [visible]);
 
+  const financialTotals = useMemo(() => {
+    const byCurrency: Record<string, { purchaseSpend: number; issueCost: number; consumedCost: number; wipCost: number; inventoryValue: number }> = {};
+    visible.forEach((row) => {
+      const currency = row.currency || 'USD';
+      byCurrency[currency] ||= { purchaseSpend: 0, issueCost: 0, consumedCost: 0, wipCost: 0, inventoryValue: 0 };
+      byCurrency[currency].purchaseSpend += row.purchaseSpend;
+      byCurrency[currency].issueCost += row.issueCost;
+      byCurrency[currency].consumedCost += row.consumedCost;
+      byCurrency[currency].wipCost += row.wipCost;
+      byCurrency[currency].inventoryValue += row.inventoryValue;
+    });
+    return Object.entries(byCurrency).filter(([, values]) => Object.values(values).some((value) => value !== 0));
+  }, [visible]);
+
+  const costRows = useMemo(() => visible.filter((row) =>
+    row.purchaseSpend || row.issueCost || row.consumedCost || row.wipCost || row.inventoryValue
+  ), [visible]);
+
   const manufacturing = useMemo(() => {
     const completed = batches.filter((b) => b.status === 'completed');
     const running = batches.filter((b) => ['materials_issued', 'in_progress', 'pending_finance'].includes(b.status));
@@ -446,6 +509,13 @@ export default function BulkRMPositionReportPage() {
       'BOM issues': row.issues,
       'Consumed in completed batches': row.consumed,
       'In manufacturing WIP': row.inManufacturing,
+      Currency: row.currency,
+      'Recorded GRN spend': row.purchaseSpend,
+      'Current unit cost': row.unitCost,
+      'Issued material cost': row.issueCost,
+      'Consumed material cost': row.consumedCost,
+      'Manufacturing WIP material cost': row.wipCost,
+      'System stock valuation': row.inventoryValue,
       'THEO closing': row.theo,
       'Physical stock': row.physical,
       'System stock': row.system,
@@ -463,45 +533,76 @@ export default function BulkRMPositionReportPage() {
       'Sage complete': row.sageComplete,
       'FG transfer': row.fgTransfer,
     })));
+    const costSheet = XLSX.utils.json_to_sheet(financialTotals.map(([currency, values]) => ({
+      Currency: currency,
+      'Recorded GRN spend': values.purchaseSpend,
+      'Material cost issued': values.issueCost,
+      'Consumed in completed batches': values.consumedCost,
+      'In open manufacturing': values.wipCost,
+      'System stock valuation': values.inventoryValue,
+    })));
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, sheet, 'Bulk RM');
     XLSX.utils.book_append_sheet(book, mfgSheet, 'Manufacturing');
+    XLSX.utils.book_append_sheet(book, costSheet, 'Cost summary');
     XLSX.writeFile(book, `Bulk-RM-position-${period.start}-to-${period.end}.xlsx`);
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[#f39200]">Manufacturing stock position</p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900">{format(new Date(`${period.start}T00:00:00`), 'MMMM yyyy')} bulk raw materials</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Purchased stock through manufacturing: weighbridge, GRN, transfers, BOM issues, batches, Sage GI / completion, and finished goods.
-          </p>
+    <div className="space-y-5 pb-6">
+      <header className="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-[#0b0b30] px-5 py-6 text-white shadow-sm sm:px-7 lg:px-8">
+        <div className="pointer-events-none absolute -right-10 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-orange-500/25 to-amber-400/5 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-28 left-1/3 h-48 w-64 rounded-full bg-gradient-to-br from-teal-400/15 to-emerald-500/5 blur-3xl" />
+        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-400/25 bg-orange-400/10 text-orange-300 shadow-lg shadow-orange-500/10 sm:flex">
+              <Factory className="h-6 w-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Executive operations report</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-slate-300">{format(new Date(`${period.start}T00:00:00`), 'MMMM yyyy')}</span>
+              </div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Raw materials to manufacturing</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                Follow purchases from weighbridge and GRN through stock, production issues, batch consumption and finished output.
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <button onClick={load} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-70">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+            <button onClick={exportWorkbook} className="inline-flex items-center gap-2 rounded-xl bg-orange-400 px-4 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-orange-300">
+              <Download className="h-4 w-4" /> Export workbook
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section aria-label="Report filters" className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><FileText className="h-4 w-4" /></span>
+          Report period
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
+            aria-label="Report month"
             value={monthIndex}
             onChange={(e) => setMonthIndex(Number(e.target.value))}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="min-w-40 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20"
           >
             {months.map((month, index) => (
               <option key={month.start} value={index}>{month.label}</option>
             ))}
           </select>
-          <button onClick={() => setHideZeros((v) => !v)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button onClick={() => setHideZeros((v) => !v)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
             {hideZeros ? 'Show zeros' : 'Hide zeros'}
           </button>
-          <button onClick={load} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </button>
-          <button onClick={exportWorkbook} className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700">
-            <Download className="h-4 w-4" /> Export
-          </button>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Weighbridge intake', value: qty(totals.weighbridge), note: 'Nett mass received at the bridge', icon: Scale },
           { label: 'GRN receipts', value: qty(totals.grn), note: 'Purchased quantity booked in', icon: FileText },
@@ -512,16 +613,54 @@ export default function BulkRMPositionReportPage() {
           { label: 'Sage manufacturing', value: `${manufacturing.sageGi}/${manufacturing.total}`, note: `${manufacturing.sageDone} batch completions posted`, icon: FileText },
           { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: PackageCheck },
         ].map(({ label, value, note, icon: Icon }) => (
-          <div key={label} className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">{label}</p>
-              <Icon className="h-4 w-4 text-teal-700" />
+          <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-slate-500">{label}</p>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                <Icon className="h-4 w-4" />
+              </span>
             </div>
-            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-slate-900">{value}</p>
             <p className="mt-1 text-xs text-slate-400">{note}</p>
           </div>
         ))}
       </div>
+
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Raw material spend &amp; valuation</h2>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">Purchase spend uses GRN received quantity × recorded unit cost. Issue and consumption costs use manufacturing issue records. Stock valuation uses system stock × current master cost. Values are grouped by currency with no conversion.</p>
+            </div>
+            <span className="mt-1 w-fit rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 sm:mt-0">By currency</span>
+          </div>
+        </div>
+        {financialTotals.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-500">No recorded material costs for this period.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5 sm:p-5">
+            {financialTotals.flatMap(([currency, values]) => [
+              { label: `Purchase spend · ${currency}`, value: values.purchaseSpend, note: 'Recorded on received GRN lines' },
+              { label: `Material issued · ${currency}`, value: values.issueCost, note: 'Cost assigned to production issues' },
+              { label: `Consumed · ${currency}`, value: values.consumedCost, note: 'Issued to completed batches' },
+              { label: `Open batch cost · ${currency}`, value: values.wipCost, note: 'Issued to batches not yet completed' },
+              { label: `Stock value · ${currency}`, value: values.inventoryValue, note: 'System quantity × current unit cost' },
+            ].map((item) => (
+              <div key={item.label} className="min-w-0 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3.5">
+                <p className="text-[11px] font-semibold leading-4 text-slate-500">{item.label}</p>
+                <p className="mt-2 break-words text-lg font-bold tabular-nums tracking-tight text-slate-900">{money(item.value, currency)}</p>
+                <p className="mt-1 text-[10px] leading-4 text-slate-500">{item.note}</p>
+              </div>
+            )))}
+          </div>
+        )}
+        {purchaseLinesWithoutCost > 0 && (
+          <p className="mx-4 mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 sm:mx-5">
+            {purchaseLinesWithoutCost} received GRN line(s) have no unit cost; they are included in received quantities but excluded from purchase spend.
+          </p>
+        )}
+      </section>
 
       {Math.abs(totals.grn - totals.weighbridge) > 0.5 && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -544,10 +683,10 @@ export default function BulkRMPositionReportPage() {
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Bulk raw materials</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-bold text-slate-900">Bulk raw material position</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
             Opening as at {openingAsAt ? format(new Date(`${openingAsAt}T00:00:00`), 'dd MMM yyyy') : 'previous close'}.
             THEO closing = opening + GRN − BOM issues. Consumed is completed manufacturing; in manufacturing is still on an open batch.
           </p>
@@ -624,10 +763,54 @@ export default function BulkRMPositionReportPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+          <h2 className="text-sm font-bold text-slate-900">Cost by raw material</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Currency is shown per material so unlike amounts are never totalled together. Master unit cost is the current raw-material cost; purchase spend uses period GRNs.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[880px] text-[13px]">
+            <thead>
+              <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-3 font-medium">Raw material</th>
+                <th className="px-3 py-3 text-center font-medium">Currency</th>
+                <th className="px-3 py-3 text-right font-medium">Purchase spend</th>
+                <th className="px-3 py-3 text-right font-medium">Master cost / unit</th>
+                <th className="px-3 py-3 text-right font-medium">Issued cost</th>
+                <th className="px-3 py-3 text-right font-medium">Consumed cost</th>
+                <th className="px-3 py-3 text-right font-medium">Open batch cost</th>
+                <th className="px-3 py-3 text-right font-medium">Stock valuation</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400">Loading material costs…</td></tr>
+              ) : costRows.length === 0 ? (
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-slate-400">No material cost data for this period.</td></tr>
+              ) : costRows.map((row) => (
+                <tr key={row.key} className="hover:bg-slate-50/80">
+                  <td className="px-3 py-2.5 font-medium text-slate-900">
+                    {row.name}
+                    {row.code ? <span className="ml-2 font-mono text-[10px] text-slate-400">{row.code}</span> : null}
+                  </td>
+                  <td className="px-3 py-2.5 text-center text-xs font-semibold text-slate-600">{row.currency}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-emerald-800">{money(row.purchaseSpend, row.currency)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{money(row.unitCost, row.currency)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-amber-800">{money(row.issueCost, row.currency)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{money(row.consumedCost, row.currency)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-sky-800">{money(row.wipCost, row.currency)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-800">{money(row.inventoryValue, row.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Manufacturing batches</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-sm font-bold text-slate-900">Manufacturing batches</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
             Orders created or completed this month, plus open batches still on the floor. Sage GI is materials issued; Sage complete is the finished-goods receipt.
           </p>
         </div>
