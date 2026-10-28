@@ -245,7 +245,7 @@ export default function FormulationsPage() {
         readiness[formula.id] = {
           ingredientTotalKg,
           varianceKg,
-          isBalanced: Number(formula.batch_size) === STANDARD_FORMULA_BATCH_KG && formula.batch_unit === 'kg'
+          isBalanced: Number(formula.batch_size) > 0 && formula.batch_unit === 'kg'
             && !nonKgFormulas.has(formula.id) && ingredientTotalKg > 0 && Math.abs(varianceKg) <= 0.01,
         };
       });
@@ -393,11 +393,12 @@ export default function FormulationsPage() {
     const nextVersion = formulations
       .filter(f => f.code === src.code)
       .reduce((max, f) => Math.max(max, Number(f.version) || 0), 0) + 1;
+    const referenceBatch = Number(src.batch_size) > 0 ? Number(src.batch_size) : STANDARD_FORMULA_BATCH_KG;
     const copiedVariants = Array.isArray(variants) && variants.length > 0
       ? variants.map((variant: UnitSizeVariant, index: number) => index === 0
-        ? { ...variant, batch_size: STANDARD_FORMULA_BATCH_KG }
+        ? { ...variant, batch_size: referenceBatch }
         : variant)
-      : [{ size: '', batch_size: STANDARD_FORMULA_BATCH_KG }];
+      : [{ size: '', batch_size: referenceBatch }];
     setForm({
       name: src.name,
       code: src.code,
@@ -405,7 +406,7 @@ export default function FormulationsPage() {
       version: nextVersion,
       category: src.category || '',
       description: src.description || '',
-      batch_size: String(STANDARD_FORMULA_BATCH_KG),
+      batch_size: String(referenceBatch),
       batch_unit: 'kg',
       unit_size_variants: copiedVariants,
       target_protein: src.target_protein.toString(),
@@ -415,7 +416,7 @@ export default function FormulationsPage() {
       estimated_cost_per_unit: 0,
       status: 'draft',
     });
-    setCopiedBatchSize(STANDARD_FORMULA_BATCH_KG);
+    setCopiedBatchSize(referenceBatch);
     setIngs([emptyIng()]);
     setLegacyBomNotice(null);
   }
@@ -468,13 +469,13 @@ export default function FormulationsPage() {
       formulaLines = specLines || [];
     }
     const sourceLines = formulaLines.length > 0 ? formulaLines : (bomRes.data || []);
-    const standardBatch = STANDARD_FORMULA_BATCH_KG;
+    const referenceBatch = Number(specRes.data?.reference_batch_size) || Number(f.batch_size) || STANDARD_FORMULA_BATCH_KG;
     let normalizedLines: any[];
     try {
       if (bomRes.error) throw bomRes.error;
-      normalizedLines = normalizeFormulaBom(sourceLines, materials, standardBatch).mass;
+      normalizedLines = normalizeFormulaBom(sourceLines, materials, referenceBatch).mass;
       const counted = (bomRes.data || []).length
-        ? normalizeFormulaBom(bomRes.data || [], materials, standardBatch).counted
+        ? normalizeFormulaBom(bomRes.data || [], materials, referenceBatch).counted
         : [];
       setCountedBomLines(counted.map(line => ({ ...line, percentage: 0, is_critical: !!line.is_critical })));
     } catch (error: any) {
@@ -482,14 +483,14 @@ export default function FormulationsPage() {
       return;
     }
 
-    // Editing uses a 1,000 kg reference after mass-unit conversion.
+    // Preserve the stored reference batch after mass-unit conversion.
     setForm(current => ({
       ...current,
-      batch_size: String(standardBatch),
+      batch_size: String(referenceBatch),
       unit_size_variants: (current.unit_size_variants?.length
         ? current.unit_size_variants
-        : [{ size: '', batch_size: standardBatch }]).map((variant, index) => index === 0
-          ? { ...variant, batch_size: standardBatch }
+        : [{ size: '', batch_size: referenceBatch }]).map((variant, index) => index === 0
+          ? { ...variant, batch_size: referenceBatch }
           : variant),
     }));
     setLegacyBomNotice(null);
@@ -497,7 +498,7 @@ export default function FormulationsPage() {
       raw_material_id: i.raw_material_id,
       quantity: Number(i.quantity) || 0,
       unit: 'kg',
-      percentage: standardBatch > 0 ? Math.round(((Number(i.quantity) || 0) / standardBatch) * 1000000) / 10000 : 0,
+      percentage: referenceBatch > 0 ? Math.round(((Number(i.quantity) || 0) / referenceBatch) * 1000000) / 10000 : 0,
       is_critical: !!(bomRes.data || []).find(line => line.raw_material_id === i.raw_material_id)?.is_critical,
     }));
     setIngs(loadedIngredients);
@@ -530,15 +531,11 @@ export default function FormulationsPage() {
       return;
     }
 
-    // Batch size can be supplied either at the top level OR via the first Unit Size Variant row.
+    // Keep the reference batch in kg and mirror it into the first legacy variant.
     const firstVariantBatch = form.unit_size_variants?.[0]?.batch_size || 0;
     const resolvedBatchSize = Number(form.batch_size) || firstVariantBatch;
-    if (resolvedBatchSize !== STANDARD_FORMULA_BATCH_KG) {
-      alert('Formula reference batches must be 1,000 kg. Reopen the formula to prepare the standard batch.');
-      return;
-    }
-    if (!resolvedBatchSize || resolvedBatchSize <= 0) {
-      alert('Please provide a batch size (either on the Unit Size Variant row or at the top-level Batch Size field).');
+    if (!Number.isFinite(resolvedBatchSize) || resolvedBatchSize <= 0) {
+      alert('Enter a valid reference batch size greater than zero kg.');
       return;
     }
 
@@ -567,7 +564,9 @@ export default function FormulationsPage() {
     setSaving(true);
     try {
       // Filter out empty unit_size_variants and validate
-      const validVariants = form.unit_size_variants.filter(v => v.size && v.batch_size > 0);
+      const validVariants = form.unit_size_variants
+        .map((variant, index) => index === 0 ? { ...variant, batch_size: resolvedBatchSize } : variant)
+        .filter(v => v.size && v.batch_size > 0);
       
       const payload = {
         ...form,
@@ -583,8 +582,7 @@ export default function FormulationsPage() {
       
       console.log('Saving formulation with variants:', payload.unit_size_variants);
 
-      const batchScale = resolvedBatchSize / STANDARD_FORMULA_BATCH_KG;
-      const rows = [...ings, ...countedBomLines.map(line => ({ ...line, quantity: line.quantity * batchScale }))]
+      const rows = [...ings, ...countedBomLines]
         .filter(i => i.raw_material_id)
         .map((i, idx) => ({
           raw_material_id: i.raw_material_id,
@@ -638,8 +636,9 @@ export default function FormulationsPage() {
     if (!selected) return;
     setSaving(true);
     try {
-      if (Number(selected.batch_size) !== STANDARD_FORMULA_BATCH_KG || selected.batch_unit !== 'kg') {
-        throw new Error('Prepare this formula in the formula editor with a 1,000 kg reference batch before editing its BOM.');
+      const referenceBatch = Number(selected.batch_size);
+      if (!(referenceBatch > 0) || selected.batch_unit !== 'kg') {
+        throw new Error('This formula needs a positive reference batch in kg before its BOM can be edited.');
       }
       // Filter valid ingredients and auto-normalize percentages to exact 100%
       const normalized = normalizeFormulaBom(bomEditIngs.filter(i => i.raw_material_id), materials);
@@ -672,8 +671,8 @@ export default function FormulationsPage() {
         }
       }
 
-      if (Math.abs(totalWeight - STANDARD_FORMULA_BATCH_KG) > 0.01) {
-        throw new Error('BOM ingredient mass must total 1,000 kg, excluding packaging.');
+      if (Math.abs(totalWeight - referenceBatch) > 0.01) {
+        throw new Error(`BOM ingredient mass must total ${referenceBatch.toLocaleString()} kg, excluding packaging.`);
       }
       const rows = validIngs.map((i, idx) => ({
         raw_material_id: i.raw_material_id,
@@ -689,7 +688,7 @@ export default function FormulationsPage() {
         p_formula: {
           name: selected.name, code: selected.code, sage_code: (selected as any).sage_code || '',
           category: selected.category, description: selected.description,
-          batch_size: 1000, batch_unit: 'kg', unit_size_variants: (selected as any).unit_size_variants || null,
+          batch_size: referenceBatch, batch_unit: 'kg', unit_size_variants: (selected as any).unit_size_variants || null,
           target_protein: selected.target_protein, target_fat: selected.target_fat,
           target_fiber: selected.target_fiber, target_moisture: selected.target_moisture,
           estimated_cost_per_unit: selected.estimated_cost_per_unit,
@@ -762,6 +761,21 @@ export default function FormulationsPage() {
   const formulaIngredientTotal = ings.filter((ingredient) => ingredient.raw_material_id).reduce((sum, ingredient) => sum + (Number(ingredient.quantity) || 0), 0);
   const formulaBatchSize = Number(form.batch_size) || Number(form.unit_size_variants?.[0]?.batch_size) || 0;
   const formulaBalanceDifference = formulaIngredientTotal - formulaBatchSize;
+
+  const updateReferenceBatch = (value: string) => {
+    const previousBatch = Number(form.batch_size) || Number(form.unit_size_variants?.[0]?.batch_size) || formulaIngredientTotal;
+    const nextBatch = Number(value);
+    const variants = form.unit_size_variants.length
+      ? [...form.unit_size_variants]
+      : [{ size: '', batch_size: nextBatch || 0 }];
+    variants[0] = { ...variants[0], batch_size: nextBatch || 0 };
+    setForm({ ...form, batch_size: value, unit_size_variants: variants });
+    if (Number.isFinite(nextBatch) && nextBatch > 0 && previousBatch > 0) {
+      setIngs(recalculateFromFormula(ings, nextBatch));
+      const scale = nextBatch / previousBatch;
+      setCountedBomLines(lines => lines.map(line => ({ ...line, quantity: line.quantity * scale })));
+    }
+  };
 
   const continueToBom = () => {
     const entered = ings.filter(i => i.raw_material_id);
@@ -1807,7 +1821,7 @@ export default function FormulationsPage() {
         <div className="formula-editor-stepper">
           <div className="formula-editor-stepper-copy">
             <p className="formula-editor-stepper-title">{formulaStage === 'formula' ? 'Build the formula specification' : 'Review the generated BOM'}</p>
-            <p className="formula-editor-stepper-subtitle">{formulaStage === 'formula' ? 'Enter the reference-batch quantities from the signed formula sheet.' : 'Confirm the calculated quantities before saving this production BOM.'}</p>
+            <p className="formula-editor-stepper-subtitle">{formulaStage === 'formula' ? 'Enter the reference batch and formula quantities from the signed formula sheet.' : 'Confirm the calculated quantities before saving this production BOM.'}</p>
           </div>
           <div className="formula-editor-stepper-badges" aria-label="Formula workflow progress">
             <span className={`formula-editor-step ${formulaStage === 'formula' ? 'active' : 'done'}`}>1&nbsp; Formula Input</span>
@@ -1831,7 +1845,7 @@ export default function FormulationsPage() {
           <aside className="formula-editor-details">
           <div>
             <h4 className="formula-editor-section-title">Formula details</h4>
-            <p className="formula-editor-section-help">Identify the finished product and define the standard batch used for the formula.</p>
+            <p className="formula-editor-section-help">Identify the finished product and set the reference batch used for the formula and BOM.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -1923,7 +1937,7 @@ export default function FormulationsPage() {
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Bag size (optional)</label>
               <input type="text" value={form.unit_size_variants[0]?.size || ''} onChange={e => { const v = [...form.unit_size_variants]; v[0] = { ...v[0], size: e.target.value }; setForm({ ...form, unit_size_variants: v }); }} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 5kg" /></div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Reference batch (kg) *</label>
-              <input type="number" aria-label="Reference batch (kg)" value={STANDARD_FORMULA_BATCH_KG} readOnly className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500" placeholder="e.g., 1000.00" />
+              <input type="number" aria-label="Reference batch (kg)" min="0.01" step="0.01" value={form.batch_size} onChange={e => updateReferenceBatch(e.target.value)} className="w-full px-3 py-2 border border-teal-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 bg-white" placeholder="e.g., 1000.00" />
               </div>
             <div><label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
               <select
@@ -1968,7 +1982,7 @@ export default function FormulationsPage() {
             </div>
             {countedBomLines.length > 0 && <div className="mb-3 border-l-2 border-teal-400 bg-teal-50 px-3 py-2 text-xs text-slate-700">
               <p className="font-semibold">Packaging / counted BOM lines</p>
-              {countedBomLines.map((line, index) => <p key={`${line.raw_material_id}-${index}`} className="mt-1">{materials.find(material => material.id === line.raw_material_id)?.name || line.raw_material_id}: {(line.quantity * (formulaBatchSize / STANDARD_FORMULA_BATCH_KG)).toLocaleString()} {line.unit}</p>)}
+              {countedBomLines.map((line, index) => <p key={`${line.raw_material_id}-${index}`} className="mt-1">{materials.find(material => material.id === line.raw_material_id)?.name || line.raw_material_id}: {line.quantity.toLocaleString()} {line.unit}</p>)}
             </div>}
             <div className="formula-editor-table">
             <table className="w-full text-sm table-fixed">
