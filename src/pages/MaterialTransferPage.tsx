@@ -43,6 +43,20 @@ interface MaterialTransfer {
   warehouses?: { name: string };
 }
 
+interface SavedTransferRequest {
+  id: string;
+  transfer_batch_key: string;
+  transfer_date: string;
+  purpose: string;
+  requested_by: string;
+  lines: Array<{ raw_material_id: string; quantity: number; unit: string }>;
+  status: 'pending' | 'verifying' | 'needs_review' | 'created' | 'cancelled';
+  attempt_count: number;
+  last_error: string | null;
+  created_at: string;
+  requester?: { full_name?: string | null; email?: string | null } | null;
+}
+
 interface SageTransferSyncLog {
   id: string;
   reference_id: string;
@@ -525,6 +539,8 @@ function SageMaterialPicker({
 export default function MaterialTransferPage() {
   const { profile } = useAuth();
   const [transfers, setTransfers] = useState<MaterialTransfer[]>([]);
+  const [savedTransferRequests, setSavedTransferRequests] = useState<SavedTransferRequest[]>([]);
+  const [retryingTransferRequestId, setRetryingTransferRequestId] = useState<string | null>(null);
   const [sageSyncLogs, setSageSyncLogs] = useState<Record<string, SageTransferSyncLog>>({});
   const [reversalsByTransferId, setReversalsByTransferId] = useState<Record<string, MaterialTransferReversal>>({});
   const [rawMaterials, setRawMaterials] = useState<any[]>([]);
@@ -598,6 +614,9 @@ export default function MaterialTransferPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
         scheduleRefresh();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfer_requests' }, () => {
+        scheduleRefresh();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
         scheduleRefresh();
       })
@@ -662,7 +681,7 @@ export default function MaterialTransferPage() {
     fetchInProgress.current = true;
     if (!silent) setLoading(true);
     try {
-    const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes, reversalsRes] = await Promise.all([
+    const [transfersRes, materialsRes, warehousesRes, ordersRes, rmBalancesRes, bufferBalancesRes, reversalsRes, transferRequestsRes] = await Promise.all([
       supabase
         .from('material_transfers')
         .select('*, requester:profiles!requested_by(full_name, email), raw_materials(name, code, unit), warehouses:from_warehouse_id(name)')
@@ -685,6 +704,11 @@ export default function MaterialTransferPage() {
       supabase
         .from('material_transfer_reversals')
         .select('id, reversal_number, original_transfer_id, status, sage_reference, failure_message, requested_at, posted_at, failed_at, updated_at')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('material_transfer_requests')
+        .select('id, transfer_batch_key, transfer_date, purpose, requested_by, lines, status, attempt_count, last_error, created_at, requester:profiles!requested_by(full_name, email)')
+        .in('status', ['pending', 'verifying', 'needs_review'])
         .order('created_at', { ascending: false }),
     ]);
 
@@ -714,6 +738,11 @@ export default function MaterialTransferPage() {
       setTransfers(nextTransfers);
     }
     if (materialsRes.data) setRawMaterials(materialsRes.data);
+    if (!transferRequestsRes.error && transferRequestsRes.data) {
+      setSavedTransferRequests(transferRequestsRes.data as SavedTransferRequest[]);
+    } else if (transferRequestsRes.error) {
+      console.warn('Failed to load saved material transfer requests:', transferRequestsRes.error.message);
+    }
     if (warehousesRes.data) setWarehouses(warehousesRes.data);
     if (ordersRes.data) setProductionOrders(ordersRes.data);
     if (rmBalancesRes.data) {
@@ -754,12 +783,23 @@ export default function MaterialTransferPage() {
     }
   }
 
-  async function verifySageStock(materialIds: string[], warehouseId: 18 | 19) {
+  async function verifySageStock(materialIds: string[], warehouseId: 18 | 19, transferRequestId?: string) {
     const ids = [...new Set(materialIds.filter(Boolean))].sort();
     const warehouse = warehouseId === 18 ? 'RM' : 'PD';
     const key = warehouse + ':' + ids.join(',');
     setStockCheckStatus('Requesting Sage ' + warehouse + ' stock verification...');
     let refreshLogId = pendingStockChecks.current[key];
+    if (transferRequestId) {
+      setStockCheckStatus('Requesting Sage ' + warehouse + ' stock verification...');
+      const { data, error } = await withClientTimeout(
+        supabase.rpc('start_material_transfer_request_check', { p_request_id: transferRequestId }),
+        12_000, 'Could not start the saved request stock check. The request remains saved for administrator review.',
+      );
+      if (error) throw error;
+      if (!data) throw new Error('No Sage stock-check reference was returned. The request remains saved for administrator review.');
+      refreshLogId = data;
+      pendingStockChecks.current[key] = refreshLogId;
+    }
     if (!refreshLogId) {
       const { data, error } = await withClientTimeout(
         supabase.rpc(warehouseId === 18 ? 'request_material_transfer_sage_refresh' : 'request_material_transfer_reversal_sage_refresh',
@@ -805,9 +845,9 @@ export default function MaterialTransferPage() {
     return balances;
   }
 
-  async function requestFreshSageTransferStock(materialIds: string[]) {
+  async function requestFreshSageTransferStock(materialIds: string[], transferRequestId?: string) {
     setRefreshingTransferStock(true);
-    try { return await verifySageStock(materialIds, 18); }
+    try { return await verifySageStock(materialIds, 18, transferRequestId); }
     finally { setRefreshingTransferStock(false); setStockCheckStatus(''); }
   }
 
@@ -822,6 +862,7 @@ export default function MaterialTransferPage() {
     creatingTransfers.current = true;
     setSaving(true);
     setTransferError(null);
+    let savedRequestId: string | null = null;
     try {
       if (!isValidTransferDocumentDate(sharedForm.transfer_date)) {
         setTransferError(['Select a valid RM transfer date from the IST before creating this transfer.']);
@@ -885,22 +926,6 @@ export default function MaterialTransferPage() {
         return;
       }
 
-      const freshSageBalances = await requestFreshSageTransferStock(validLines.map((line) => line.raw_material_id));
-
-      // Sage is the stock authority for RM transfers. The bridge refreshes this
-      // balance from the configured Sage company and verifies it again when posting.
-      for (const line of validLines) {
-        const sageRmBalance = freshSageBalances.get(line.raw_material_id) || 0;
-        const bufferBalance = bufferWarehouseBalances[line.raw_material_id] || 0;
-        const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
-        const material = rawMaterials.find(m => m.id === line.raw_material_id);
-        if (line.quantity > rmBalance) {
-          setTransferError([`${material?.name || 'Material'} cannot be transferred because available Sage RM stock after Buffer allocation is insufficient. Available: ${rmBalance.toLocaleString()} ${material?.unit || 'kg'}; requested: ${line.quantity.toLocaleString()} ${material?.unit || 'kg'}.`]);
-          setSaving(false);
-          return;
-        }
-      }
-
       const payload = {
         p_lines: validLines.map(line => ({
           raw_material_id: line.raw_material_id,
@@ -915,10 +940,40 @@ export default function MaterialTransferPage() {
         p_requested_by: user.id,
       };
       transferSubmission.current = transferRequestIdentity(transferSubmission.current, payload, () => crypto.randomUUID());
-      const { data: createdIds, error } = await withClientTimeout(
-        supabase.rpc('create_material_transfer_bundle', {
-          ...payload, p_transfer_batch_key: transferSubmission.current.key,
+      const { data: requestId, error: requestError } = await withClientTimeout(
+        supabase.rpc('save_material_transfer_request', {
+          p_transfer_batch_key: transferSubmission.current.key,
+          p_lines: payload.p_lines,
+          p_from_warehouse_id: payload.p_from_warehouse_id,
+          p_transfer_date: payload.p_transfer_date,
+          p_purpose: payload.p_purpose,
+          p_notes: payload.p_notes,
+          p_production_order_id: payload.p_production_order_id,
         }),
+        15_000, 'Could not confirm that the request was saved. Check the IST request list before submitting again.',
+      );
+      if (requestError) throw requestError;
+      if (!requestId) throw new Error('The request was not saved. No Sage or inventory action was started.');
+      savedRequestId = requestId;
+
+      const freshSageBalances = await requestFreshSageTransferStock(
+        validLines.map((line) => line.raw_material_id), savedRequestId,
+      );
+
+      // Sage remains the stock authority; the database rechecks freshness and
+      // available quantity when the atomic bundle is committed.
+      for (const line of validLines) {
+        const sageRmBalance = freshSageBalances.get(line.raw_material_id) || 0;
+        const bufferBalance = bufferWarehouseBalances[line.raw_material_id] || 0;
+        const rmBalance = Math.max(0, sageRmBalance - bufferBalance);
+        const material = rawMaterials.find(m => m.id === line.raw_material_id);
+        if (line.quantity > rmBalance) {
+          throw new Error(`${material?.name || 'Material'} has insufficient Sage RM stock after Buffer allocation. Available: ${rmBalance.toLocaleString()} ${material?.unit || 'kg'}; requested: ${line.quantity.toLocaleString()} ${material?.unit || 'kg'}.`);
+        }
+      }
+
+      const { data: createdIds, error } = await withClientTimeout(
+        supabase.rpc('complete_material_transfer_request', { p_request_id: savedRequestId }),
         30_000,
         'Transfer save confirmation timed out. The IST may already exist. Check the register before retrying; do not use another IST number for the same movement.',
       );
@@ -941,11 +996,72 @@ export default function MaterialTransferPage() {
       fetchData();
     } catch (err: any) {
       console.error('Unexpected error:', err);
-      setTransferError([err.message || 'The save outcome is unconfirmed. Check the IST register before retrying; do not create a replacement IST.']);
+      let message = err.message || 'Transfer verification did not complete.';
+      if (savedRequestId) {
+        try {
+          const { error: recordError } = await supabase.rpc('record_material_transfer_request_failure', {
+            p_request_id: savedRequestId,
+            p_error: message,
+          });
+          if (recordError) console.error('Could not update the saved transfer request status:', recordError.message);
+        } catch (recordError) {
+          console.error('Could not update the saved transfer request status:', recordError);
+        }
+        message = `Request ${savedRequestId.slice(0, 8)} is saved for administrator review. Only a successful verified completion creates transfers. If this was a completion timeout, check the IST register before retrying. Details: ${message}`;
+        void fetchData(true);
+      }
+      setTransferError([message]);
     } finally {
       creatingTransfers.current = false;
       setSaving(false);
     }
+  }
+
+  async function retrySavedTransferRequest(request: SavedTransferRequest) {
+    if (profile?.role !== 'admin' || retryingTransferRequestId) return;
+    setRetryingTransferRequestId(request.id);
+    try {
+      const materialIds = request.lines.map((line) => line.raw_material_id);
+      const balances = await requestFreshSageTransferStock(materialIds, request.id);
+      for (const line of request.lines) {
+        const sageBalance = balances.get(line.raw_material_id) || 0;
+        const available = Math.max(0, sageBalance - (bufferWarehouseBalances[line.raw_material_id] || 0));
+        if (Number(line.quantity) > available) {
+          const material = rawMaterials.find((item) => item.id === line.raw_material_id);
+          throw new Error(`${material?.name || 'Material'} has insufficient verified RM stock. Available: ${available.toLocaleString()} ${line.unit}; requested: ${Number(line.quantity).toLocaleString()} ${line.unit}.`);
+        }
+      }
+      const { error } = await withClientTimeout(
+        supabase.rpc('complete_material_transfer_request', { p_request_id: request.id }),
+        30_000, 'Transfer completion timed out. Check the IST register before retrying; the saved request prevents duplicate lines.',
+      );
+      if (error) throw error;
+      await fetchData(true);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Administrator retry did not complete.';
+      try {
+        const { error: recordError } = await supabase.rpc('record_material_transfer_request_failure', {
+          p_request_id: request.id,
+          p_error: message,
+        });
+        if (recordError) console.error('Could not update the saved transfer request status:', recordError.message);
+      } catch (recordError) {
+        console.error('Could not update the saved transfer request status:', recordError);
+      }
+      await fetchData(true);
+    } finally {
+      setRetryingTransferRequestId(null);
+    }
+  }
+
+  async function cancelSavedTransferRequest(request: SavedTransferRequest) {
+    if (profile?.role !== 'admin' || !window.confirm(`Cancel saved request for ${request.purpose}? No inventory has been moved.`)) return;
+    const { error } = await supabase.rpc('cancel_material_transfer_request', { p_request_id: request.id });
+    if (error) {
+      console.error('Failed to cancel transfer request:', error.message);
+      return;
+    }
+    await fetchData(true);
   }
 
   const transferSearch = searchTerm.trim().toLowerCase();
@@ -1236,6 +1352,60 @@ export default function MaterialTransferPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {profile?.role === 'admin' && savedTransferRequests.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-amber-300 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-bold text-amber-950">Transfer requests needing review</h2>
+              <p className="mt-1 text-xs text-amber-800">These requests have not moved inventory. Retry checks live Sage RM stock before creating transfers.</p>
+            </div>
+            <span className="text-xs font-bold text-amber-900">{savedTransferRequests.length} open</span>
+          </div>
+          <div className="divide-y divide-slate-200">
+            {savedTransferRequests.map((request) => (
+              <div key={request.id} className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">{request.purpose}</span>
+                    <span className={`border px-2 py-0.5 text-[11px] font-semibold ${request.status === 'verifying' ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                      {request.status === 'verifying' ? 'Checking Sage' : 'Needs review'}
+                    </span>
+                    <span className="text-xs text-slate-500">{request.requester?.full_name || request.requester?.email || 'Requester not available'}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {request.lines.map((line) => {
+                      const material = rawMaterials.find((item) => item.id === line.raw_material_id);
+                      return `${material?.name || material?.code || 'Material'} ${Number(line.quantity).toLocaleString()} ${line.unit}`;
+                    }).join(' · ')}
+                  </p>
+                  {request.last_error && <p className="mt-2 break-words text-xs text-red-700">{request.last_error}</p>}
+                  <p className="mt-1 text-[11px] text-slate-400">Saved {format(new Date(request.created_at), 'dd MMM yyyy, HH:mm')} · {request.attempt_count} stock check{request.attempt_count === 1 ? '' : 's'}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void retrySavedTransferRequest(request)}
+                    disabled={retryingTransferRequestId !== null}
+                    className="inline-flex items-center gap-2 border border-teal-700 bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {retryingTransferRequestId === request.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    {retryingTransferRequestId === request.id ? 'Checking Sage...' : 'Retry'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void cancelSavedTransferRequest(request)}
+                    disabled={retryingTransferRequestId !== null}
+                    className="border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel request
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <div className="rounded-2xl border border-slate-300/70 bg-slate-50/95 shadow-sm p-4 space-y-4">
