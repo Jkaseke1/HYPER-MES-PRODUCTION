@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, Radio } from 'lucide-react';
+import { Plus, Search, Eye, Play, Check, Package, CheckCircle2, Clock, RefreshCw, Layers, AlertCircle, AlertTriangle, ArrowRight, X, Factory, FileText, CalendarDays, ClipboardList, Activity, Radio, SquarePen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
@@ -14,6 +14,7 @@ import './production-orders.css';
 import { generateBatchNumber, generateProductionBatchNumber, peekProductionBatchNumber } from '../lib/batchNumberGenerator';
 import { bagSizeKg, bagsFromKg, kgFromBags, formatBags } from '../lib/bagUnits';
 import { isCountedBomLine, normalizeFormulaBom } from '../lib/formulaUnits';
+import { resolveProductionUnitCost } from '../lib/productionOrderCosts';
 
 interface OrderMaterial {
   id: string; 
@@ -839,7 +840,7 @@ export default function ProductionOrdersPage() {
     const [bomResult, packagingResult] = await Promise.all([
       supabase
         .from('formulation_ingredients')
-        .select('*, raw_materials(name, code, category, unit, cost_per_unit, current_stock)')
+        .select('*, raw_materials(name, code, category, unit, cost_per_unit, cost_per_unit_usd, current_stock)')
         .eq('formulation_id', fid)
         .eq('is_active', true),
       supabase
@@ -856,6 +857,29 @@ export default function ProductionOrdersPage() {
       setBomPreview([]);
       return;
     }
+
+    const materialIds = [...new Set(bomData.map((line: any) => line.raw_material_id).filter(Boolean))];
+    const { data: registeredCosts, error: costRegisterError } = materialIds.length
+      ? await supabase
+        .from('rm_cost_register')
+        .select('raw_material_id, cost_per_tonne_usd, effective_date, created_at')
+        .in('raw_material_id', materialIds)
+        .order('effective_date', { ascending: false })
+        .order('created_at', { ascending: false })
+      : { data: [], error: null };
+    if (costRegisterError) console.warn('Could not load registered RM costs; using material costs where available.', costRegisterError);
+    const latestCostByMaterial = new Map<string, number>();
+    (registeredCosts || []).forEach((entry: any) => {
+      if (!latestCostByMaterial.has(entry.raw_material_id)) {
+        latestCostByMaterial.set(entry.raw_material_id, Number(entry.cost_per_tonne_usd) || 0);
+      }
+    });
+    const getLineCost = (line: any) => resolveProductionUnitCost({
+      lineUnit: line.unit,
+      material: line.raw_materials,
+      costPerTonneUsd: latestCostByMaterial.get(line.raw_material_id),
+      counted: isCountedBomLine(line),
+    });
     
     setWorkflowError(null);
     const scale = form.planned_qty > 0 ? form.planned_qty / sel.batch_size : 1;
@@ -866,8 +890,8 @@ export default function ProductionOrdersPage() {
       actual_qty: 0, 
       wastage_qty: 0,
       unit: ing.unit, 
-      unit_cost: ing.raw_materials?.cost_per_unit || 0,
-      total_cost: Math.round(ing.quantity * scale * (ing.raw_materials?.cost_per_unit || 0) * 100) / 100,
+      unit_cost: getLineCost(ing),
+      total_cost: Math.round(ing.quantity * scale * getLineCost(ing) * 100) / 100,
       issued: false, 
       raw_materials: ing.raw_materials,
     }));
@@ -883,7 +907,7 @@ export default function ProductionOrdersPage() {
       unit: ing.unit || 'kg',
       bomPercent: isCountedBomLine(ing) ? 0 : Math.round((ing.quantity / sel.batch_size) * 10000) / 100,
       quantity: ing.quantity,
-      unitCost: ing.raw_materials?.cost_per_unit || 0,
+      unitCost: getLineCost(ing),
     }));
     setBomPreview(preview);
   };
@@ -1301,8 +1325,8 @@ export default function ProductionOrdersPage() {
 
       if (error) throw error;
 
-      // Update unit_cost and total_cost from raw materials
-      const unitCost = Math.round((material.raw_materials?.cost_per_unit || 0) * 10000) / 10000;
+      // Keep the cost snapshot captured when this production-order line was created.
+      const unitCost = Math.round((Number(material.unit_cost) || Number(material.raw_materials?.cost_per_unit_usd) || Number(material.raw_materials?.cost_per_unit) || 0) * 10000) / 10000;
       const totalCost = Math.round((material.planned_qty * unitCost) * 10000) / 10000;
       
       console.log('DEBUG: Issuing ingredient', {
@@ -2297,6 +2321,14 @@ export default function ProductionOrdersPage() {
                   <h3 className="text-sm font-semibold text-slate-800">BOM Preview — Scaled to Planned Quantity</h3>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.open(`${window.location.pathname}#/formulations?editId=${encodeURIComponent(selectedFormulation.id)}`, '_blank', 'noopener,noreferrer')}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-teal-300 bg-white px-2.5 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-50"
+                    title="Open this formula in a new tab to edit it"
+                  >
+                    <SquarePen className="h-3.5 w-3.5" /> Edit formula
+                  </button>
                   {premixLines.length > 0 && (
                     <Badge className="bg-fuchsia-100 text-fuchsia-800 border border-fuchsia-200 text-[11px]">
                       Premix: {premixKg.toFixed(2)} kg
