@@ -14,6 +14,12 @@ const FINISHED_GOODS_WAREHOUSES = [
   { code: 'DEB', id: 17 },
   { code: 'DSP', id: 20 }, // retained for historical receipts only
 ];
+// These active MES records do not currently have usable Sage RM/PD warehouse
+// balances. Keep them available in MES, but omit them from broad cache refreshes.
+const BROAD_STOCK_SYNC_EXCLUSIONS = new Set([
+  '77', '79', 'CLE0001', 'ETB0001', 'PAS00025', 'PAS00050', 'PAS0025',
+  'PHB 15', 'PIPBSM001', 'TRA', 'WIB15', 'WIB-REC01',
+]);
 const FULL_SYNC_BATCH_SIZE = Math.max(1, Number(process.env.SAGE_STOCK_SYNC_BATCH_SIZE || 50));
 let nextFullSyncOffset = 0;
 
@@ -55,7 +61,8 @@ async function loadMaterials(itemCodes, { fullSync = false, warehouseCodes, mate
     : null;
   const materials = (data || []).filter((material) => {
     const itemCode = (material.sage_code || material.code || '').trim().toUpperCase();
-    return itemCode && (!requestedCodes || requestedCodes.has(itemCode));
+    if (!itemCode || (requestedCodes && !requestedCodes.has(itemCode))) return false;
+    return requestedCodes !== null || !BROAD_STOCK_SYNC_EXCLUSIONS.has(itemCode);
   });
   if (!materials.length) return materials;
 
