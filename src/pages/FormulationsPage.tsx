@@ -8,6 +8,7 @@ import './formula-editor.css';
 import './formulations-page.css';
 import StatusBadge from '../components/ui/StatusBadge';
 import { formulaMassFactor, isCountedBomLine, normalizeFormulaBom } from '../lib/formulaUnits';
+import { useSearchParams } from 'react-router-dom';
 
 const formatLabel = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
@@ -145,6 +146,8 @@ export function getIngredientTypeCode(name: string, code: string): { isPremix: b
 }
 
 export default function FormulationsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoEditHandled = useRef(false);
   const activationInFlight = useRef(new Set<string>());
   const [formulations, setFormulations] = useState<Formulation[]>([]);
   const [materials, setMaterials] = useState<Pick<RawMaterial, 'id' | 'name' | 'code' | 'unit'>[]>([]);
@@ -282,6 +285,29 @@ export default function FormulationsPage() {
   }, []);
 
   useEffect(() => { fetchFormulations(true); fetchMaterials(); fetchCategories(); }, [fetchFormulations, fetchMaterials, fetchCategories]);
+
+  useEffect(() => {
+    const targetId = searchParams.get('editId');
+    if (!targetId || loading || autoEditHandled.current) return;
+    const target = formulations.find((formula) => formula.id === targetId);
+    if (!target) {
+      autoEditHandled.current = true;
+      toast.error('That formula could not be found or you do not have access to it.');
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete('editId');
+        return next;
+      }, { replace: true });
+      return;
+    }
+    autoEditHandled.current = true;
+    void openEdit(target);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('editId');
+      return next;
+    }, { replace: true });
+  }, [formulations, loading, openEdit, searchParams, setSearchParams]);
   useRealtimeRefresh(
     'formulations-page-live-refresh',
     ['formulations', 'formulation_ingredients', 'formula_specs', 'formula_spec_lines', 'production_bom_packaging'],
