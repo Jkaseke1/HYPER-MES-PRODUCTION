@@ -909,7 +909,7 @@ export default function ProductionOrdersPage() {
     setSaving(true);
     try {
       // Finance control: a work order must be based on an approved formula whose
-      // standard ingredient quantities reconcile to its declared batch size.
+      // ingredient quantities reconcile to its declared reference batch size.
       const [{ data: formulation, error: formulationError }, { data: ingredients, error: ingredientsError }] = await Promise.all([
         supabase.from('formulations').select('batch_size, batch_unit, status, approved_by, is_daily_active').eq('id', form.formulation_id).single(),
         supabase.from('formulation_ingredients').select('raw_material_id, quantity, unit, is_active, raw_materials(name, category, unit)').eq('formulation_id', form.formulation_id),
@@ -920,8 +920,8 @@ export default function ProductionOrdersPage() {
         throw new Error('This formulation is awaiting Finance approval and cannot be used for a work order yet.');
       }
       const batchSize = Number(formulation.batch_size || 0);
-      if (batchSize !== 1000 || formulation.batch_unit !== 'kg') {
-        throw new Error('Production requires a Finance-approved 1,000 kg reference formula. Ask Finance to prepare and approve the standard formula first.');
+      if (!(batchSize > 0) || formulation.batch_unit !== 'kg') {
+        throw new Error('Production requires a Finance-approved formula with a positive reference batch in kg. Ask Finance to review the formula first.');
       }
       const activeIngredients = (ingredients || []).filter(ingredient => ingredient.is_active !== false);
       if (activeIngredients.some(ingredient => !isCountedBomLine(ingredient) && ingredient.unit !== 'kg')) {

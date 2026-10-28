@@ -33,6 +33,14 @@ assert.equal(joinedPackaging.counted[0].quantity, 20);
 assert.equal(joinedPackaging.totalKg, 0);
 assert.equal(sourceLines[0].unit, 'g', 'source rows are not mutated');
 
+const customReferenceBatch = normalizeFormulaBom([
+  { raw_material_id: 'maize', quantity: 80, unit: 'kg' },
+  { raw_material_id: 'salt', quantity: 20, unit: 'kg' },
+  { raw_material_id: 'bag', quantity: 4, unit: 'each' },
+], materials, 2500);
+assert.equal(customReferenceBatch.mass.reduce((sum, line) => sum + line.quantity, 0), 2500);
+assert.equal(customReferenceBatch.counted[0].quantity, 100);
+
 const scaled = normalizeFormulaBom([
   { raw_material_id: 'maize', quantity: 50, unit: 'kg' },
   { raw_material_id: 'bag', quantity: 1, unit: 'each' },
