@@ -29,6 +29,9 @@ const configuredStockSyncInterval = Number(process.env.SAGE_STOCK_SYNC_INTERVAL_
 const STOCK_SYNC_INTERVAL_MS = Number.isFinite(configuredStockSyncInterval)
   ? Math.max(configuredStockSyncInterval, 10 * 1000)
   : 60 * 1000;
+const DEFERRED_STOCK_SYNC_CODES = new Set([
+  '77', '79', 'ETB0001', 'PAS0025', 'PHB 15', 'PIPBSM001', 'TRA', 'WIB15', 'WIB-REC01',
+]);
 const MASTER_SYNC_ENABLED = process.env.SAGE_MASTER_SYNC_ENABLED === 'true';
 const MASTER_SYNC_CODES = (process.env.SAGE_MASTER_SYNC_CODES || '').split(',').map((value) => value.trim()).filter(Boolean);
 const MASTER_SYNC_PREFIXES = (process.env.SAGE_MASTER_SYNC_PREFIXES || '').split(',').map((value) => value.trim()).filter(Boolean);
@@ -119,7 +122,20 @@ async function queueSageStockSync(itemCodes, reason, options = {}) {
   const run = stockSyncQueue.catch(() => undefined).then(async () => {
     const result = await syncSageStock(itemCodes, options);
     console.log(`  Sage stock sync (${reason}): ${result.synced} warehouse balance(s) refreshed for ${result.materialCount} material(s)`);
-    if (result.failures.length) console.warn(`  Sage stock sync warnings: ${result.failures.slice(0, 3).join('; ')}`);
+    if (result.failures.length) {
+      const reportableFailures = !itemCodes?.length
+        ? result.failures.filter((failure) => !DEFERRED_STOCK_SYNC_CODES.has(
+          failure.slice(0, failure.indexOf('/')).trim().toUpperCase(),
+        ))
+        : result.failures;
+      if (reportableFailures.length) {
+        console.warn(`  Sage stock sync warnings: ${reportableFailures.slice(0, 3).join('; ')}`);
+      }
+      const suppressedCount = result.failures.length - reportableFailures.length;
+      if (suppressedCount) {
+        console.info(`  Sage stock sync: ${suppressedCount} deferred-code warning(s) suppressed; affected balances remain unverified.`);
+      }
+    }
     return result;
   });
   stockSyncQueue = run.catch(() => undefined);

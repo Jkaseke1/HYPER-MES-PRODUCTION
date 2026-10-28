@@ -38,11 +38,11 @@ namespace SDK_Test
                             return Ok(new
                             {
                                 status = "validated",
-                                environment = "UAT",
+                                environment = SageRuntime.EnvironmentName,
                                 action = "material-issue",
                                 sageConnection = "verified",
                                 sagePosting = "not performed",
-                                message = "Validated against Sage UAT. No material issue was posted.",
+                                message = "Validated against Sage " + SageRuntime.EnvironmentName + ". No material issue was posted.",
                                 materialIssue = IssueSummary(request, preparedLines)
                             });
                         }
@@ -100,11 +100,11 @@ namespace SDK_Test
                             return Ok(new
                             {
                                 status = "posted",
-                                environment = "UAT",
+                                environment = SageRuntime.EnvironmentName,
                                 action = "material-issue",
                                 postingMode = "sdk-inventory-transaction",
                                 sagePosting = "completed",
-                                message = "Material issue posted to Sage UAT through the Evolution SDK.",
+                                message = "Material issue posted to Sage " + SageRuntime.EnvironmentName + " through the Evolution SDK.",
                                 materialIssue = IssueSummary(request, preparedLines)
                             });
                         }
@@ -122,9 +122,9 @@ namespace SDK_Test
                 return Content(HttpStatusCode.InternalServerError, new
                 {
                     status = "failed",
-                    environment = "UAT",
+                    environment = SageRuntime.EnvironmentName,
                     action = "material-issue",
-                    message = "Sage UAT could not post this material issue.",
+                    message = "Sage " + SageRuntime.EnvironmentName + " could not post this material issue.",
                     exception = ex.GetType().FullName,
                     exceptionMessage = ex.Message
                 });
