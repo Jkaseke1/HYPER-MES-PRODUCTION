@@ -66,7 +66,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const knownIncomingTransferIdsRef = useRef<Set<string>>(new Set());
   const sageQueueLoadedRef = useRef(false);
   const knownSageStagesRef = useRef<Map<string, string>>(new Map());
-  const transferNumberByReferenceRef = useRef<Map<string, string>>(new Map());
+  const transferGroupByReferenceRef = useRef<Map<string, { batchKey: string | null; label: string | null }>>(new Map());
 
   // System Update state
   const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
@@ -121,7 +121,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
   }
 
-  const showSageActivityToast = useCallback((item: SageQueueItem, processId = item.reference_id || item.id) => {
+  const showSageActivityToast = useCallback((item: SageQueueItem, processId = item.reference_id || item.id, processLabel = processId) => {
     const label = sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ');
     const isFailed = item.status === 'failed';
     const isPosted = item.status === 'success';
@@ -133,7 +133,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         ? item.message || 'The Sage document is ready.'
         : item.message || 'Waiting for the Sage bridge.';
     const detail = item.event_type === 'material_transfer_to_production'
-      ? `Transfer ${processId} · ${statusDetail}`
+      ? `Transfer ${processLabel} · ${statusDetail}`
       : statusDetail;
     const tone = isFailed ? 'bg-rose-500' : isPosted ? 'bg-emerald-500' : isProcessing ? 'bg-blue-500' : 'bg-amber-500';
     const iconTone = isFailed ? 'bg-rose-50 text-rose-700' : isPosted ? 'bg-emerald-50 text-emerald-700' : isProcessing ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700';
@@ -338,34 +338,44 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       if (transferReferences.length > 0) {
         const { data: transferGroups, error: groupsError } = await supabase
           .from('material_transfers')
-          .select('id, transfer_number')
+          .select('id, transfer_batch_key, purpose')
           .in('id', transferReferences);
         if (!groupsError) {
           (transferGroups || []).forEach((transfer) => {
-            transferNumberByReferenceRef.current.set(transfer.id, transfer.transfer_number);
+            transferGroupByReferenceRef.current.set(transfer.id, {
+              batchKey: transfer.transfer_batch_key,
+              label: transfer.purpose,
+            });
           });
         }
       }
 
-      const getProcessId = (item: SageQueueItem) => item.event_type === 'material_transfer_to_production'
-        ? transferNumberByReferenceRef.current.get(item.reference_id || '') || item.reference_id || item.id
-        : item.reference_id || item.id;
+      const getProcess = (item: SageQueueItem) => {
+        if (item.event_type !== 'material_transfer_to_production') {
+          const id = item.reference_id || item.id;
+          return { id, label: id };
+        }
+        const transfer = transferGroupByReferenceRef.current.get(item.reference_id || '');
+        const id = transfer?.batchKey || item.reference_id || item.id;
+        return { id, label: transfer?.label || item.reference_id || item.id };
+      };
       const stageFor = (item: SageQueueItem) => item.status;
       const nextStages = new Map<string, string>();
       visibleQueue.forEach((item) => {
-        const key = `${item.event_type}:${getProcessId(item)}`;
+        const key = `${item.event_type}:${getProcess(item).id}`;
         if (!nextStages.has(key)) nextStages.set(key, stageFor(item));
       });
       if (sageQueueLoadedRef.current) {
         const notifiedProcesses = new Set<string>();
         visibleQueue.forEach((item) => {
-          const processId = getProcessId(item);
+          const process = getProcess(item);
+          const processId = process.id;
           const key = `${item.event_type}:${processId}`;
           const stage = nextStages.get(key);
           if (!stage || knownSageStagesRef.current.get(key) === stage || notifiedProcesses.has(key)) return;
 
           notifiedProcesses.add(key);
-          showSageActivityToast(item, processId);
+          showSageActivityToast(item, processId, process.label);
         });
       }
       knownSageStagesRef.current = nextStages;
@@ -386,30 +396,40 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         const transferReferences = [...new Set(events
           .filter((event) => event.event_type === 'material_transfer_to_production' && event.reference_id)
           .map((event) => event.reference_id as string)
-          .filter((referenceId) => !transferNumberByReferenceRef.current.has(referenceId)))];
+          .filter((referenceId) => !transferGroupByReferenceRef.current.has(referenceId)))];
         if (transferReferences.length > 0) {
           const { data: transferGroups, error } = await supabase
             .from('material_transfers')
-            .select('id, transfer_number')
+            .select('id, transfer_batch_key, purpose')
             .in('id', transferReferences);
           if (!error) {
             (transferGroups || []).forEach((transfer) => {
-              transferNumberByReferenceRef.current.set(transfer.id, transfer.transfer_number);
+              transferGroupByReferenceRef.current.set(transfer.id, {
+                batchKey: transfer.transfer_batch_key,
+                label: transfer.purpose,
+              });
             });
           }
         }
-        const latestByProcess = new Map<string, { item: SageQueueItem; processId: string }>();
+        const latestByProcess = new Map<string, { item: SageQueueItem; processId: string; processLabel: string }>();
         events.sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()).forEach((item) => {
-          const processId = item.event_type === 'material_transfer_to_production'
-            ? transferNumberByReferenceRef.current.get(item.reference_id || '') || item.reference_id || item.id
-            : item.reference_id || item.id;
+          const process = item.event_type === 'material_transfer_to_production'
+            ? (() => {
+                const transfer = transferGroupByReferenceRef.current.get(item.reference_id || '');
+                return {
+                  id: transfer?.batchKey || item.reference_id || item.id,
+                  label: transfer?.label || item.reference_id || item.id,
+                };
+              })()
+            : { id: item.reference_id || item.id, label: item.reference_id || item.id };
+          const processId = process.id;
           const key = `${item.event_type}:${processId}`;
           const stage = item.status;
           if (knownSageStagesRef.current.get(key) === stage) return;
           knownSageStagesRef.current.set(key, stage);
-          latestByProcess.set(key, { item, processId });
+          latestByProcess.set(key, { item, processId, processLabel: process.label });
         });
-        latestByProcess.forEach(({ item, processId }) => showSageActivityToast(item, processId));
+        latestByProcess.forEach(({ item, processId, processLabel }) => showSageActivityToast(item, processId, processLabel));
       }, 300);
     };
     const scheduleQueueRefresh = () => {
@@ -438,7 +458,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
       pendingSageEvents.clear();
       sageQueueLoadedRef.current = false;
       knownSageStagesRef.current = new Map();
-      transferNumberByReferenceRef.current = new Map();
+      transferGroupByReferenceRef.current = new Map();
       supabase.removeChannel(channel);
     };
   }, [showSageActivityToast]);
