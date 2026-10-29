@@ -28,6 +28,7 @@ interface Material {
   current_stock: number;
   cost_per_unit: number;
   currency_code: string;
+  unit: string | null;
 }
 
 interface PositionRow {
@@ -35,6 +36,7 @@ interface PositionRow {
   materialId: string | null;
   name: string;
   code: string;
+  unit: string;
   opening: number;
   weighbridge: number;
   grn: number;
@@ -61,7 +63,7 @@ interface BatchRow {
   status: string;
   planned: number;
   actual: number;
-  issuedKg: number;
+  issued: string;
   sageIssue: string;
   sageComplete: string;
   fgTransfer: string;
@@ -84,6 +86,40 @@ function qty(v: number | null | undefined) {
   if (v === null || v === undefined) return '—';
   if (Math.abs(v) < 0.0005) return '0.00';
   return v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function unitName(unit: string | null | undefined) {
+  const normalized = String(unit || 'kg').trim().toLowerCase();
+  if (['kg', 'kgs', 'kilogram', 'kilograms'].includes(normalized)) return 'kg';
+  if (['unit', 'units', 'each', 'ea'].includes(normalized)) return 'units';
+  return normalized || 'kg';
+}
+
+function qtyUnit(value: number | null | undefined, unit: string) {
+  const formatted = qty(value);
+  return formatted === '—' ? formatted : `${formatted} ${unit}`;
+}
+
+function sumByUnit(
+  rows: PositionRow[],
+  field: keyof Pick<PositionRow, 'opening' | 'weighbridge' | 'grn' | 'transfers' | 'issues' | 'consumed' | 'inManufacturing' | 'physical' | 'system'>,
+  getUnit: (row: PositionRow) => string = (row) => row.unit,
+) {
+  return rows.reduce<Record<string, number>>((totals, row) => {
+    const amount = row[field];
+    if (amount !== null && amount !== undefined) {
+      const unit = unitName(getUnit(row));
+      totals[unit] = (totals[unit] || 0) + n(amount);
+    }
+    return totals;
+  }, {});
+}
+
+function formatUnitTotals(values: Record<string, number>) {
+  const entries = Object.entries(values).filter(([, value]) => Math.abs(value) >= 0.0005);
+  if (entries.length) return entries.map(([unit, value]) => qtyUnit(value, unit)).join(' + ');
+  const units = Object.keys(values);
+  return units.length ? units.map((unit) => qtyUnit(0, unit)).join(' + ') : qtyUnit(0, 'kg');
 }
 
 function money(value: number, currency: string) {
@@ -148,7 +184,7 @@ export default function BulkRMPositionReportPage() {
       const endTs = `${period.end}T23:59:59`;
 
       const [materialsRes, openingSnapsRes, physicalSnapsRes, sageRes, tickets, grns, transfers, issues, createdOrders, completedOrders, openOrders] = await Promise.all([
-        supabase.from('raw_materials').select('id, name, code, current_stock, cost_per_unit, currency_code').eq('is_active', true).order('name'),
+        supabase.from('raw_materials').select('id, name, code, current_stock, cost_per_unit, currency_code, unit').eq('is_active', true).order('name'),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock, opening_stock').lte('snapshot_date', openingDate).order('snapshot_date', { ascending: false }).limit(4000),
         supabase.from('rm_daily_snapshots').select('snapshot_date, raw_material_name, physical_stock').lte('snapshot_date', period.end).order('snapshot_date', { ascending: false }).limit(4000),
         supabase.from('sage_stock_balances').select('*'),
@@ -287,7 +323,7 @@ export default function BulkRMPositionReportPage() {
       const consumedCost: Record<string, number> = {};
       const wipCost: Record<string, number> = {};
       let missingCostLines = 0;
-      const issuedByOrder: Record<string, number> = {};
+      const issuedByOrder: Record<string, Record<string, number>> = {};
       const unmatchedWb: Record<string, number> = {};
 
       tickets.forEach((t) => {
@@ -335,7 +371,10 @@ export default function BulkRMPositionReportPage() {
             add(wipCost, mat.id, cost);
           }
         }
-        if (row.production_order_id) add(issuedByOrder, row.production_order_id, amount);
+        if (row.production_order_id) {
+          const orderIssues = issuedByOrder[row.production_order_id] ||= {};
+          add(orderIssues, unitName(mat?.unit), amount);
+        }
       });
 
       setBatches(manufacturingOrders
@@ -350,7 +389,7 @@ export default function BulkRMPositionReportPage() {
             status: order.status || 'pending',
             planned: n(order.planned_qty),
             actual: n(order.actual_qty),
-            issuedKg: issuedByOrder[order.id] || 0,
+            issued: formatUnitTotals(issuedByOrder[order.id] || {}),
             sageIssue: latestSage[order.id]?.materials_issued || 'not queued',
             sageComplete: latestSage[order.id]?.production_completed || 'not queued',
             fgTransfer: latestFg[order.id] || 'none',
@@ -402,6 +441,7 @@ export default function BulkRMPositionReportPage() {
           materialId: mat?.id || null,
           name,
           code: mat?.code || '',
+          unit: unitName(mat?.unit),
           opening,
           weighbridge: mat ? weighbridge[mat.id] || 0 : 0,
           grn: mat ? grnQty[mat.id] || 0 : 0,
@@ -462,18 +502,29 @@ export default function BulkRMPositionReportPage() {
     );
   }, [withCalcs, hideZeros]);
 
-  const totals = useMemo(() => visible.reduce((acc, row) => ({
-    opening: acc.opening + row.opening,
-    weighbridge: acc.weighbridge + row.weighbridge,
-    grn: acc.grn + row.grn,
-    transfers: acc.transfers + row.transfers,
-    issues: acc.issues + row.issues,
-    consumed: acc.consumed + row.consumed,
-    inManufacturing: acc.inManufacturing + row.inManufacturing,
-    theo: acc.theo + row.theo,
-    system: acc.system + row.system,
-    physical: acc.physical + (row.physical || 0),
-  }), { opening: 0, weighbridge: 0, grn: 0, transfers: 0, issues: 0, consumed: 0, inManufacturing: 0, theo: 0, system: 0, physical: 0 }), [visible]);
+  const unitTotals = useMemo(() => ({
+    opening: sumByUnit(visible, 'opening'),
+    weighbridge: sumByUnit(visible, 'weighbridge', () => 'kg'),
+    grn: sumByUnit(visible, 'grn'),
+    transfers: sumByUnit(visible, 'transfers'),
+    issues: sumByUnit(visible, 'issues'),
+    consumed: sumByUnit(visible, 'consumed'),
+    inManufacturing: sumByUnit(visible, 'inManufacturing'),
+    physical: sumByUnit(visible, 'physical'),
+    system: sumByUnit(visible, 'system'),
+    theo: visible.reduce<Record<string, number>>((totals, row) => {
+      const unit = unitName(row.unit);
+      totals[unit] = (totals[unit] || 0) + row.theo;
+      return totals;
+    }, {}),
+  }), [visible]);
+
+  const kgGrn = unitTotals.grn.kg || 0;
+  const kgWeighbridge = unitTotals.weighbridge.kg || 0;
+  const transferIssueGaps = Object.entries(unitTotals.transfers).map(([unit, transferred]) => ({
+    unit,
+    amount: transferred - (unitTotals.issues[unit] || 0),
+  })).filter((entry) => entry.amount > 0.5);
 
   const financialTotals = useMemo(() => {
     const byCurrency: Record<string, { purchaseSpend: number; issueCost: number; consumedCost: number; wipCost: number; inventoryValue: number }> = {};
@@ -509,14 +560,15 @@ export default function BulkRMPositionReportPage() {
       Material: row.name,
       Code: row.code,
       [`Opening (${openingAsAt || period.start})`]: row.opening,
-      'Weighbridge kg': row.weighbridge,
-      'GRN receipts kg': row.grn,
-      'WB vs GRN': row.wbGap,
-      Total: row.total,
-      'Transfers to production': row.transfers,
-      'BOM issues': row.issues,
-      'Consumed in completed batches': row.consumed,
-      'In manufacturing WIP': row.inManufacturing,
+      Unit: row.unit,
+      'Weighbridge (kg)': row.weighbridge,
+      'GRN receipts (material unit)': row.grn,
+      'WB vs GRN (only comparable for kg materials)': row.unit.toLowerCase() === 'kg' ? row.wbGap : null,
+      'Total (material unit)': row.total,
+      'Transfers to production (material unit)': row.transfers,
+      'BOM issues (material unit)': row.issues,
+      'Consumed in completed batches (material unit)': row.consumed,
+      'In manufacturing WIP (material unit)': row.inManufacturing,
       Currency: row.currency,
       'Recorded GRN spend': row.purchaseSpend,
       'Current unit cost': row.unitCost,
@@ -536,7 +588,7 @@ export default function BulkRMPositionReportPage() {
       Status: row.status,
       'Planned kg': row.planned,
       'Produced kg': row.actual,
-      'RM issued kg': row.issuedKg,
+      'RM issued (material units)': row.issued,
       'Sage GI': row.sageIssue,
       'Sage complete': row.sageComplete,
       'FG transfer': row.fgTransfer,
@@ -556,14 +608,14 @@ export default function BulkRMPositionReportPage() {
     XLSX.writeFile(book, `Bulk-RM-position-${period.start}-to-${period.end}.xlsx`);
   }
 
-  const mobilePositionTotals: Array<[string, number]> = [
-    ['Weighbridge', totals.weighbridge],
-    ['GRN receipts', totals.grn],
-    ['Transfers', totals.transfers],
-    ['BOM issues', totals.issues],
-    ['Consumed', totals.consumed],
-    ['In manufacturing', totals.inManufacturing],
-    ['THEO close', totals.theo],
+  const mobilePositionTotals: Array<[string, string]> = [
+    ['Weighbridge', formatUnitTotals(unitTotals.weighbridge)],
+    ['GRN receipts', formatUnitTotals(unitTotals.grn)],
+    ['Transfers', formatUnitTotals(unitTotals.transfers)],
+    ['BOM issues', formatUnitTotals(unitTotals.issues)],
+    ['Consumed', formatUnitTotals(unitTotals.consumed)],
+    ['In manufacturing', formatUnitTotals(unitTotals.inManufacturing)],
+    ['THEO close', formatUnitTotals(unitTotals.theo)],
   ];
 
   return (
@@ -608,9 +660,9 @@ export default function BulkRMPositionReportPage() {
         </div>
         <div className="relative grid grid-cols-2 border-t border-white/10 bg-white/[0.035] sm:grid-cols-4 lg:px-5">
           {[
-            { label: 'Weighbridge', value: `${qty(totals.weighbridge)} kg`, icon: Scale },
-            { label: 'Received on GRN', value: `${qty(totals.grn)} kg`, icon: ClipboardList },
-            { label: 'Issued to production', value: `${qty(totals.issues)} kg`, icon: ArrowRightLeft },
+            { label: 'Weighbridge', value: formatUnitTotals(unitTotals.weighbridge), icon: Scale },
+            { label: 'Received on GRN', value: formatUnitTotals(unitTotals.grn), icon: ClipboardList },
+            { label: 'Issued to production', value: formatUnitTotals(unitTotals.issues), icon: ArrowRightLeft },
             { label: 'Finished output', value: `${qty(manufacturing.produced)} kg`, icon: PackageCheck },
           ].map(({ label, value, icon: Icon }, index) => (
             <div key={label} className={`flex min-w-0 items-center gap-3 px-4 py-4 sm:px-6 lg:py-5 ${index > 0 ? 'border-l border-white/10' : ''} ${index > 1 ? 'border-t border-white/10 sm:border-t-0' : ''}`}>
@@ -680,8 +732,8 @@ export default function BulkRMPositionReportPage() {
         </div>
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           {[
-            { label: 'Transfers to production', value: `${qty(totals.transfers)} kg`, note: 'Moved from raw material stores', icon: ArrowRightLeft, tone: 'violet' },
-            { label: 'Raw material issued', value: `${qty(totals.issues)} kg`, note: `${qty(totals.consumed)} kg consumed · ${qty(totals.inManufacturing)} kg in open batches`, icon: Factory, tone: 'amber' },
+            { label: 'Transfers to production', value: formatUnitTotals(unitTotals.transfers), note: 'Moved from raw material stores, grouped by stock unit', icon: ArrowRightLeft, tone: 'violet' },
+            { label: 'Raw material issued', value: formatUnitTotals(unitTotals.issues), note: `${formatUnitTotals(unitTotals.consumed)} consumed · ${formatUnitTotals(unitTotals.inManufacturing)} in open batches`, icon: Factory, tone: 'amber' },
             { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: ClipboardList, tone: 'sky' },
             { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: TrendingUp, tone: 'teal' },
           ].map(({ label, value, note, icon: Icon, tone }) => (
@@ -737,22 +789,22 @@ export default function BulkRMPositionReportPage() {
         )}
       </section>
 
-      {Math.abs(totals.grn - totals.weighbridge) > 0.5 && (
+      {Math.abs(kgGrn - kgWeighbridge) > 0.5 && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          GRN booked {qty(totals.grn)} kg against weighbridge nett {qty(totals.weighbridge)} kg. Difference {qty(totals.grn - totals.weighbridge)} kg.
+          GRN booked {qtyUnit(kgGrn, 'kg')} against weighbridge nett {qtyUnit(kgWeighbridge, 'kg')}. Difference {qtyUnit(kgGrn - kgWeighbridge, 'kg')} (kg materials only).
         </div>
       )}
-      {totals.transfers - totals.issues > 0.5 && (
+      {transferIssueGaps.length > 0 && (
         <div className="flex items-start gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          {qty(totals.transfers - totals.issues)} kg transferred to production has not been issued onto a batch yet.
+          {transferIssueGaps.map((entry) => qtyUnit(entry.amount, entry.unit)).join(' + ')} transferred to production has not been matched to BOM issues in this period.
         </div>
       )}
-      {totals.inManufacturing > 0.5 && (
+      {Object.values(unitTotals.inManufacturing).some((amount) => amount > 0.5) && (
         <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
           <Factory className="mt-0.5 h-4 w-4 shrink-0" />
-          {qty(totals.inManufacturing)} kg is issued to open manufacturing batches and has not become finished goods yet.
+          {formatUnitTotals(unitTotals.inManufacturing)} is issued to open manufacturing batches and has not become finished goods yet.
         </div>
       )}
 
@@ -810,7 +862,7 @@ export default function BulkRMPositionReportPage() {
                       <span className="flex shrink-0 items-center gap-2">
                         <span className="text-right">
                           <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">THEO close</span>
-                          <span className="block text-sm font-bold tabular-nums text-slate-900">{qty(row.theo)} kg</span>
+                  <span className="block text-sm font-bold tabular-nums text-slate-900">{qtyUnit(row.theo, row.unit)}</span>
                         </span>
                         <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
                       </span>
@@ -819,7 +871,7 @@ export default function BulkRMPositionReportPage() {
                       {metrics.map(([label, value]) => (
                         <div key={label} className={`min-w-0 px-3 py-2.5 ${label === 'Variance' ? 'col-span-2 bg-slate-50' : 'bg-white'}`}>
                           <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
-                          <dd className={`mt-0.5 truncate text-xs font-semibold tabular-nums ${label === 'Variance' && highlight ? 'text-rose-700' : 'text-slate-700'}`}>{value === null ? '—' : `${qty(value)} kg`}</dd>
+                          <dd className={`mt-0.5 truncate text-xs font-semibold tabular-nums ${label === 'Variance' && highlight ? 'text-rose-700' : 'text-slate-700'}`}>{qtyUnit(value, label === 'Weighbridge' ? 'kg' : row.unit)}</dd>
                         </div>
                       ))}
                     </dl>
@@ -832,7 +884,7 @@ export default function BulkRMPositionReportPage() {
                   {mobilePositionTotals.map(([label, value]) => (
                     <div key={label} className="bg-white px-3 py-2.5">
                       <dt className="text-[10px] font-medium text-slate-400">{label}</dt>
-                      <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800">{qty(value)} kg</dd>
+                      <dd className="mt-0.5 text-xs font-bold tabular-nums text-slate-800">{value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -866,25 +918,25 @@ export default function BulkRMPositionReportPage() {
                 <tr><td colSpan={13} className="px-3 py-16 text-center text-slate-400">No bulk movement in this month.</td></tr>
               ) : visible.map((row) => {
                 const highlight = row.variance !== null && Math.abs(row.variance) > 0.1;
-                const wbWarn = Math.abs(row.wbGap) > 0.5 && (row.weighbridge > 0 || row.grn > 0);
+                const wbWarn = row.unit.toLowerCase() === 'kg' && Math.abs(row.wbGap) > 0.5 && (row.weighbridge > 0 || row.grn > 0);
                 return (
                   <tr key={row.key} className={`border-t border-slate-100 transition-colors ${highlight ? 'bg-rose-50/70 hover:bg-rose-50' : 'odd:bg-white even:bg-slate-50/60 hover:bg-teal-50/60'}`}>
                     <td className={`sticky left-0 z-[1] px-3 py-3 font-semibold text-slate-900 ${highlight ? 'bg-rose-50' : 'bg-inherit'}`}>
                       {row.name}
                       {row.code ? <span className="ml-2 font-mono text-[10px] text-slate-400">{row.code}</span> : null}
                     </td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qty(row.opening)}</td>
-                    <td className={`px-2.5 py-3 text-right tabular-nums ${wbWarn ? 'font-semibold text-amber-700' : 'text-slate-700'}`}>{qty(row.weighbridge)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-emerald-700">{qty(row.grn)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qty(row.total)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-violet-700">{qty(row.transfers)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-amber-700">{qty(row.issues)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qty(row.consumed)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-sky-700">{qty(row.inManufacturing)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums font-bold text-slate-900">{qty(row.theo)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qty(row.physical)}</td>
-                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-500">{qty(row.system)}</td>
-                    <td className={`px-2.5 py-3 text-right tabular-nums ${highlight ? 'font-bold text-rose-700' : 'text-slate-500'}`}>{qty(row.variance)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qtyUnit(row.opening, row.unit)}</td>
+                    <td className={`px-2.5 py-3 text-right tabular-nums ${wbWarn ? 'font-semibold text-amber-700' : 'text-slate-700'}`}>{qtyUnit(row.weighbridge, 'kg')}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-emerald-700">{qtyUnit(row.grn, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qtyUnit(row.total, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-violet-700">{qtyUnit(row.transfers, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-amber-700">{qtyUnit(row.issues, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qtyUnit(row.consumed, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-sky-700">{qtyUnit(row.inManufacturing, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums font-bold text-slate-900">{qtyUnit(row.theo, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-700">{qtyUnit(row.physical, row.unit)}</td>
+                    <td className="px-2.5 py-3 text-right tabular-nums text-slate-500">{qtyUnit(row.system, row.unit)}</td>
+                    <td className={`px-2.5 py-3 text-right tabular-nums ${highlight ? 'font-bold text-rose-700' : 'text-slate-500'}`}>{qtyUnit(row.variance, row.unit)}</td>
                   </tr>
                 );
               })}
@@ -893,18 +945,18 @@ export default function BulkRMPositionReportPage() {
               <tfoot>
                 <tr className="border-t-2 border-slate-300 bg-slate-100 font-bold text-slate-900">
                   <td className="px-3 py-3">Totals</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.opening)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.weighbridge)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.grn)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.opening + totals.grn)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.transfers)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.issues)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.consumed)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.inManufacturing)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.theo)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.physical)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.system)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums">{qty(totals.physical - totals.system)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.opening)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.weighbridge)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.grn)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(Object.fromEntries(Object.keys(unitTotals.opening).map((unit) => [unit, visible.filter((row) => row.unit === unit).reduce((sum, row) => sum + row.total, 0)])))}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.transfers)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.issues)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.consumed)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.inManufacturing)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(Object.fromEntries(Object.keys(unitTotals.opening).map((unit) => [unit, visible.filter((row) => row.unit === unit).reduce((sum, row) => sum + row.theo, 0)])))}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.physical)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(unitTotals.system)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums">{formatUnitTotals(Object.fromEntries(Object.keys(unitTotals.opening).map((unit) => [unit, visible.filter((row) => row.unit === unit).reduce((sum, row) => sum + (row.variance || 0), 0)])))}</td>
                 </tr>
               </tfoot>
             )}
@@ -1012,10 +1064,10 @@ export default function BulkRMPositionReportPage() {
           ) : batches.length === 0 ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">No manufacturing batches in this month.</div>
           ) : batches.map((row) => {
-            const productionMetrics: Array<[string, number]> = [
-              ['Planned', row.planned],
-              ['Produced', row.actual],
-              ['RM issued', row.issuedKg],
+            const productionMetrics: Array<[string, string]> = [
+              ['Planned', qtyUnit(row.planned, 'kg')],
+              ['Produced', qtyUnit(row.actual, 'kg')],
+              ['RM issued', row.issued],
             ];
             const sageStages: Array<[string, string]> = [
               ['Sage GI', row.sageIssue],
@@ -1038,7 +1090,7 @@ export default function BulkRMPositionReportPage() {
                 {productionMetrics.map(([label, value]) => (
                   <div key={label} className="min-w-0 bg-slate-50 px-3 py-2.5">
                     <dt className="truncate text-[10px] font-medium text-slate-400">{label}</dt>
-                    <dd className="mt-0.5 truncate text-xs font-bold tabular-nums text-slate-800">{qty(value)} kg</dd>
+                    <dd className="mt-0.5 truncate text-xs font-bold tabular-nums text-slate-800">{value}</dd>
                   </div>
                 ))}
               </dl>
@@ -1064,7 +1116,7 @@ export default function BulkRMPositionReportPage() {
                 <th className="px-3 py-3 font-bold">Status</th>
                 <th className="px-3 py-3 text-right font-bold">Planned</th>
                 <th className="px-3 py-3 text-right font-bold">Produced</th>
-                <th className="px-3 py-3 text-right font-bold">RM issued</th>
+                <th className="px-3 py-3 text-right font-bold">RM issued by unit</th>
                 <th className="px-3 py-3 font-bold">Sage GI</th>
                 <th className="px-3 py-3 font-bold">Sage complete</th>
                 <th className="px-3 py-3 font-bold">FG transfer</th>
@@ -1087,7 +1139,7 @@ export default function BulkRMPositionReportPage() {
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{qty(row.planned)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-slate-900">{qty(row.actual)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{qty(row.issuedKg)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{row.issued}</td>
                   <td className={`px-3 py-2.5 ${row.sageIssue === 'success' ? 'text-emerald-700' : row.sageIssue === 'failed' ? 'text-red-700' : 'text-slate-500'}`}>{row.sageIssue.replace(/_/g, ' ')}</td>
                   <td className={`px-3 py-2.5 ${row.sageComplete === 'success' ? 'text-emerald-700' : row.sageComplete === 'failed' ? 'text-red-700' : 'text-slate-500'}`}>{row.sageComplete.replace(/_/g, ' ')}</td>
                   <td className="px-3 py-2.5 capitalize text-slate-600">{row.fgTransfer.replace(/_/g, ' ')}</td>
