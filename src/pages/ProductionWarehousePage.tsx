@@ -155,9 +155,14 @@ export default function ProductionWarehousePage() {
   const [receiptChecksError, setReceiptChecksError] = useState<string | null>(null);
   const [receiptChecksRefreshing, setReceiptChecksRefreshing] = useState(false);
   const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
+  const realtimeRefreshTimer = useRef<number | null>(null);
 
   async function fetchTransfers(silent = false) {
-    if (refreshInFlight.current) return;
+    if (refreshInFlight.current) {
+      refreshQueued.current = true;
+      return;
+    }
     refreshInFlight.current = true;
     setReceiptChecksRefreshing(true);
     if (!silent) setLoading(true);
@@ -282,6 +287,10 @@ export default function ProductionWarehousePage() {
       refreshInFlight.current = false;
       setReceiptChecksRefreshing(false);
       if (!silent) setLoading(false);
+      if (refreshQueued.current) {
+        refreshQueued.current = false;
+        window.setTimeout(() => void fetchTransfers(true), 150);
+      }
     }
   }
 
@@ -318,31 +327,47 @@ export default function ProductionWarehousePage() {
   useEffect(() => { fetchTransfers(); }, []);
 
   useEffect(() => {
+    const scheduleRealtimeRefresh = () => {
+      if (realtimeRefreshTimer.current !== null) window.clearTimeout(realtimeRefreshTimer.current);
+      realtimeRefreshTimer.current = window.setTimeout(() => {
+        realtimeRefreshTimer.current = null;
+        void fetchTransfers(true);
+      }, 300);
+    };
     const channel = supabase
       .channel('production-warehouse-live-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_movements' }, () => {
-        fetchTransfers(true);
+        scheduleRealtimeRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sage_stock_balances' }, () => {
-        fetchTransfers(true);
+        scheduleRealtimeRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'warehouse_stock_balances' }, () => {
-        fetchTransfers(true);
+        scheduleRealtimeRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfers' }, () => {
-        fetchTransfers(true);
+        scheduleRealtimeRefresh();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'material_transfer_reversals' }, () => {
-        fetchTransfers(true);
+        scheduleRealtimeRefresh();
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'sync_log',
+        filter: 'event_type=eq.material_transfer_to_production',
+      }, () => {
+        scheduleRealtimeRefresh();
       })
       .subscribe();
 
     const intervalId = window.setInterval(() => {
       fetchTransfers(true);
-    }, 60000);
+    }, 15000);
 
     return () => {
       window.clearInterval(intervalId);
+      if (realtimeRefreshTimer.current !== null) window.clearTimeout(realtimeRefreshTimer.current);
       supabase.removeChannel(channel);
     };
   }, []);
