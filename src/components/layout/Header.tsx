@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell, Loader2, Search, Menu, Sparkles, RefreshCw, AlertTriangle, CheckCircle2, Radio, Info, Clock, ArrowRightLeft, PackageCheck, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -66,6 +66,7 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
   const knownIncomingTransferIdsRef = useRef<Set<string>>(new Set());
   const sageQueueLoadedRef = useRef(false);
   const knownSageStagesRef = useRef<Map<string, string>>(new Map());
+  const transferNumberByReferenceRef = useRef<Map<string, string>>(new Map());
 
   // System Update state
   const [softUpdate, setSoftUpdate] = useState<SystemUpdatePayload | null>(null);
@@ -120,17 +121,20 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
   }
 
-  function showSageActivityToast(item: SageQueueItem) {
+  const showSageActivityToast = useCallback((item: SageQueueItem, processId = item.reference_id || item.id) => {
     const label = sageEventLabels[item.event_type] || item.event_type.replace(/_/g, ' ');
     const isFailed = item.status === 'failed';
     const isPosted = item.status === 'success';
     const isProcessing = item.status === 'processing';
     const title = isFailed ? 'Sage posting needs attention' : isPosted ? 'Posted to Sage' : isProcessing ? 'Processing in Sage' : 'Queued for Sage';
-    const detail = isFailed
+    const statusDetail = isFailed
       ? item.message || item.last_failure_message || 'The Sage bridge could not complete this transaction.'
       : isPosted
         ? item.message || 'The Sage document is ready.'
         : item.message || 'Waiting for the Sage bridge.';
+    const detail = item.event_type === 'material_transfer_to_production'
+      ? `Transfer ${processId} · ${statusDetail}`
+      : statusDetail;
     const tone = isFailed ? 'bg-rose-500' : isPosted ? 'bg-emerald-500' : isProcessing ? 'bg-blue-500' : 'bg-amber-500';
     const iconTone = isFailed ? 'bg-rose-50 text-rose-700' : isPosted ? 'bg-emerald-50 text-emerald-700' : isProcessing ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700';
 
@@ -163,8 +167,8 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
           </button>
         </div>
       </div>
-    ), { duration: isProcessing ? 5500 : 7500 });
-  }
+    ), { duration: isProcessing ? 5500 : 7500, id: `sage-process:${item.event_type}:${processId}` });
+  }, [navigate]);
 
   useEffect(() => {
     async function checkForUpdates() {
@@ -303,6 +307,9 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
 
   useEffect(() => {
     let isMounted = true;
+    const pendingSageEvents = new Map<string, SageQueueItem>();
+    let sageEventTimer: number | null = null;
+    let sageQueueRefreshTimer: number | null = null;
 
     async function loadSageQueue() {
       const { data, error } = await supabase
@@ -325,13 +332,40 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         )
         .slice(0, 12) as SageQueueItem[];
 
-      const nextStages = new Map(visibleQueue.map((item) => [item.id, `${item.status}:${item.message || ''}`]));
-      if (sageQueueLoadedRef.current) {
-        visibleQueue.forEach((item) => {
-          const stage = nextStages.get(item.id);
-          if (!stage || knownSageStagesRef.current.get(item.id) === stage) return;
+      const transferReferences = [...new Set(visibleQueue
+        .filter((item) => item.event_type === 'material_transfer_to_production' && item.reference_id)
+        .map((item) => item.reference_id as string))];
+      if (transferReferences.length > 0) {
+        const { data: transferGroups, error: groupsError } = await supabase
+          .from('material_transfers')
+          .select('id, transfer_number')
+          .in('id', transferReferences);
+        if (!groupsError) {
+          (transferGroups || []).forEach((transfer) => {
+            transferNumberByReferenceRef.current.set(transfer.id, transfer.transfer_number);
+          });
+        }
+      }
 
-          showSageActivityToast(item);
+      const getProcessId = (item: SageQueueItem) => item.event_type === 'material_transfer_to_production'
+        ? transferNumberByReferenceRef.current.get(item.reference_id || '') || item.reference_id || item.id
+        : item.reference_id || item.id;
+      const stageFor = (item: SageQueueItem) => item.status;
+      const nextStages = new Map<string, string>();
+      visibleQueue.forEach((item) => {
+        const key = `${item.event_type}:${getProcessId(item)}`;
+        if (!nextStages.has(key)) nextStages.set(key, stageFor(item));
+      });
+      if (sageQueueLoadedRef.current) {
+        const notifiedProcesses = new Set<string>();
+        visibleQueue.forEach((item) => {
+          const processId = getProcessId(item);
+          const key = `${item.event_type}:${processId}`;
+          const stage = nextStages.get(key);
+          if (!stage || knownSageStagesRef.current.get(key) === stage || notifiedProcesses.has(key)) return;
+
+          notifiedProcesses.add(key);
+          showSageActivityToast(item, processId);
         });
       }
       knownSageStagesRef.current = nextStages;
@@ -341,6 +375,50 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
     }
 
     loadSageQueue();
+    const queueSageEvent = (item: SageQueueItem) => {
+      if (!item.id || !['pending', 'processing', 'success', 'failed'].includes(item.status)) return;
+      pendingSageEvents.set(item.id, item);
+      if (sageEventTimer !== null) return;
+      sageEventTimer = window.setTimeout(async () => {
+        sageEventTimer = null;
+        const events = [...pendingSageEvents.values()];
+        pendingSageEvents.clear();
+        const transferReferences = [...new Set(events
+          .filter((event) => event.event_type === 'material_transfer_to_production' && event.reference_id)
+          .map((event) => event.reference_id as string)
+          .filter((referenceId) => !transferNumberByReferenceRef.current.has(referenceId)))];
+        if (transferReferences.length > 0) {
+          const { data: transferGroups, error } = await supabase
+            .from('material_transfers')
+            .select('id, transfer_number')
+            .in('id', transferReferences);
+          if (!error) {
+            (transferGroups || []).forEach((transfer) => {
+              transferNumberByReferenceRef.current.set(transfer.id, transfer.transfer_number);
+            });
+          }
+        }
+        const latestByProcess = new Map<string, { item: SageQueueItem; processId: string }>();
+        events.sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime()).forEach((item) => {
+          const processId = item.event_type === 'material_transfer_to_production'
+            ? transferNumberByReferenceRef.current.get(item.reference_id || '') || item.reference_id || item.id
+            : item.reference_id || item.id;
+          const key = `${item.event_type}:${processId}`;
+          const stage = item.status;
+          if (knownSageStagesRef.current.get(key) === stage) return;
+          knownSageStagesRef.current.set(key, stage);
+          latestByProcess.set(key, { item, processId });
+        });
+        latestByProcess.forEach(({ item, processId }) => showSageActivityToast(item, processId));
+      }, 300);
+    };
+    const scheduleQueueRefresh = () => {
+      if (sageQueueRefreshTimer !== null) window.clearTimeout(sageQueueRefreshTimer);
+      sageQueueRefreshTimer = window.setTimeout(() => {
+        sageQueueRefreshTimer = null;
+        void loadSageQueue();
+      }, 350);
+    };
     const channel = supabase
       .channel('header-sage-posting-queue')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sync_log' }, (payload) => {
@@ -348,24 +426,22 @@ export default function Header({ title, onMobileMenuToggle }: HeaderProps) {
         // posted in only a few seconds, before a follow-up query would see the
         // intermediate validation and posting stages.
         const item = payload.new as SageQueueItem | undefined;
-        if (sageQueueLoadedRef.current && item?.id && ['pending', 'processing', 'success', 'failed'].includes(item.status)) {
-          const stage = `${item.status}:${item.message || ''}`;
-          if (knownSageStagesRef.current.get(item.id) !== stage) {
-            knownSageStagesRef.current.set(item.id, stage);
-            showSageActivityToast(item);
-          }
-        }
-        loadSageQueue();
+        if (sageQueueLoadedRef.current && item) queueSageEvent(item);
+        scheduleQueueRefresh();
       })
       .subscribe();
 
     return () => {
       isMounted = false;
+      if (sageEventTimer !== null) window.clearTimeout(sageEventTimer);
+      if (sageQueueRefreshTimer !== null) window.clearTimeout(sageQueueRefreshTimer);
+      pendingSageEvents.clear();
       sageQueueLoadedRef.current = false;
       knownSageStagesRef.current = new Map();
+      transferNumberByReferenceRef.current = new Map();
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [showSageActivityToast]);
 
   useEffect(() => {
     if (!forceUpdateModal) return;
