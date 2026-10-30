@@ -122,6 +122,20 @@ function formatUnitTotals(values: Record<string, number>) {
   return units.length ? units.map((unit) => qtyUnit(0, unit)).join(' + ') : qtyUnit(0, 'kg');
 }
 
+function UnitTotalChips({ values, compact = false }: { values: Record<string, number>; compact?: boolean }) {
+  const entries = Object.entries(values).length ? Object.entries(values) : [['kg', 0] as [string, number]];
+  return (
+    <div className={`flex flex-wrap gap-1.5 ${compact ? 'justify-end' : ''}`}>
+      {entries.map(([unit, amount]) => (
+        <span key={unit} className={`inline-flex items-baseline gap-1 rounded-md bg-slate-50 px-2 py-1 ${compact ? 'border border-slate-100' : ''}`}>
+          <span className={`${compact ? 'text-[11px]' : 'text-base sm:text-lg'} whitespace-nowrap font-bold tabular-nums text-slate-900`}>{qty(amount)}</span>
+          <span className="text-[10px] font-semibold text-slate-500">{unit}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function money(value: number, currency: string) {
   try {
     return new Intl.NumberFormat('en', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
@@ -732,11 +746,11 @@ export default function BulkRMPositionReportPage() {
         </div>
         <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           {[
-            { label: 'Transfers to production', value: formatUnitTotals(unitTotals.transfers), note: 'Moved from raw material stores, grouped by stock unit', icon: ArrowRightLeft, tone: 'violet' },
-            { label: 'Raw material issued', value: formatUnitTotals(unitTotals.issues), note: `${formatUnitTotals(unitTotals.consumed)} consumed · ${formatUnitTotals(unitTotals.inManufacturing)} in open batches`, icon: Factory, tone: 'amber' },
-            { label: 'Open manufacturing', value: String(manufacturing.running), note: 'Finance review, issued or running', icon: ClipboardList, tone: 'sky' },
-            { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: TrendingUp, tone: 'teal' },
-          ].map(({ label, value, note, icon: Icon, tone }) => (
+            { label: 'Transfers to production', value: null, unitValues: unitTotals.transfers, note: 'Moved from raw material stores', icon: ArrowRightLeft, tone: 'violet' },
+            { label: 'Raw material issued', value: null, unitValues: unitTotals.issues, note: '', issueDetails: true, icon: Factory, tone: 'amber' },
+            { label: 'Open manufacturing', value: String(manufacturing.running), unitValues: null, note: 'Finance review, issued or running', icon: ClipboardList, tone: 'sky' },
+            { label: 'Output vs planned', value: `${manufacturing.yieldPct.toFixed(1)}%`, unitValues: null, note: `${qty(manufacturing.produced)} of ${qty(manufacturing.planned)} kg`, icon: TrendingUp, tone: 'teal' },
+          ].map(({ label, value, unitValues, note, issueDetails, icon: Icon, tone }) => (
             <div key={label} className={`group relative min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg sm:p-5 lg:p-6 ${tone === 'violet' ? 'before:bg-violet-500' : tone === 'amber' ? 'before:bg-amber-500' : tone === 'sky' ? 'before:bg-sky-500' : 'before:bg-teal-500'} before:absolute before:inset-y-0 before:left-0 before:w-1`}>
               <div className="flex items-start justify-between gap-3">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone === 'violet' ? 'bg-violet-50 text-violet-700' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : tone === 'sky' ? 'bg-sky-50 text-sky-700' : 'bg-teal-50 text-teal-700'}`}>
@@ -745,8 +759,17 @@ export default function BulkRMPositionReportPage() {
                 <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${tone === 'violet' ? 'bg-violet-50 text-violet-700' : tone === 'amber' ? 'bg-amber-50 text-amber-700' : tone === 'sky' ? 'bg-sky-50 text-sky-700' : 'bg-teal-50 text-teal-700'}`}>This period</span>
               </div>
               <p className="mt-3 text-[11px] font-semibold leading-4 text-slate-500 sm:mt-4 sm:text-xs">{label}</p>
-              <p className="mt-1 break-words text-xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-2xl lg:text-[1.8rem]">{loading ? '—' : value}</p>
-              <p className="mt-2 min-h-8 text-[10px] leading-4 text-slate-400 sm:text-[11px] lg:text-xs">{note}</p>
+              {unitValues ? (
+                <div className="mt-2 min-h-10"><UnitTotalChips values={unitValues} /></div>
+              ) : (
+                <p className="mt-1 min-h-10 break-words text-xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-2xl lg:text-[1.8rem]">{loading ? '—' : value}</p>
+              )}
+              {issueDetails ? (
+                <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2">
+                  <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-slate-500">Consumed</span><UnitTotalChips values={unitTotals.consumed} compact /></div>
+                  <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium text-slate-500">Open batches</span><UnitTotalChips values={unitTotals.inManufacturing} compact /></div>
+                </div>
+              ) : <p className="mt-2 min-h-8 text-[10px] leading-4 text-slate-400 sm:text-[11px] lg:text-xs">{note}</p>}
             </div>
           ))}
         </div>

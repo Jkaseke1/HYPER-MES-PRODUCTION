@@ -12,6 +12,7 @@ import { Dialog, DialogContent } from '../components/ui/dialog';
 import WeighBridgeTicket from '../components/grn/WeighBridgeTicket';
 import { cacheData, getCachedData } from '../lib/offlineSync';
 import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
+import { notifyWorkflow } from '../lib/workflowNotifications';
 
 interface WBTicket {
   id: string;
@@ -232,7 +233,7 @@ export default function WeighBridgePage() {
   function openEditTicket(ticket: WBTicket) {
     if (!canCorrectTickets) return;
     if (!['open', 'in_grn'].includes(ticket.status)) {
-      alert('Only open or in-GRN tickets can be corrected. Linked tickets are locked for audit integrity.');
+      notifyWorkflow('Ticket is locked', 'Only open or in-GRN tickets can be corrected. Linked tickets are locked for audit integrity.', 'error');
       return;
     }
     setViewTicket(null);
@@ -244,7 +245,7 @@ export default function WeighBridgePage() {
   async function handleDeleteTicket(ticket: WBTicket) {
     if (!canCorrectTickets) return;
     if (ticket.status !== 'open' || ticket.grn_number) {
-      alert('Only an open, unlinked ticket can be deleted. Use edit before it enters the GRN workflow.');
+      notifyWorkflow('Ticket cannot be deleted', 'Only an open, unlinked ticket can be deleted. Use edit before it enters the GRN workflow.', 'error');
       return;
     }
     if (!window.confirm(`Delete weighbridge ticket ${ticket.ticket_no}? This cannot be undone.`)) return;
@@ -258,8 +259,9 @@ export default function WeighBridgePage() {
       if (error) throw error;
       setViewTicket(null);
       await fetchTickets();
+      notifyWorkflow('Ticket deleted', `${ticket.ticket_no} was removed.`);
     } catch (err: any) {
-      alert(`Failed to delete ticket: ${err.message}`);
+      notifyWorkflow('Could not delete ticket', err.message || 'Please try again.', 'error');
     } finally {
       setSaving(false);
     }
@@ -268,23 +270,23 @@ export default function WeighBridgePage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.wb_transaction_no) {
-      alert('Transaction No is required.');
+      notifyWorkflow('Ticket number required', 'Enter the weighbridge transaction number before saving.', 'error');
       return;
     }
     if (!form.wb_product_code || !form.wb_product_name) {
-      alert('Product is required before saving a weighbridge ticket.');
+      notifyWorkflow('Product required', 'Select a product before saving this ticket.', 'error');
       return;
     }
     if (!form.wb_supplier_id && !form.wb_unregistered_supplier_name.trim()) {
-      alert('Select a supplier, or record the supplier name for Finance.');
+      notifyWorkflow('Supplier required', 'Select a supplier or record the supplier name for Finance.', 'error');
       return;
     }
     if (form.wb_inbound_transport_mode === 'company_hired' && !form.wb_inbound_transporter_id) {
-      alert('Company-hired transport requires a transporter. The Raw Materials Manager records the rate and supporting documents on the GRN.');
+      notifyWorkflow('Transporter required', 'Select the transporter. The Raw Materials Manager records the rate and supporting documents on the GRN.', 'error');
       return;
     }
     if (editing && !editingTicketId) {
-      alert('This ticket could not be identified for editing. Close the form and open the ticket again.');
+      notifyWorkflow('Ticket could not be identified', 'Close the form and open the ticket again before editing.', 'error');
       return;
     }
     setSaving(true);
@@ -327,8 +329,14 @@ export default function WeighBridgePage() {
       setEditingTicketId(null);
       setViewTicket(null);
       await fetchTickets();
+      notifyWorkflow(editing ? 'Ticket updated' : 'Ticket saved', `${form.wb_transaction_no} is saved in PlantControl.`);
     } catch (err: any) {
-      alert(`Failed to save ticket: ${err.message}`);
+      const errorText = `${err?.message || ''} ${err?.details || ''} ${err?.constraint || ''}`;
+      if (err?.code === '23505' && /weigh_bridge_tickets_ticket_no_key/i.test(errorText)) {
+        notifyWorkflow('Ticket number already in use', `Ticket ${form.wb_transaction_no} already exists. Enter a unique number; the existing ticket has not been changed.`, 'error');
+      } else {
+        notifyWorkflow('Could not save ticket', err?.message || 'Please check the details and try again.', 'error');
+      }
     } finally {
       setSaving(false);
     }
