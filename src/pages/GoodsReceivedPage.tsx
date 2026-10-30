@@ -28,6 +28,7 @@ import { useRealtimeRefresh } from '../hooks/useRealtimeRefresh';
 import { isGrnInput } from '../lib/grnMaterials';
 import { grnLineFromWeighbridge } from '../lib/grnWeighbridgeDraft';
 import GRNMaterialPicker from '../components/grn/GRNMaterialPicker';
+import { notifyWorkflow } from '../lib/workflowNotifications';
 
 interface GRNItem {
   raw_material_id: string;
@@ -541,16 +542,16 @@ export default function GoodsReceivedPage() {
   };
 
   const handleSaveGRN = async () => {
-    if (createdGrnRecovery) { toast.error('This GRN draft already exists. Open the saved GRN to complete it.'); return; }
+    if (createdGrnRecovery) { notifyWorkflow('Saved GRN needs completion', 'Open the existing draft to finish it instead of creating another GRN.', 'error'); return; }
     if (!inputCatalogueReady || items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.raw_material_id);
       return !material || !isGrnInput(material, finishedCodes);
     })) {
-      toast.error('Select approved GRN inputs only. Finished feeds cannot be received into RM.');
+      notifyWorkflow('Choose an approved input', 'Finished feeds cannot be received into the raw-material warehouse.', 'error');
       return;
     }
     if ((!supplierId || (supplierId === 'other' && !unregisteredSupplierName.trim())) || !manualGrvNumber.trim() || items.length === 0 || !items[0].raw_material_id) {
-      toast.error('Please fill in all required fields');
+      notifyWorkflow('Required details missing', 'Enter the supplier, GRV number and at least one material line.', 'error');
       return;
     }
 
@@ -564,28 +565,28 @@ export default function GoodsReceivedPage() {
       );
 
       if (!ticket || ticket.status !== 'open') {
-        toast.error('Select an open weighbridge ticket. A linked or cancelled ticket cannot be reused.');
+        notifyWorkflow('Ticket unavailable', 'Select an open weighbridge ticket. Linked or cancelled tickets cannot be reused.', 'error');
         return;
       }
       const existingGrn = grns.find((grn: any) => grn.weigh_bridge_ticket_id === weighBridgeTicketId);
       if (existingGrn) {
-        toast.error(`This weighbridge ticket is already linked to ${existingGrn.grn_number}. Open that GRN instead of creating another one.`);
+        notifyWorkflow('Ticket already received', `Ticket is linked to ${existingGrn.grn_number}. Open that GRN instead of creating another one.`, 'error');
         return;
       }
       if (ticket.supplier_id !== selectedSupplierId) {
-        toast.error('The weighbridge ticket supplier must match the GRN supplier.');
+        notifyWorkflow('Supplier does not match', 'The weighbridge ticket supplier must match the GRN supplier.', 'error');
         return;
       }
       if (!linkedMaterial) {
-        toast.error('The weighbridge ticket material must match the GRN material.');
+        notifyWorkflow('Material does not match', 'The weighbridge ticket material must match the GRN material.', 'error');
         return;
       }
       if (!(Number(ticket.nett_mass) > 0) || !ticket.driver_signed) {
-        toast.error('The linked weighbridge ticket needs a positive nett mass and driver sign-off.');
+        notifyWorkflow('Ticket is not ready', 'A linked ticket needs a positive nett mass and driver sign-off.', 'error');
         return;
       }
       if (ticket.inbound_transport_mode === 'company_hired' && canCaptureTransportCost && (!Number.isFinite(Number(transportAmount)) || Number(transportAmount) <= 0)) {
-        toast.error('Enter the total transport amount for this company-hired delivery.');
+        notifyWorkflow('Transport amount required', 'Enter the total transport amount for this company-hired delivery.', 'error');
         return;
       }
     }
@@ -673,7 +674,7 @@ export default function GoodsReceivedPage() {
         if (ticketError) throw ticketError;
       }
 
-      toast.success('GRN created successfully');
+      notifyWorkflow('GRN saved', `${grn.grn_number} is ready for costing review.`);
       setModalOpen(false);
       resetForm();
       fetchData();
@@ -682,13 +683,15 @@ export default function GoodsReceivedPage() {
       if (createdReceipt) {
         setCreatedGrnRecovery({ id: createdReceipt.id, number: createdReceipt.grn_number,
           message: error.message || 'A remaining receipt step failed.' });
-        toast.error(`${createdReceipt.grn_number} already exists. Complete that draft; do not create it again.`);
+        notifyWorkflow('GRN saved, completion needs attention', `${createdReceipt.grn_number} is already saved. Use the recovery prompt to complete the remaining steps; do not submit it again.`, 'error');
         await fetchData(false);
       } else if (String(error?.message || '').includes('uq_grn_weighbridge_ticket')) {
-        toast.error('This weighbridge ticket is already linked to a GRN. Refresh the list and open the existing GRN instead.');
+        notifyWorkflow('Ticket already received', 'This weighbridge ticket is linked to a GRN. Refresh the list and open that receipt instead.', 'error');
         await fetchData(false);
+      } else if (error?.code === '23505') {
+        notifyWorkflow('GRN reference already exists', 'That GRN or manual GRV reference is already in use. Check the register and enter a unique reference.', 'error');
       } else {
-        toast.error(`Failed to create GRN: ${error.message}`);
+        notifyWorkflow('Could not save GRN', error.message || 'Please check the details and try again.', 'error');
       }
     } finally {
       setSaving(false);
