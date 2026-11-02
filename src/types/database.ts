@@ -271,6 +271,7 @@ export interface ProductionOrder {
   operator_id: string | null;
   supervisor_id: string | null;
   raw_material_cost: number;
+  packaging_cost?: number;
   labour_cost: number;
   machine_cost: number;
   overhead_cost: number;

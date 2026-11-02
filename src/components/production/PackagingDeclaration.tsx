@@ -16,6 +16,10 @@ interface PackagingLine {
   packaging_sku_id: string;
   bags_used: number;
   implied_tonnes: number;
+  item_code?: string;
+  description?: string;
+  planned_qty?: number;
+  bag_size_kg?: number;
 }
 
 interface PackagingDeclarationProps {
@@ -23,6 +27,15 @@ interface PackagingDeclarationProps {
   formulationId?: string;
   unitSize?: string; // e.g. "50", "50kg", "25"
   formulationName?: string; // e.g. "Broiler Starter/Grower 50kg"
+  selectedPackaging?: Array<{
+    id: string;
+    packaging_sku_id: string;
+    item_code: string;
+    description: string;
+    planned_qty: number;
+    actual_qty: number;
+    packaging_skus?: { bag_size_kg?: number } | null;
+  }>;
   onSave: (lines: PackagingLine[]) => Promise<void>;
   disabled?: boolean;
 }
@@ -45,6 +58,7 @@ export default function PackagingDeclaration({
   formulationId,
   unitSize,
   formulationName,
+  selectedPackaging,
   onSave,
   disabled = false
 }: PackagingDeclarationProps) {
@@ -57,8 +71,31 @@ export default function PackagingDeclaration({
   const targetBagSizeKg = extractTargetBagSize(unitSize, formulationName);
 
   useEffect(() => {
+    if (selectedPackaging !== undefined) {
+      const outputKg = Math.max(0, actualOutputQty * 1000);
+      const savedLines = selectedPackaging.map((item) => {
+        const bagSize = Number(item.packaging_skus?.bag_size_kg) || targetBagSizeKg;
+        const bags = Number(item.actual_qty) > 0
+          ? Number(item.actual_qty)
+          : Number(item.planned_qty) || (outputKg > 0 ? Math.max(1, Math.round(outputKg / bagSize)) : 0);
+        return {
+          id: item.id,
+          packaging_sku_id: item.packaging_sku_id,
+          item_code: item.item_code,
+          description: item.description,
+          planned_qty: Number(item.planned_qty || 0),
+          bag_size_kg: bagSize,
+          bags_used: bags,
+          implied_tonnes: (bags * bagSize) / 1000,
+        };
+      });
+      setLines(savedLines);
+      setError(savedLines.length ? null : 'No packaging was saved on this order. Return to the order setup and select its packaging before production starts.');
+      setLoading(false);
+      return;
+    }
     fetchSkus();
-  }, [actualOutputQty, formulationId, unitSize, formulationName]);
+  }, [actualOutputQty, formulationId, unitSize, formulationName, selectedPackaging]);
 
   async function fetchSkus() {
     try {
@@ -240,8 +277,9 @@ export default function PackagingDeclaration({
 
         if (field === 'bags_used') {
           const sku = skus.find((s) => s.id === updated.packaging_sku_id);
-          if (sku && sku.bag_size_kg > 0) {
-            updated.implied_tonnes = (updated.bags_used * sku.bag_size_kg) / 1000;
+          const bagSize = Number(updated.bag_size_kg || sku?.bag_size_kg) || targetBagSizeKg;
+          if (bagSize > 0) {
+            updated.implied_tonnes = (updated.bags_used * bagSize) / 1000;
           } else {
             updated.implied_tonnes = 0;
           }
@@ -337,8 +375,10 @@ export default function PackagingDeclaration({
                   <Sparkles className="w-3 h-3" /> Formulated for {targetBagSizeKg}kg
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Dynamic SKU matching from formulation <span className="font-semibold text-white">({formulationName || 'Custom Formulation'})</span> & unit size ({targetBagSizeKg}kg).
+          <p className="text-xs text-slate-300 mt-0.5">
+                {selectedPackaging !== undefined
+                  ? <>Packaging was selected on the production order for <span className="font-semibold text-white">{formulationName || 'this batch'}</span>. Confirm the actual bags used.</>
+                  : <>Dynamic SKU matching from formulation <span className="font-semibold text-white">({formulationName || 'Custom Formulation'})</span> & unit size ({targetBagSizeKg}kg).</>}
               </p>
             </div>
           </div>
@@ -381,20 +421,20 @@ export default function PackagingDeclaration({
       {/* Packaging Lines */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Packaging Lines & SKUs</label>
-          <button
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">{selectedPackaging !== undefined ? 'Selected order packaging' : 'Packaging Lines & SKUs'}</label>
+          {selectedPackaging === undefined && <button
             type="button"
             onClick={addLine}
             disabled={disabled || saving}
             className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Add SKU Line
-          </button>
+          </button>}
         </div>
 
         {lines.length === 0 ? (
           <div className="p-6 text-center bg-slate-50 border border-slate-200 rounded-xl">
-            <p className="text-xs text-amber-600 font-medium">No packaging SKUs configured. Click "Add SKU Line" above.</p>
+            <p className="text-xs text-amber-700 font-medium">{selectedPackaging !== undefined ? 'No packaging SKU was saved with this order.' : 'No packaging SKUs configured. Click "Add SKU Line" above.'}</p>
           </div>
         ) : (
           lines.map((line, idx) => {
@@ -402,7 +442,7 @@ export default function PackagingDeclaration({
               <div key={line.id} className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-sm space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <span className="text-xs font-bold text-slate-600 font-mono">Line #{idx + 1}</span>
-                  {lines.length > 1 && (
+                  {selectedPackaging === undefined && lines.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeLine(line.id)}
@@ -417,7 +457,12 @@ export default function PackagingDeclaration({
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
                   <div className="md:col-span-6 space-y-1">
                     <label className="block text-[11px] font-bold text-slate-500 uppercase">Packaging SKU</label>
-                    <select
+                    {selectedPackaging !== undefined ? (
+                      <div className="min-h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800">
+                        {line.item_code} — {line.description} ({line.bag_size_kg} kg/bag)
+                        <span className="mt-1 block text-[10px] font-normal text-slate-500">Selected on this production order</span>
+                      </div>
+                    ) : <select
                       value={line.packaging_sku_id}
                       onChange={(e) => updateLine(line.id, 'packaging_sku_id', e.target.value)}
                       disabled={disabled || saving}
@@ -429,11 +474,11 @@ export default function PackagingDeclaration({
                           {sku.sku_code} — {sku.description} ({sku.bag_size_kg} kg/bag)
                         </option>
                       ))}
-                    </select>
+                    </select>}
                   </div>
 
                   <div className="md:col-span-3 space-y-1">
-                    <label className="block text-[11px] font-bold text-emerald-700 uppercase">Bags Used ({targetBagSizeKg}kg)</label>
+                    <label className="block text-[11px] font-bold text-emerald-700 uppercase">Actual Bags Used ({line.bag_size_kg || targetBagSizeKg}kg)</label>
                     <input
                       type="number"
                       min="1"
