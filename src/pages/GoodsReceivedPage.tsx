@@ -217,14 +217,22 @@ export default function GoodsReceivedPage() {
     if (!viewing || !adminReceivedDate || !adminSupplierReason.trim() || savingAdminSupplierCorrection) return;
     setSavingAdminSupplierCorrection(true);
     try {
-      const { error } = await supabase.rpc('correct_failed_grn_details', {
-        p_grn_id: viewing.id,
-        p_expected_supplier_id: viewing.supplier_id,
-        p_expected_received_date: viewing.received_date,
-        p_supplier_id: adminSupplierId || null,
-        p_received_date: adminReceivedDate,
-        p_reason: adminSupplierReason.trim(),
-      });
+      const isAdmin = profile?.role === 'admin';
+      const { error } = isAdmin
+        ? await supabase.rpc('correct_failed_grn_details', {
+          p_grn_id: viewing.id,
+          p_expected_supplier_id: viewing.supplier_id,
+          p_expected_received_date: viewing.received_date,
+          p_supplier_id: adminSupplierId || null,
+          p_received_date: adminReceivedDate,
+          p_reason: adminSupplierReason.trim(),
+        })
+        : await supabase.rpc('correct_failed_grn_date', {
+          p_grn_id: viewing.id,
+          p_expected_received_date: viewing.received_date,
+          p_received_date: adminReceivedDate,
+          p_reason: adminSupplierReason.trim(),
+        });
       if (error) throw error;
       setAdminSupplierCorrectionOpen(false);
       await fetchData();
@@ -2336,9 +2344,9 @@ export default function GoodsReceivedPage() {
                   const tone = detail.tone === 'emerald' ? 'bg-emerald-100 text-emerald-800' : detail.tone === 'rose' ? 'bg-rose-100 text-rose-800' : detail.tone === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800';
                   return <Badge className={`text-xs px-3 py-1 ${tone}`}>RTS: {detail.label}</Badge>;
                 })()}
-                {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && !getSageGrvNumber(syncByGrnId[viewing.id]) && (
+                {viewing && ['admin', 'finance'].includes(profile?.role || '') && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && !getSageGrvNumber(syncByGrnId[viewing.id]) && (
                   <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin correct GRN
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Correct failed GRN
                   </Button>
                 )}
                 {viewing && canManageReturns && viewing.status === 'approved' && selectedSync?.status === 'success' && !viewRts && (
@@ -2822,7 +2830,7 @@ export default function GoodsReceivedPage() {
                 <p className="mt-1 text-sm text-rose-700">{syncByGrnId[viewing?.id || '']?.message || 'Sage could not post this GRN.'}</p>
               </div>
             </div>
-            <div className="space-y-1.5">
+            {profile?.role === 'admin' && <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Sage supplier</Label>
               <Select value={adminSupplierId} onValueChange={setAdminSupplierId}>
                 <SelectTrigger className="h-11"><SelectValue placeholder="Choose the supplier from Sage" /></SelectTrigger>
@@ -2832,7 +2840,7 @@ export default function GoodsReceivedPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct GRN / Sage transaction date *</Label>
               <Input type="date" value={adminReceivedDate} onChange={(event) => setAdminReceivedDate(event.target.value)} />
@@ -2840,7 +2848,7 @@ export default function GoodsReceivedPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Audit reason *</Label>
-              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Example: selected the supplier shown on the original invoice" rows={3} />
+              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Record why the date correction is needed and the document used to verify it" rows={3} />
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Back to GRN</Button>
