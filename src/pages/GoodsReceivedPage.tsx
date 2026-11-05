@@ -152,6 +152,7 @@ export default function GoodsReceivedPage() {
   const [supplierCodeFeedback, setSupplierCodeFeedback] = useState('');
   const [adminSupplierCorrectionOpen, setAdminSupplierCorrectionOpen] = useState(false);
   const [adminSupplierId, setAdminSupplierId] = useState('');
+  const [adminReceivedDate, setAdminReceivedDate] = useState('');
   const [adminSupplierReason, setAdminSupplierReason] = useState('');
   const [savingAdminSupplierCorrection, setSavingAdminSupplierCorrection] = useState(false);
   const [showReturnToSupplierModal, setShowReturnToSupplierModal] = useState(false);
@@ -207,23 +208,27 @@ export default function GoodsReceivedPage() {
   const openAdminSupplierCorrection = () => {
     if (!viewing || profile?.role !== 'admin') return;
     setAdminSupplierId(viewing.supplier_id || '');
+    setAdminReceivedDate(viewing.received_date || '');
     setAdminSupplierReason('');
     setAdminSupplierCorrectionOpen(true);
   };
 
   const saveAdminSupplierCorrection = async () => {
-    if (!viewing || !adminSupplierId || !adminSupplierReason.trim() || savingAdminSupplierCorrection) return;
+    if (!viewing || !adminReceivedDate || !adminSupplierReason.trim() || savingAdminSupplierCorrection) return;
     setSavingAdminSupplierCorrection(true);
     try {
-      const { error } = await supabase.rpc('correct_failed_grn_supplier', {
+      const { error } = await supabase.rpc('correct_failed_grn_details', {
         p_grn_id: viewing.id,
-        p_supplier_id: adminSupplierId,
+        p_expected_supplier_id: viewing.supplier_id,
+        p_expected_received_date: viewing.received_date,
+        p_supplier_id: adminSupplierId || null,
+        p_received_date: adminReceivedDate,
         p_reason: adminSupplierReason.trim(),
       });
       if (error) throw error;
       setAdminSupplierCorrectionOpen(false);
       await fetchData();
-      toast.success(`${viewing.grn_number} supplier corrected. Review this GRN, then retry Sage.`);
+      toast.success(`${viewing.grn_number} corrected. Review the details, then retry Sage when ready.`);
     } catch (error: any) {
       toast.error(error.message || 'Could not correct the GRN supplier.');
     } finally {
@@ -2331,9 +2336,9 @@ export default function GoodsReceivedPage() {
                   const tone = detail.tone === 'emerald' ? 'bg-emerald-100 text-emerald-800' : detail.tone === 'rose' ? 'bg-rose-100 text-rose-800' : detail.tone === 'blue' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800';
                   return <Badge className={`text-xs px-3 py-1 ${tone}`}>RTS: {detail.label}</Badge>;
                 })()}
-                {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && (
+                {viewing && profile?.role === 'admin' && viewing.status === 'approved' && syncByGrnId[viewing.id]?.status === 'failed' && !getSageGrvNumber(syncByGrnId[viewing.id]) && (
                   <Button type="button" size="sm" onClick={openAdminSupplierCorrection} className="bg-amber-400 text-slate-950 hover:bg-amber-300">
-                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin edit supplier
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Admin correct GRN
                   </Button>
                 )}
                 {viewing && canManageReturns && viewing.status === 'approved' && selectedSync?.status === 'success' && !viewRts && (
@@ -2790,9 +2795,9 @@ export default function GoodsReceivedPage() {
           <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-5">
             <div className="flex items-start justify-between gap-4 pr-8">
               <div>
-                <DialogTitle className="text-xl text-slate-900">Correct supplier on this GRN</DialogTitle>
+                <DialogTitle className="text-xl text-slate-900">Correct failed GRN</DialogTitle>
                 <DialogDescription className="mt-1">
-                  Select the correct Sage supplier, record the reason, then return to the same GRN to retry posting.
+                  Correct the transaction date from the receipt documents. You may also correct the supplier. Sage posting is not triggered by saving.
                 </DialogDescription>
               </div>
               <Badge variant="destructive" className="shrink-0">Sage failed</Badge>
@@ -2808,13 +2813,17 @@ export default function GoodsReceivedPage() {
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Current supplier</p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">{viewing ? grnSupplierLabel(viewing) : 'Not mapped'}</p>
               </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Current transaction date</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{viewing && format(new Date(viewing.received_date), 'dd MMM yyyy')}</p>
+              </div>
               <div className="sm:col-span-2">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Sage message</p>
                 <p className="mt-1 text-sm text-rose-700">{syncByGrnId[viewing?.id || '']?.message || 'Sage could not post this GRN.'}</p>
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct Sage supplier *</Label>
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Sage supplier</Label>
               <Select value={adminSupplierId} onValueChange={setAdminSupplierId}>
                 <SelectTrigger className="h-11"><SelectValue placeholder="Choose the supplier from Sage" /></SelectTrigger>
                 <SelectContent>
@@ -2825,14 +2834,19 @@ export default function GoodsReceivedPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Correct GRN / Sage transaction date *</Label>
+              <Input type="date" value={adminReceivedDate} onChange={(event) => setAdminReceivedDate(event.target.value)} />
+              <p className="text-xs text-slate-500">Use the date supported by the supplier invoice, delivery note, or receiving evidence.</p>
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Audit reason *</Label>
               <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Example: selected the supplier shown on the original invoice" rows={3} />
             </div>
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Back to GRN</Button>
-              <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminSupplierId || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
+              <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminReceivedDate || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
                 {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
-                Save and return to GRN
+                Save audited correction
               </Button>
             </div>
           </div>
