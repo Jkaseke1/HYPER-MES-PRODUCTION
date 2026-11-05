@@ -1,4 +1,4 @@
-type Ticket = { product_code?: string | null; status?: string; driver_signed?: boolean; nett_mass?: number | string | null };
+type Ticket = { product_code?: string | null; status?: string; driver_signed?: boolean; nett_mass?: number | string | null; packaging_unit_count?: number | string | null };
 type Material = { id: string; code: string; sage_code?: string | null; unit?: string; is_active?: boolean };
 
 export function grnLineFromWeighbridge<T extends Material>(ticket: Ticket, eligibleMaterials: T[]) {
@@ -9,9 +9,11 @@ export function grnLineFromWeighbridge<T extends Material>(ticket: Ticket, eligi
     [material.code, material.sage_code].some(value => value?.trim().toUpperCase() === code));
   if (matches.length !== 1) throw new Error('The ticket product does not match one active GRV input. Select the material from the receipt documents.');
   const material = matches[0];
-  const mass = Number(ticket.nett_mass);
-  // Weighbridge kg cannot establish bag/unit counts or an unsigned receipt quantity.
-  const useNetKg = ticket.driver_signed === true && Number.isFinite(mass) && mass > 0 &&
-    ['kg', 'kgs', 'kilogram', 'kilograms'].includes((material.unit || '').trim().toLowerCase());
-  return { material, receivedQty: useNetKg ? mass : '' as const };
+  const unit = (material.unit || '').trim().toLowerCase();
+  const isPackaging = ['unit', 'units', 'bag', 'bags', 'each', 'ea', 'pack', 'packs'].includes(unit);
+  const quantity = Number(isPackaging ? ticket.packaging_unit_count : ticket.nett_mass);
+  // Mass cannot establish bag counts, and package counts cannot replace mass for kg materials.
+  const canUseQuantity = Number.isFinite(quantity) && quantity > 0 &&
+    (isPackaging || (ticket.driver_signed === true && ['kg', 'kgs', 'kilogram', 'kilograms'].includes(unit)));
+  return { material, receivedQty: canUseQuantity ? quantity : '' as const };
 }
