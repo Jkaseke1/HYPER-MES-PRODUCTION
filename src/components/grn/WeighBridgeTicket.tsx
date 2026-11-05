@@ -21,6 +21,7 @@ interface WeighBridgeData {
   wb_time_out: string;
   wb_second_mass: string;
   wb_nett_mass: string;
+  wb_packaging_unit_count: string;
   wb_driver_signed: boolean;
   wb_inbound_transport_mode: 'supplier_provided' | 'company_hired';
   wb_inbound_transporter_id: string;
@@ -350,6 +351,19 @@ export default function WeighBridgeTicket({ data, onChange, receivedQty, hideHea
             {/* Right: Weighing */}
             <div className="space-y-4">
               <SectionHeader icon={Scale}>Weighing</SectionHeader>
+
+              <Field title="Packaging Units (optional)">
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={data.wb_packaging_unit_count}
+                  onChange={(e) => onChange('wb_packaging_unit_count', e.target.value)}
+                  placeholder="Enter physical bag / package count when applicable"
+                  className={input}
+                />
+                <p className="mt-1 text-[11px] text-slate-500">Record the counted units separately from nett mass in kg.</p>
+              </Field>
 
               {/* Entry / Exit side by side */}
               <div className="grid grid-cols-2 gap-2.5">

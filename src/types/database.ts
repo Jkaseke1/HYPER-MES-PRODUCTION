@@ -161,6 +161,7 @@ export interface GoodsReceivedNote {
   wb_time_out?: string | null;
   wb_second_mass?: number | null;
   wb_nett_mass?: number | null;
+  packaging_unit_count?: number | null;
   wb_driver_signed?: boolean;
   created_at: string;
   updated_at: string;

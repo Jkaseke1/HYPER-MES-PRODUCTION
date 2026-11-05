@@ -33,6 +33,7 @@ interface WBTicket {
   first_mass: number;
   second_mass: number;
   nett_mass: number;
+  packaging_unit_count?: number | null;
   comment: string;
   driver_signed: boolean;
   status: 'open' | 'in_grn' | 'linked' | 'cancelled';
@@ -67,6 +68,7 @@ const emptyWBForm = {
   wb_time_out: '',
   wb_second_mass: '',
   wb_nett_mass: '',
+  wb_packaging_unit_count: '',
   wb_driver_signed: false,
   wb_inbound_transport_mode: 'supplier_provided',
   wb_inbound_transporter_id: '',
@@ -219,6 +221,7 @@ export default function WeighBridgePage() {
       wb_time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
       wb_second_mass: ticket.second_mass == null ? '' : String(ticket.second_mass),
       wb_nett_mass: ticket.nett_mass == null ? '' : String(ticket.nett_mass),
+      wb_packaging_unit_count: ticket.packaging_unit_count == null ? '' : String(ticket.packaging_unit_count),
       wb_driver_signed: Boolean(ticket.driver_signed),
       wb_inbound_transport_mode: ticket.inbound_transport_mode || 'supplier_provided',
       wb_inbound_transporter_id: ticket.inbound_transporter_id || '',
@@ -285,6 +288,10 @@ export default function WeighBridgePage() {
       notifyWorkflow('Transporter required', 'Select the transporter. The Raw Materials Manager records the rate and supporting documents on the GRN.', 'error');
       return;
     }
+    if (form.wb_packaging_unit_count && (!Number.isFinite(Number(form.wb_packaging_unit_count)) || Number(form.wb_packaging_unit_count) < 0)) {
+      notifyWorkflow('Invalid packaging count', 'Enter a non-negative number of bags or packages.', 'error');
+      return;
+    }
     if (editing && !editingTicketId) {
       notifyWorkflow('Ticket could not be identified', 'Close the form and open the ticket again before editing.', 'error');
       return;
@@ -308,6 +315,7 @@ export default function WeighBridgePage() {
         first_mass: form.wb_first_mass ? parseFloat(form.wb_first_mass) : null,
         second_mass: form.wb_second_mass ? parseFloat(form.wb_second_mass) : null,
         nett_mass: form.wb_nett_mass ? parseFloat(form.wb_nett_mass) : null,
+        packaging_unit_count: form.wb_packaging_unit_count ? parseFloat(form.wb_packaging_unit_count) : null,
         comment: form.wb_comment,
         driver_signed: form.wb_driver_signed,
         inbound_transport_mode: form.wb_inbound_transport_mode,
@@ -507,6 +515,7 @@ export default function WeighBridgePage() {
                         <td className="px-5 py-3.5 text-slate-700 text-xs font-medium">{(t as any).created_by_user?.full_name || (t as any).created_by_user?.email || '—'}</td>
                         <td className="px-5 py-3.5 text-right font-extrabold text-slate-900 font-mono text-sm">
                           {t.nett_mass != null ? Number(t.nett_mass).toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—'}
+                          {t.packaging_unit_count != null && <span className="mt-1 block text-[10px] font-semibold text-amber-700">{Number(t.packaging_unit_count).toLocaleString()} units</span>}
                         </td>
                         <td className="px-5 py-3.5 text-slate-500 font-mono text-[11px]">
                           {t.time_in ? format(new Date(t.time_in), 'dd MMM HH:mm') : '—'}
@@ -667,6 +676,7 @@ export default function WeighBridgePage() {
                 <div className="text-right">
                   <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Nett Mass</p>
                   <p className="text-2xl font-black text-emerald-400 font-mono">{viewTicket.nett_mass != null ? Number(viewTicket.nett_mass).toLocaleString() : '—'} <span className="text-sm font-normal text-emerald-300">kg</span></p>
+                  {viewTicket.packaging_unit_count != null && <p className="mt-1 text-sm font-semibold text-amber-200">{Number(viewTicket.packaging_unit_count).toLocaleString()} packaging units</p>}
                 </div>
               </div>
 

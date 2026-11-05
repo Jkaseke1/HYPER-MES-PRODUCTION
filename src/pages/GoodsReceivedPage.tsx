@@ -280,6 +280,7 @@ export default function GoodsReceivedPage() {
     time_out: '',
     second_mass: '',
     nett_mass: '',
+    packaging_unit_count: '',
     driver_signed: false,
   });
 
@@ -879,7 +880,7 @@ export default function GoodsReceivedPage() {
     setLoadingTicketProduct(true);
     try {
       const { data: ticket, error } = await supabase.from('weigh_bridge_tickets')
-        .select('id, ticket_no, product_code, status, driver_signed, nett_mass').eq('id', editWeighBridgeTicketId).single();
+        .select('id, ticket_no, product_code, status, driver_signed, nett_mass, packaging_unit_count').eq('id', editWeighBridgeTicketId).single();
       if (error) throw error;
       if (!ticket) throw new Error('The linked weighbridge ticket could not be loaded.');
       const { material, receivedQty } = grnLineFromWeighbridge(ticket, materials.filter(candidate => isGrnInput(candidate, finishedCodes)));
@@ -1828,8 +1829,8 @@ export default function GoodsReceivedPage() {
                                   next[0] = {
                                     ...next[0],
                                     raw_material_id: matchedMaterial.id,
-                                    received_qty: ticket.nett_mass != null && !next[0].received_qty ? Number(ticket.nett_mass) : next[0].received_qty,
-                                    ordered_qty: ticket.nett_mass != null && !next[0].ordered_qty ? Number(ticket.nett_mass) : next[0].ordered_qty,
+                                    received_qty: !next[0].received_qty ? grnLineFromWeighbridge(ticket, materials.filter((candidate) => isGrnInput(candidate, finishedCodes))).receivedQty : next[0].received_qty,
+                                    ordered_qty: !next[0].ordered_qty ? grnLineFromWeighbridge(ticket, materials.filter((candidate) => isGrnInput(candidate, finishedCodes))).receivedQty : next[0].ordered_qty,
                                   };
                                   return next;
                                 });
@@ -1848,6 +1849,7 @@ export default function GoodsReceivedPage() {
                                 time_out: ticket.time_out ? ticket.time_out.slice(0, 16) : '',
                                 second_mass: ticket.second_mass != null ? String(ticket.second_mass) : '',
                                 nett_mass: ticket.nett_mass != null ? String(ticket.nett_mass) : '',
+                                packaging_unit_count: ticket.packaging_unit_count != null ? String(ticket.packaging_unit_count) : '',
                                 driver_signed: ticket.driver_signed || false,
                               });
                             }
@@ -1859,7 +1861,7 @@ export default function GoodsReceivedPage() {
                           <SelectContent>
                             {wbTickets.map((t: any) => (
                               <SelectItem key={t.id} value={t.id}>
-                                {t.ticket_no} | {t.product_name || t.product_code || 'No product'} | {t.suppliers?.name || 'No supplier'} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${Number(t.nett_mass).toLocaleString()} kg` : 'No mass'}
+                                {t.ticket_no} | {t.product_name || t.product_code || 'No product'} | {t.suppliers?.name || 'No supplier'} | {t.vehicle_reg || 'No reg'} | {t.nett_mass != null ? `${Number(t.nett_mass).toLocaleString()} kg` : 'No mass'}{t.packaging_unit_count != null ? ` | ${Number(t.packaging_unit_count).toLocaleString()} units` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1879,7 +1881,7 @@ export default function GoodsReceivedPage() {
                               setWbForm({
                                 transaction_no: '', vehicle_reg: '', haulier_code: 'HYPER', product_code: '',
                                 comment: '', trailer_number: '', driver_name: '', driver_id: '',
-                                time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', driver_signed: false,
+                                time_in: '', first_mass: '', time_out: '', second_mass: '', nett_mass: '', packaging_unit_count: '', driver_signed: false,
                               });
                             }}
                             className="text-slate-600 hover:text-red-600 shrink-0"
@@ -2870,7 +2872,17 @@ export default function GoodsReceivedPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Linked weighbridge</Label>
-                <Select value={editWeighBridgeTicketId} onValueChange={setEditWeighBridgeTicketId} disabled={loadingTicketProduct}>
+                <Select value={editWeighBridgeTicketId} onValueChange={(value) => {
+                  if (value === 'none') {
+                    const linked = Array.isArray((editingGrn as any)?.weigh_bridge_tickets)
+                      ? (editingGrn as any).weigh_bridge_tickets[0]
+                      : (editingGrn as any)?.weigh_bridge_tickets;
+                    if (linked?.ticket_no && editReferences.external_reference.trim() === linked.ticket_no) {
+                      setEditReferences((current) => ({ ...current, external_reference: '' }));
+                    }
+                  }
+                  setEditWeighBridgeTicketId(value);
+                }} disabled={loadingTicketProduct}>
                   <SelectTrigger><SelectValue placeholder="Select ticket" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No weighbridge ticket</SelectItem>
