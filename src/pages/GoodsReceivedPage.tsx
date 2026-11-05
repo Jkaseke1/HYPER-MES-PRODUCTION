@@ -2312,7 +2312,7 @@ export default function GoodsReceivedPage() {
                   <h2 className="text-lg font-bold tracking-tight">{viewing?.grn_number}</h2>
                   <p className="text-slate-400 text-xs">
                     <Calendar className="w-3 h-3 inline mr-1" />
-                    Received {viewing && format(new Date(viewing.received_date), 'PPP')}
+                    GRN transaction date: {viewing && format(new Date(viewing.received_date), 'PPP')}
                   </p>
                 </div>
               </div>
@@ -2509,7 +2509,7 @@ export default function GoodsReceivedPage() {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 h-full">
               {/* Left Column: Info + Weigh Bridge */}
               <div className="xl:col-span-4 space-y-2">
-                {/* Supplier / Warehouse / Created - compact inline */}
+                {/* Supplier / Warehouse / transaction and created dates */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="border-l-3 border-l-blue-500 bg-white rounded-lg border border-slate-200 p-2.5">
                     <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Supplier</p>
@@ -2520,9 +2520,15 @@ export default function GoodsReceivedPage() {
                     <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing?.warehouses?.name || 'N/A'}</p>
                   </div>
                 </div>
-                <div className="border-l-3 border-l-emerald-500 bg-white rounded-lg border border-slate-200 p-2.5">
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Created</p>
-                  <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'PPP')}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="border-l-3 border-l-amber-500 bg-amber-50 rounded-lg border border-amber-200 p-2.5">
+                    <p className="text-[10px] text-amber-800 font-semibold uppercase tracking-wider">GRN / Sage transaction date</p>
+                    <p className="text-sm font-bold text-slate-900 mt-0.5">{viewing && format(new Date(viewing.received_date), 'dd MMM yyyy')}</p>
+                  </div>
+                  <div className="border-l-3 border-l-emerald-500 bg-white rounded-lg border border-slate-200 p-2.5">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Date created in MES</p>
+                    <p className="text-xs font-semibold text-slate-800 mt-0.5">{viewing && format(new Date(viewing.created_at), 'dd MMM yyyy')}</p>
+                  </div>
                 </div>
                 <div className="border-l-3 border-l-purple-500 bg-white rounded-lg border border-slate-200 p-2.5">
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Initiated By</p>
