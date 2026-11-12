@@ -35,7 +35,14 @@ export function isGrnInput(material: { name: string; code: string; sage_code?: s
   const purchasedSoya = (material.sage_code?.trim() || material.code.trim()).toUpperCase() === 'FFS0001'
     && (material.category || '').trim().toLowerCase() === 'protein'
     && material.name.trim().replace(/\s+/g, ' ').toLowerCase() === 'full fat soya meal';
-  if (!purchasedSoya && [material.code, material.sage_code].some((code) => code && finishedCodes.has(code.trim().toUpperCase()))) return false;
+  // Beef Carcass Meal is a purchased raw protein; the generic finished-feed
+  // rule below incorrectly matches "Beef ... Meal" and hides it from GRVs.
+  const purchasedBeefCarcassMeal = (material.sage_code?.trim() || material.code.trim()).toUpperCase() === 'BCM0001'
+    && (material.category || '').trim().toLowerCase() === 'protein'
+    && material.name.trim().replace(/\s+/g, ' ').toLowerCase() === 'beef carcass meal';
+  if (!purchasedSoya && !purchasedBeefCarcassMeal
+    && [material.code, material.sage_code].some((code) => code && finishedCodes.has(code.trim().toUpperCase()))) return false;
+  if (purchasedBeefCarcassMeal) return true;
   const text = `${material.category || ''} ${material.name}`.toLowerCase();
   if (/packaging|premix|pre-mix/.test(text)) return true;
   return !/^(feed|feeds|finished_goods|finished goods)$/i.test(material.category || '')
