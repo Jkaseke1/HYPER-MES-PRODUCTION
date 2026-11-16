@@ -1,3 +1,3 @@
-export function transporterRegistrationBlocksApproval(status: string | null | undefined): boolean {
-  return !['legacy', 'verified', 'not_required'].includes(status || '');
+export function transporterRegistrationBlocksApproval(_status: string | null | undefined): boolean {
+  return false;
 }

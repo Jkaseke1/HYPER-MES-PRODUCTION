@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { transporterRegistrationBlocksApproval } from '../../lib/transporterRegistration';
 
-export default function FinanceTransporterReview({ grnId, onBlocked }: { grnId: string; onBlocked: (blocked: boolean) => void }) {
+export default function FinanceTransporterReview({ grnId }: { grnId: string }) {
   const { profile } = useAuth();
   const [record, setRecord] = useState<any>(null);
   const [account, setAccount] = useState('');
@@ -14,15 +13,14 @@ export default function FinanceTransporterReview({ grnId, onBlocked }: { grnId: 
   const canResolve = ['admin', 'finance', 'accountant'].includes(profile?.role || '');
   useEffect(() => {
     let active = true;
-    onBlocked(true); setRecord(null); setSupplier(null); setError('');
+    setRecord(null); setSupplier(null); setError('');
     supabase.from('grn_transporter_registration').select('*').eq('grn_id', grnId).single().then(({ data, error }) => {
       if (!active) return;
-      if (error) { setError('Transporter registration could not be checked. Refresh before approving.'); return; }
+      if (error) { setError('Transporter registration could not be checked. GRN approval can proceed; complete this follow-up later.'); return; }
       setRecord(data);
-      onBlocked(transporterRegistrationBlocksApproval(data.registration_status));
     });
     return () => { active = false; };
-  }, [grnId, onBlocked]);
+  }, [grnId]);
   const findSupplier = async () => {
     setBusy(true); setError(''); setSupplier(null);
     try {
@@ -40,7 +38,6 @@ export default function FinanceTransporterReview({ grnId, onBlocked }: { grnId: 
       const { error } = await supabase.rpc('resolve_pending_transporter', { p_transporter_id: record.transporter_id, p_supplier_id: supplier.id });
       if (error) throw error;
       setRecord({ ...record, registration_status: 'verified', sage_supplier_account: supplier.sage_code });
-      onBlocked(false);
     } catch (err: any) { setError(err.message || 'Sage account could not be linked.'); }
     finally { setBusy(false); }
   };
@@ -52,7 +49,7 @@ export default function FinanceTransporterReview({ grnId, onBlocked }: { grnId: 
     <p className="text-sm font-semibold text-slate-900">{record.transporter_name || 'Transporter not recorded'}</p>
     {record.contact_phone && <p className="text-xs text-slate-700">Contact: {record.contact_phone}</p>}
     {record.registration_note && <p className="break-words text-xs text-slate-700">{record.registration_note}</p>}
-    <p className="text-xs text-orange-900">Register or update this transporter in Sage, then link its imported supplier account before approving this GRN.</p>
+    <p className="text-xs text-orange-900">Transporter registration is a finance follow-up and does not block GRN approval. Register or update this transporter in Sage, then link its imported supplier account when available.</p>
     {canResolve && record.transporter_id && <>
       <div className="flex flex-wrap gap-2"><input aria-label="Sage transporter supplier code" value={account} onChange={event => { setAccount(event.target.value); setSupplier(null); }} placeholder="Sage supplier code" className="min-w-0 flex-1 rounded-md border border-orange-200 bg-white px-3 py-2 text-sm" /><button type="button" disabled={busy || !account.trim()} onClick={() => void findSupplier()} className="inline-flex items-center gap-2 rounded-md border border-orange-300 bg-white px-3 py-2 text-sm font-semibold"><Search className="h-4 w-4" />Find supplier</button></div>
       {supplier && <div className="space-y-2"><p className="text-sm font-semibold text-slate-900">{supplier.sage_code} - {supplier.name}</p><button type="button" disabled={busy} onClick={() => void resolve()} className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />}Confirm Sage supplier link</button></div>}

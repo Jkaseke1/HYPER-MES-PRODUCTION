@@ -12,8 +12,7 @@ function load(file, dependencies = {}) {
   return exports;
 }
 const rules = load('src/lib/transporterRegistration.ts');
-for (const status of ['pending', 'missing', '', undefined, null, 'unexpected']) assert.equal(rules.transporterRegistrationBlocksApproval(status), true);
-for (const status of ['legacy', 'verified', 'not_required']) assert.equal(rules.transporterRegistrationBlocksApproval(status), false);
+for (const status of ['pending', 'missing', '', undefined, null, 'unexpected', 'legacy', 'verified', 'not_required']) assert.equal(rules.transporterRegistrationBlocksApproval(status), false);
 async function verify() {
   let hook = 0;
   const { default: Approval } = load('src/components/approval/GRNApprovalButtons.tsx', {
@@ -25,12 +24,11 @@ async function verify() {
   const approvalHtml = renderToStaticMarkup(React.createElement(Approval, {
     grnId: 'fixture', currentStatus: 'pending_finance', vatReviewedAt: '2026-10-19', onApproved() {}, onRejected() {},
   }));
-  assert.match(approvalHtml, /disabled="" title="Resolve the transporter registration before approval\."/);
+  assert.doesNotMatch(approvalHtml, /Resolve the transporter registration before approval/);
   assert(hook > 0);
   for (const role of ['admin', 'finance', 'accountant', 'finance_viewer', 'md', 'raw_material_manager']) {
     let stateIndex = 0;
     let effect;
-    const blocked = [];
     const record = { registration_status: 'pending', transporter_id: 'fixture', transporter_name: 'BlexExpress', contact_phone: 'test', registration_note: 'New supplier' };
     const response = { data: record, error: null };
     const query = { select() { return this; }, eq() { return this; }, single() { return Promise.resolve(response); } };
@@ -38,21 +36,19 @@ async function verify() {
       react: { ...React, useState: initial => [stateIndex++ === 0 ? record : initial, () => {}], useEffect: fn => { effect = fn; } },
       '../../lib/supabase': { supabase: { from: () => query } },
       '../../context/AuthContext': { useAuth: () => ({ profile: { role } }) },
-      '../../lib/transporterRegistration': rules,
     });
-    const html = renderToStaticMarkup(React.createElement(Panel, { grnId: 'fixture', onBlocked: value => blocked.push(value) }));
+    const html = renderToStaticMarkup(React.createElement(Panel, { grnId: 'fixture' }));
     assert.match(html, /BlexExpress/);
     assert.match(html, /Finance action required/);
     assert.equal(html.includes('Find supplier'), ['admin','finance','accountant'].includes(role));
     effect();
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(blocked, [true, true]);
   }
   const sql = fs.readFileSync('supabase/migrations/20261019160000_add_pending_transporter_registration.sql', 'utf8');
   assert.match(sql, /pg_advisory_xact_lock/);
   assert.match(sql, /'pending'/);
-  assert.match(sql, /GRN approval blocked/);
-  assert.match(sql, /BEFORE INSERT OR UPDATE OF status/);
+  const optionalApproval = fs.readFileSync('supabase/migrations/20261116140000_allow_grn_approval_without_transporter_registration.sql', 'utf8');
+  assert.match(optionalApproval, /DROP TRIGGER IF EXISTS guard_grn_pending_transporter/);
   assert.match(sql, /sage_supplier_account = btrim\(v_supplier.sage_code\)/);
   assert.match(sql, /registration_audit = registration_audit \|\|/);
   assert.match(sql, /Transporter is locked after this ticket is linked/);
