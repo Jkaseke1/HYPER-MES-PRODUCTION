@@ -206,7 +206,7 @@ export default function GoodsReceivedPage() {
   }
 
   const openAdminSupplierCorrection = () => {
-    if (!viewing || profile?.role !== 'admin') return;
+    if (!viewing || !['admin', 'finance'].includes(profile?.role || '')) return;
     setAdminSupplierId(viewing.supplier_id || '');
     setAdminReceivedDate(viewing.received_date || '');
     setAdminSupplierReason('');
@@ -850,9 +850,9 @@ export default function GoodsReceivedPage() {
     };
   }, [viewModalOpen, viewing?.id]);
 
-  const openGrnCorrection = async () => {
-    if (!viewing || !canManageGrnCorrections) return;
-    if (!['pending', 'pending_costing', 'pending_finance'].includes(viewing.status)) {
+  const openGrnCorrection = async (grnToCorrect: GoodsReceivedNote | null = viewing) => {
+    if (!grnToCorrect || !canManageGrnCorrections) return;
+    if (!['pending', 'pending_costing', 'pending_finance'].includes(grnToCorrect.status)) {
       toast.error('Approved or rejected GRNs are locked. Correct the GRN before final approval.');
       return;
     }
@@ -863,7 +863,7 @@ export default function GoodsReceivedPage() {
     setLoadingGrnEdit(true);
     setGrnEditOpen(true);
     try {
-      const snapshot = await supabase.rpc('get_grn_correction', { p_grn_id: viewing.id });
+      const snapshot = await supabase.rpc('get_grn_correction', { p_grn_id: grnToCorrect.id });
       if (snapshot.error) {
         if (snapshot.error.code === 'PGRST202') throw new Error('The GRV editor database update is not installed. Apply the LIVE GRV migration, then retry.');
         throw snapshot.error;
@@ -885,6 +885,30 @@ export default function GoodsReceivedPage() {
     } catch (error: any) {
       setEditLoadError(error.message || 'Could not load the complete GRV.');
     } finally { setLoadingGrnEdit(false); }
+  };
+
+  const reopenFailedGrnForLineCorrection = async () => {
+    if (!viewing || !['admin', 'finance'].includes(profile?.role || '') || !adminSupplierReason.trim() || savingAdminSupplierCorrection) return;
+    const grnToCorrect = viewing;
+    setSavingAdminSupplierCorrection(true);
+    try {
+      const { error } = await supabase.rpc('reopen_failed_grn_for_line_correction', {
+        p_grn_id: grnToCorrect.id,
+        p_reason: adminSupplierReason.trim(),
+      });
+      if (error) throw error;
+
+      const reopenedGrn = { ...grnToCorrect, status: 'pending' as GoodsReceivedNote['status'] };
+      setViewing(reopenedGrn);
+      setAdminSupplierCorrectionOpen(false);
+      await fetchData(false);
+      await openGrnCorrection(reopenedGrn);
+      toast.success(`${grnToCorrect.grn_number} reopened with an audit record. Correct the lines, save, then complete costing and Finance approval again.`);
+    } catch (error: any) {
+      toast.error(error.message || 'Could not reopen this failed GRN for line correction.');
+    } finally {
+      setSavingAdminSupplierCorrection(false);
+    }
   };
 
   const loadCorrectionTicketProduct = async () => {
@@ -2805,7 +2829,7 @@ export default function GoodsReceivedPage() {
               <div>
                 <DialogTitle className="text-xl text-slate-900">Correct failed GRN</DialogTitle>
                 <DialogDescription className="mt-1">
-                  Correct the transaction date from the receipt documents. You may also correct the supplier. Sage posting is not triggered by saving.
+                  Correct the date or supplier, or reopen this failed GRN to edit receipt lines. Line edits are audited, reverse the current Plant Control stock effect, and require approval again before Sage can retry.
                 </DialogDescription>
               </div>
               <Badge variant="destructive" className="shrink-0">Sage failed</Badge>
@@ -2848,14 +2872,24 @@ export default function GoodsReceivedPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wide text-slate-600">Audit reason *</Label>
-              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Record why the date correction is needed and the document used to verify it" rows={3} />
+              <Textarea value={adminSupplierReason} onChange={(event) => setAdminSupplierReason(event.target.value)} placeholder="Record why the GRN needs correction and the receipt evidence used" rows={3} />
             </div>
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Back to GRN</Button>
-              <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminReceivedDate || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
-                {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
-                Save audited correction
-              </Button>
+            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button type="button" variant="outline" onClick={() => setAdminSupplierCorrectionOpen(false)} disabled={savingAdminSupplierCorrection}>Back to GRN</Button>
+                <Button type="button" onClick={saveAdminSupplierCorrection} disabled={savingAdminSupplierCorrection || !adminReceivedDate || !adminSupplierReason.trim()} className="bg-amber-500 text-slate-950 hover:bg-amber-600">
+                  {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-1.5 h-4 w-4" />}
+                  Save date / supplier correction
+                </Button>
+              </div>
+              {['admin', 'finance'].includes(profile?.role || '') && <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                <p className="text-sm font-semibold text-orange-950">Need to replace an incorrect material line?</p>
+                <p className="mt-1 text-xs leading-5 text-orange-900">Reopening records the current GRN and reverses its Plant Control receipt movements. The corrected GRN returns to costing and Finance approval; Sage posting waits until it is approved again.</p>
+                <Button type="button" onClick={reopenFailedGrnForLineCorrection} disabled={savingAdminSupplierCorrection || !adminSupplierReason.trim()} className="mt-3 bg-orange-600 text-white hover:bg-orange-700">
+                  {savingAdminSupplierCorrection ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Pencil className="mr-1.5 h-4 w-4" />}
+                  Reopen and edit line items
+                </Button>
+              </div>}
             </div>
           </div>
         </DialogContent>
