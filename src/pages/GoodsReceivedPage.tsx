@@ -2390,7 +2390,7 @@ export default function GoodsReceivedPage() {
                   </Button>
                 )}
                 {viewing && canManageGrnCorrections && ['pending', 'pending_costing', 'pending_finance'].includes(viewing.status) && (
-                  <Button type="button" size="sm" onClick={openGrnCorrection} className="bg-orange-500 text-white hover:bg-orange-600">
+                  <Button type="button" size="sm" onClick={() => void openGrnCorrection()} className="bg-orange-500 text-white hover:bg-orange-600">
                     Edit GRV
                   </Button>
                 )}
@@ -2911,7 +2911,7 @@ export default function GoodsReceivedPage() {
             </button>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-5">
-            {loadingGrnEdit ? <div role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-5 w-5 animate-spin" />Loading GRV lines...</div> : editLoadError ? <div role="alert" className="border border-red-200 bg-red-50 p-4 text-red-800">{editLoadError}<Button variant="outline" onClick={openGrnCorrection} className="ml-3">Retry</Button></div> : <>
+            {loadingGrnEdit ? <div role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-5 w-5 animate-spin" />Loading GRV lines...</div> : editLoadError ? <div role="alert" className="border border-red-200 bg-red-50 p-4 text-red-800">{editLoadError}<Button variant="outline" onClick={() => void openGrnCorrection()} className="ml-3">Retry</Button></div> : <>
             <fieldset disabled={savingGrnEdit} className="min-w-0">
             <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
               <div className="space-y-1.5">
